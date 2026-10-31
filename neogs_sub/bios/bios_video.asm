@@ -263,6 +263,8 @@ bios_video_write_word:
 ; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
 ; -------------------------------------------------------------------------
 bios_int10_video_test:
+        xor     a
+        ld      (x86_real_bounds_enable), a
         call    x86_mem_init
         ld      hl, x86_bios_video_test_image
         ld      de, #5002
