@@ -2,6 +2,10 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 
+rem Always build from the repository root, even when launched by double-click.
+cd /d "%~dp0"
+if errorlevel 1 goto BUILD_FAILED
+
 rem =========================================================================
 rem PROJECT 124 — reproducible dual-Z80 build
 rem 0. Assemble tests/TEST.ASM to TEST.BIN with NASM.
@@ -27,13 +31,20 @@ rem NASM is required; the resulting TEST.BIN is exported to TR-DOS as TEST.C.
 rem =========================================================================
 echo [BUILD] 0/4: Сборка внешнего набора x86-тестов...
 
+if not exist "tests\TEST.ASM" (
+    echo [ERROR] Не найден tests\TEST.ASM
+    goto BUILD_TESTS_FAILED
+)
+
+set "TEST_SIZE="
 where nasm.exe >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Не найден NASM (nasm.exe). Добавьте NASM в PATH.
     goto BUILD_TESTS_FAILED
 )
 
-nasm.exe -f bin tests\TEST.ASM -o TEST.BIN
+if exist "TEST.BIN" del /q "TEST.BIN"
+nasm.exe -Wall -f bin tests\TEST.ASM -o TEST.BIN
 if errorlevel 1 goto BUILD_TESTS_FAILED
 if not exist "TEST.BIN" goto BUILD_TESTS_FAILED
 
@@ -138,7 +149,7 @@ goto BUILD_FAILED
 
 :BUILD_VERIFY_FAILED
 echo.
-echo [ERROR] Проверка neoprog.C в disk_A.trd не пройдена.
+echo [ERROR] Проверка TR-DOS файлов neoprog.C / TEST.C не пройдена.
 echo Образ нельзя считать готовым к запуску.
 goto BUILD_FAILED
 
