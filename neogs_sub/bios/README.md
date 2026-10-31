@@ -90,8 +90,9 @@ memory backend at `0000:5002`. Instruction fetches are bounded to the loaded
 payload and the current task entry uses CS=0.
 
 The legacy linear interpreter remains available for the transport/edge-case
-diagnostics. The real-mode executor currently supports only a small instruction
-subset; it is not a complete 8086 emulator.
+diagnostics. The real-mode executor currently supports NOP, INC AX, MOV AX/BX/DX,imm16,
+MOV r8,imm8 (including the standard AH/AL BIOS calling convention), HLT,
+INT imm8, INT 3 and IRET. It is not a complete 8086 emulator.
 
 ## Memory map and limitations
 
