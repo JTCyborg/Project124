@@ -393,6 +393,7 @@ rom_return_trampoline_code:
 rom_return_trampoline_end:
 
         INCLUDE "x86_memory.asm"
+        INCLUDE "x86_runtime.asm"
         INCLUDE "x86_interpreter.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
