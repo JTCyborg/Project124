@@ -58,7 +58,12 @@ start_neoprogram:
         ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
         ldir
 
-        ; Notify the Spectrum only after the new firmware is executing.
+        ; First send a textual startup confirmation to the host Z80.
+        ld      hl, neo_startup_message
+        call    neo_send_startup_text
+        jr      c, main_loop
+
+        ; ACK only after the host has received the startup message.
         ld      a, NGS_FIRMWARE_READY_ACK
         call    neo_send_data_byte
 
@@ -85,6 +90,8 @@ main_loop:
         jp      z, command_get_status
         cp      CMD_MEM_TEST
         jp      z, command_mem_test
+        cp      CMD_DEBUG_DRAIN
+        jp      z, command_debug_drain
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -215,6 +222,8 @@ execute_neogs_x86:
         xor     a
         ld      (x86_exit_status), a
 
+        ld      hl, neo_debug_msg_x86_started
+        call    neo_debug_puts
         ld      bc, X86_RAM_RUN_ADDR
         call    x86_execute_loop
 
@@ -235,7 +244,49 @@ execute_neogs_x86:
 ; Result is returned through the existing CMD_GET_STATUS frame.
 ; -------------------------------------------------------------------------
 command_mem_test:
+        ld      hl, neo_debug_msg_memtest_started
+        call    neo_debug_puts
         call    x86_mem_test
+        ld      a, (x86_exit_status)
+        or      a
+        jr      nz, .memtest_failed
+        ld      hl, neo_debug_msg_memtest_pass
+        call    neo_debug_puts
+        jr      .memtest_done
+.memtest_failed:
+        ld      hl, neo_debug_msg_memtest_fail
+        call    neo_debug_puts
+.memtest_done:
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Host response: length byte followed by exactly that many debug characters.
+command_debug_drain:
+        ld      a, (neo_debug_length)
+        call    neo_send_data_byte
+        jr      c, .debug_drain_failed
+        ld      a, (neo_debug_length)
+        ld      (neo_debug_remaining), a
+        ld      hl, neo_debug_buffer
+.debug_drain_loop:
+        ld      a, (neo_debug_remaining)
+        or      a
+        jr      z, .debug_drain_done
+        ld      a, (hl)
+        call    neo_send_data_byte
+        jr      c, .debug_drain_failed
+        inc     hl
+        ld      a, (neo_debug_remaining)
+        dec     a
+        ld      (neo_debug_remaining), a
+        jr      .debug_drain_loop
+.debug_drain_done:
+        xor     a
+        ld      (neo_debug_length), a
+        out     (CLRCBIT), a
+        jp      main_loop
+.debug_drain_failed:
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -278,6 +329,52 @@ command_get_status:
 ; Wait for DBIT=0, write ZXDATWR (#03), then wait for host read to clear DBIT.
 ; OUT: carry clear on success, carry set on timeout. Preserves HL and DE.
 ; -------------------------------------------------------------------------
+neo_send_startup_text:
+        ld      a, (hl)
+        or      a
+        jr      z, .startup_text_end
+        call    neo_send_data_byte
+        ret     c
+        inc     hl
+        jr      neo_send_startup_text
+.startup_text_end:
+        xor     a
+        jp      neo_send_data_byte
+
+; Append a NUL-terminated string to the local debug queue.
+; IN: HL=string. HL/BC/DE preserved.
+neo_debug_puts:
+        ld      a, (hl)
+        or      a
+        ret     z
+        call    neo_debug_putc
+        inc     hl
+        jr      neo_debug_puts
+
+; Append one byte. Capacity is 255 bytes; excess characters are discarded.
+; IN: A=character. HL/BC/DE preserved.
+neo_debug_putc:
+        push    hl
+        push    bc
+        push    de
+        ld      b, a
+        ld      a, (neo_debug_length)
+        cp      #FF
+        jr      nc, .debug_putc_done
+        ld      l, a
+        ld      h, 0
+        ld      de, neo_debug_buffer
+        add     hl, de
+        ld      (hl), b
+        ld      a, (neo_debug_length)
+        inc     a
+        ld      (neo_debug_length), a
+.debug_putc_done:
+        pop     de
+        pop     bc
+        pop     hl
+        ret
+
 neo_send_data_byte:
         ld      (neo_tx_byte), a
         ld      bc, IPC_WAIT_LIMIT
@@ -315,6 +412,15 @@ neo_send_data_byte:
 neo_command:       db 0
 neo_tx_byte:       db 0
 neo_dma_error:     db 0
+neo_debug_length:  db 0
+neo_debug_remaining: db 0
+neo_debug_buffer:  ds 255, 0
+neo_startup_message:
+        db "[NEOGS] STARTUP OK: LOADED FIRMWARE EXECUTION STARTED.", 13, 0
+neo_debug_msg_x86_started: db "[NEOGS] X86 PAYLOAD EXECUTION STARTED.", 13, 0
+neo_debug_msg_memtest_started: db "[NEOGS] MEMORY TEST STARTED.", 13, 0
+neo_debug_msg_memtest_pass: db "[NEOGS] MEMORY TEST PASS.", 13, 0
+neo_debug_msg_memtest_fail: db "[NEOGS] MEMORY TEST FAIL.", 13, 0
 saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
 
