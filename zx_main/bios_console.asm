@@ -62,6 +62,7 @@ BIOS_DebugConsole_Clear::
         ld      (Console_Y), a
         ld      a, BIOS_DEBUG_TOP
         ld      (Console_Y), a
+        xor     a
         ld      (Console_X), a
         pop     hl
         pop     de
