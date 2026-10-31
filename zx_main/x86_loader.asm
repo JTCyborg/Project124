@@ -178,6 +178,24 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_pass
 
         ; -------------------------------------------------------------
+        ; Stage 3A: guest INT 10h video BIOS services and live console stream.
+        ; The NeoGS sends each teletype byte over DBIT while this host drains
+        ; the stream to port #EF and the 42x12 6x8 debug window.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_bios_video_start
+        call    neogs_bios_video_test_and_get_result
+        jp      c, .bios_video_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .bios_video_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #1A10
+        or      a
+        sbc     hl, de
+        jp      nz, .bios_video_fail
+        MACRO_EF_STRING P124_msg_bios_video_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -423,6 +441,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.bios_video_transport_fail:
+        MACRO_EF_STRING P124_msg_bios_video_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.bios_video_fail:
+        MACRO_EF_STRING P124_msg_bios_video_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -572,9 +608,79 @@ neogs_send_dma_block:
 neogs_run_and_get_result:
         ld      a, CMD_RUN_X86
         out     (GSCOM), a
-        call    neogs_wait_command_done_long
+        call    neogs_wait_run_done_with_console
         ret     c
         jp      neogs_get_result_frame
+
+; Stage 3A guest BIOS video test. Its output is drained while the NeoGS
+; command remains active; DBIT bytes are never confused with the result frame.
+neogs_bios_video_test_and_get_result:
+        ld      a, CMD_BIOS_VIDEO_TEST
+        out     (GSCOM), a
+        call    neogs_wait_run_done_with_console
+        ret     c
+        jp      neogs_get_result_frame
+
+; Wait for the RUN command while servicing the bidirectional data channel.
+; Stream protocol: nonzero=character, 00 00=clear, 00 01 row col=set cursor.
+; Each character is sent to emulator printer port #EF and rendered on screen.
+neogs_wait_run_done_with_console:
+        push    de
+        ld      d, #10
+.run_outer:
+        ld      hl, IPC_CMD_TIMEOUT
+.run_inner:
+        in      a, (GSSTAT)
+        bit     B_DBIT, a
+        jr      z, .no_stream_byte
+        in      a, (GSDAT)
+        or      a
+        jr      z, .stream_control
+        push    af
+        ld      bc, #00EF
+        out     (c), a
+        pop     af
+        call    BIOS_DebugConsole_PrintChar
+        jr      .run_inner
+
+.stream_control:
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        or      a
+        jr      z, .stream_clear
+        cp      1
+        jr      nz, .run_inner
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        ld      (P124_BIOS_STREAM_ROW), a
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        ld      c, a
+        ld      a, (P124_BIOS_STREAM_ROW)
+        call    BIOS_DebugConsole_SetCursor
+        jr      .run_inner
+
+.stream_clear:
+        call    BIOS_DebugConsole_Clear
+        jr      .run_inner
+
+.no_stream_byte:
+        bit     B_CBIT, a
+        jr      z, .run_done
+        dec     hl
+        ld      a, h
+        or      l
+        jr      nz, .run_inner
+        dec     d
+        jr      nz, .run_outer
+.run_timeout:
+        pop     de
+        scf
+        ret
+.run_done:
+        pop     de
+        or      a
+        ret
 
 ; Run the BIOS low-memory POST and fetch the existing four-byte result frame.
 neogs_bios_post_and_get_result:
@@ -656,6 +762,10 @@ P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler 
 P124_msg_int_guest_pass: DEFB "[INT] PASS: guest handler executed through CS:IP; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
+P124_msg_bios_video_start: DEFB "[BIOS] Stage 3A: guest INT 10h video services and 6x8 console...", 13, 0
+P124_msg_bios_video_pass: DEFB "[BIOS] PASS: INT 10h mode/cursor/teletype; 42-column stream rendered.", 13, 0
+P124_msg_bios_video_transport_fail: DEFB "[BIOS] FAIL: INT 10h video stream/result timeout.", 13, 0
+P124_msg_bios_video_fail: DEFB "[BIOS] FAIL: INT 10h status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
@@ -723,6 +833,7 @@ P124_X86_RESULT_STATUS:    db 0
 P124_X86_RESULT_AX:        dw 0
 P124_DIAG_EXPECT_STATUS:    db 0
 P124_DIAG_EXPECT_AX:        dw 0
+P124_BIOS_STREAM_ROW:       db 0
 
 ; Strings
 P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
