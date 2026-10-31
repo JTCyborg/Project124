@@ -1,19 +1,12 @@
-```bat
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
 
 rem =========================================================================
-rem PROJECT 124 — АВТОМАТИЗИРОВАННАЯ ДВУХПРОЦЕССОРНАЯ СБОРКА
-rem =========================================================================
-rem ШАГ 1: Сборка NeoGS:
-rem         neogs_code.bin
-rem         neogs_bootstrap.bin
-rem
-rem ШАГ 2: Сборка ZX Spectrum:
-rem         основной код + упаковка TRD
-rem
-rem Ассемблер: tools\sjasmplus.exe
+rem PROJECT 124 — reproducible dual-Z80 build
+rem 1. Build NeoGS firmware and bootstrap.
+rem 2. Build the Spectrum host and export neoprog.C into disk_A.trd.
+rem 3. Verify that TR-DOS neoprog.C is byte-for-byte the NeoGS firmware.
 rem =========================================================================
 
 echo.
@@ -28,11 +21,9 @@ if not exist "tools\sjasmplus.exe" (
 )
 
 rem =========================================================================
-rem ШАГ 1. СБОРКА ПРОШИВКИ NEOGS И BOOTSTRAP
+rem STEP 1 — NeoGS firmware and first-stage bootstrap
 rem =========================================================================
-
-echo [BUILD] Шаг 1: Сборка прошивки NeoGS и Bootstrap...
-echo.
+echo [BUILD] 1/3: Сборка прошивки NeoGS и Bootstrap...
 
 tools\sjasmplus.exe --dirbol ^
     -I neogs_sub -I shared ^
@@ -41,29 +32,17 @@ tools\sjasmplus.exe --dirbol ^
     neogs_sub/build_firmware.asm
 
 if errorlevel 1 goto BUILD_NEOGS_FAILED
+if not exist "neogs_code.bin" goto BUILD_NEOGS_FAILED
+if not exist "neogs_bootstrap.bin" goto BUILD_NEOGS_FAILED
 
-rem Проверка результата сборки
-
-if not exist "neogs_code.bin" (
-    echo [ERROR] Не создан neogs_code.bin
-    goto BUILD_NEOGS_FAILED
-)
-
-if not exist "neogs_bootstrap.bin" (
-    echo [ERROR] Не создан neogs_bootstrap.bin
-    goto BUILD_NEOGS_FAILED
-)
-
-echo [SUCCESS] neogs_code.bin создан.
-echo [SUCCESS] neogs_bootstrap.bin создан.
-echo.
+echo [SUCCESS] neogs_code.bin и neogs_bootstrap.bin созданы.
 
 rem =========================================================================
-rem ШАГ 2. СБОРКА ОСНОВНОГО КОДА ZX SPECTRUM
+rem STEP 2 — Spectrum host and TR-DOS image
+rem main.asm exports neogs_code.bin as disk file neoprog.C.
+rem The firmware image is NOT embedded in proj124.C.
 rem =========================================================================
-
-echo [BUILD] Шаг 2: Сборка ZX Spectrum и TR-DOS...
-echo.
+echo [BUILD] 2/3: Сборка host-программы и образа TR-DOS...
 
 tools\sjasmplus.exe --dirbol ^
     -I zx_main -I shared -I neogs_sub ^
@@ -72,55 +51,63 @@ tools\sjasmplus.exe --dirbol ^
     zx_main/main.asm
 
 if errorlevel 1 goto BUILD_ZX_FAILED
+if not exist "disk_A.trd" goto BUILD_ZX_FAILED
+
+rem =========================================================================
+rem STEP 3 — Verify TR-DOS directory entry, length, sectors and file bytes
+rem =========================================================================
+echo [BUILD] 3/3: Проверка neoprog.C внутри disk_A.trd...
+
+if not exist "tools\verify_neoprog_trd.ps1" goto BUILD_VERIFY_FAILED
+
+powershell -NoProfile -ExecutionPolicy Bypass ^
+    -File "tools\verify_neoprog_trd.ps1" ^
+    -ImagePath "disk_A.trd" ^
+    -FirmwarePath "neogs_code.bin"
+
+if errorlevel 1 goto BUILD_VERIFY_FAILED
 
 echo.
 echo ================================================================
-echo [SUCCESS] PROJECT 124 BUILD COMPLETED
+echo [SUCCESS] PROJECT 124 BUILD AND TR-DOS FIRMWARE VERIFY COMPLETED
 echo ================================================================
 echo.
-echo [MAP] neogs_map.txt
-echo [MAP] zx_map.txt
-echo [LST] neogs_list.txt
-echo [LST] zx_list.txt
+echo [FILES]
+echo   disk_A.trd       - boot.B + proj124.C + NeoGS firmware neoprog.C
+echo   neogs_code.bin   - source firmware binary used for TR-DOS export
+echo   neogs_bootstrap.bin - first-stage loader embedded in proj124.C
 echo.
-
-echo [FILES] Результаты:
-if exist "neogs_code.bin" echo   neogs_code.bin
-if exist "neogs_bootstrap.bin" echo   neogs_bootstrap.bin
-if exist "zx_main\neogs_code.bin" echo   zx_main\neogs_code.bin
-if exist "zx_main\neogs_bootstrap.bin" echo   zx_main\neogs_bootstrap.bin
+echo [MAP/LIST]
+echo   neogs_map.txt
+echo   neogs_list.txt
+echo   zx_map.txt
+echo   zx_list.txt
 echo.
-
 pause
 exit /b 0
 
-rem =========================================================================
-rem ОШИБКИ СБОРКИ
-rem =========================================================================
-
 :BUILD_NEOGS_FAILED
 echo.
-echo ================================================================
-echo [ERROR] ОШИБКА СБОРКИ NEOGS / BOOTSTRAP
-echo ================================================================
-echo Проверь neogs_list.txt и вывод ассемблера.
-echo.
-pause
-exit /b 1
+echo [ERROR] Ошибка сборки NeoGS firmware/bootstrap.
+echo Проверь neogs_list.txt и вывод sjasmplus.
+goto BUILD_FAILED
 
 :BUILD_ZX_FAILED
 echo.
-echo ================================================================
-echo [ERROR] ОШИБКА СБОРКИ ZX SPECTRUM
-echo ================================================================
-echo Проверь zx_list.txt и вывод ассемблера.
+echo [ERROR] Ошибка сборки ZX Spectrum или создания disk_A.trd.
+echo Проверь zx_list.txt и вывод sjasmplus.
+goto BUILD_FAILED
+
+:BUILD_VERIFY_FAILED
 echo.
-pause
-exit /b 1
+echo [ERROR] Проверка neoprog.C в disk_A.trd не пройдена.
+echo Образ нельзя считать готовым к запуску.
+goto BUILD_FAILED
 
 :BUILD_FAILED
 echo.
-echo [ERROR] Сборка невозможна: отсутствует ассемблер.
+echo ================================================================
+echo [ERROR] PROJECT 124 BUILD FAILED
+echo ================================================================
 pause
 exit /b 1
-```

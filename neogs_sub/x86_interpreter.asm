@@ -95,6 +95,8 @@ x86_mov_ax_imm16:
 ; F4 — HLT: successful end of task
 x86_hlt:
         ld      (saved_z80_ax), hl
+        ld      hl, neo_debug_msg_x86_hlt
+        call    neo_debug_puts
         xor     a
         ld      (x86_exit_status), a
         ret
@@ -102,6 +104,8 @@ x86_hlt:
 ; Unsupported instruction: stop rather than executing arbitrary memory.
 x86_unsupported:
         ld      (saved_z80_ax), hl
+        ld      hl, neo_debug_msg_x86_unsupported
+        call    neo_debug_puts
         ld      a, 2
         ld      (x86_exit_status), a
         ret
@@ -109,6 +113,8 @@ x86_unsupported:
 x86_ip_out_of_range:
         ld      a, 4
         ld      (x86_exit_status), a
+        ld      hl, neo_debug_msg_x86_bounds
+        call    neo_debug_puts
         ld      hl, (saved_z80_ax)
         ret
 
@@ -139,3 +145,8 @@ x86_jump_table:
 x86_steps_remaining: dw 0
 x86_program_end:     dw 0
 x86_exit_status:     db 0
+
+; NeoGS-local diagnostic messages, queued for the host Z80 #EF logger.
+neo_debug_msg_x86_hlt:         db "[NEOGS] X86 HLT REACHED.", 13, 0
+neo_debug_msg_x86_unsupported: db "[NEOGS] X86 UNSUPPORTED OPCODE.", 13, 0
+neo_debug_msg_x86_bounds:      db "[NEOGS] X86 IP OUT OF RANGE.", 13, 0
