@@ -20,7 +20,7 @@ msg_stage1:    DEFB "[CORE] Stage 1: Clock RTC K512VI1 checked and synced succes
 msg_stage2:    DEFB "[CORE] Stage 2: Bootstrapping custom NeoGS Z80 firmware through GS105a ROM loader...",13,0
 msg_stage3_ok: DEFB "[GUI] Stage 3: Custom fonts linked. Two-window application workspace rendered.",13,0
 msg_stage4:    DEFB "[CORE] Stage 4: Execution window stabilized. Bypassing interactive loop.",13,0
-msg_stage_all_complete: DEFB "[HALT] NeoGS firmware loaded; diagnostics completed. System suspended.",13,0
+msg_stage_all_complete: DEFB "[HALT] NeoGS firmware loaded; diagnostics and external x86 tests completed. System suspended.",13,0
 
 ; Screen log strings.
 msg_log_screen_ready: DEFB "[SYS_START] PERFECT MANAGER 124 DUAL-CORE NODE ONLINE.",0
