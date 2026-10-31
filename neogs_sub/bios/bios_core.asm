@@ -187,6 +187,10 @@ bios_post:
         call    bios_expect_byte
         jp      c, bios_post_fail_8
 
+        ; Publish the INT 10h firmware trap after the IVT zero-fill check.
+        call    bios_int10_install_vector
+        jp      c, bios_post_fail_8
+
         ld      hl, BIOS_POST_SIGNATURE
         ld      (saved_x86_ax), hl
         xor     a
