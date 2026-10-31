@@ -5,7 +5,7 @@ ZX Spectrum Pentagon 1024 project with a host Z80 and a NeoGS Z80 firmware core.
 ## Build
 
 Run `build.bat` from the repository root on Windows. The build requires
-`tools/sjasmplus.exe` and Windows PowerShell.
+`tools/sjasmplus.exe`, `nasm.exe` on `PATH`, and Windows PowerShell.
 
 The build order is intentional:
 
