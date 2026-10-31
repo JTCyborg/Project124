@@ -93,6 +93,8 @@ main_loop:
         jp      z, command_int_guest_test
         cp      CMD_BIOS_VIDEO_TEST
         jp      z, command_bios_video_test
+        cp      CMD_RUN_X86_REAL
+        jp      z, command_run_x86_real
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -272,6 +274,13 @@ command_int_guest_test:
 ; Stage 3A: guest INT 10h video BIOS service test.
 command_bios_video_test:
         call    bios_int10_video_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Run a TR-DOS payload through the bounded CS:IP real-mode executor.
+command_run_x86_real:
+        call    execute_neogs_x86_real
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
