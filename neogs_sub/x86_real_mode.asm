@@ -104,12 +104,12 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_si)
-        ld      de, #BEEF
+        ld      de, #8000
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_di)
-        ld      de, #F00D
+        ld      de, #7FFF
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -121,7 +121,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_ip)
-        ld      de, #501D
+        ld      de, #5025
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -131,7 +131,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_flags)
-        ld      de, #0302
+        ld      de, #0B16
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -358,7 +358,6 @@ x86_real_update_incdec_flags:
         bit     7, h
         jr      z, .no_sf
         ld      hl, x86_real_new_flags
-        inc     hl
         set     7, (hl)
 .no_sf:
         ; AF: INC when old low nibble was F; DEC when it was 0.
@@ -587,8 +586,10 @@ x86_guest_main_image:
         db #BB,#9A,#BC             ; MOV BX,BC9A
         db #BC,#00,#01             ; MOV SP,0100 (preserve test stack)
         db #BD,#DE,#AD             ; MOV BP,ADDE
-        db #BE,#EF,#BE             ; MOV SI,BEEF
-        db #BF,#0D,#F0             ; MOV DI,F00D
+        db #BE,#FF,#7F             ; MOV SI,7FFF
+        db #46                     ; INC SI -> 8000, OF/SF/AF/PF
+        db #BF,#00,#80             ; MOV DI,8000
+        db #4F                     ; DEC DI -> 7FFF, OF/AF/PF
         db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
