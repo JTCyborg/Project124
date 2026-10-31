@@ -20,6 +20,7 @@ C_GLED          EQU #20
 
 ; NeoGS Z80 local ports
 MPAG            EQU #00
+MPAGEX          EQU #10             ; independent 16 KiB page for C000-FFFF
 ZXCMD           EQU #01
 ZXDATRD         EQU #02
 ZXDATWR         EQU #03
