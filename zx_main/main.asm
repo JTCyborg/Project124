@@ -200,6 +200,7 @@ START_APPLICATION:
         ; neoprog.C повторно не читается и не исполняется как x86-код.
         di
         call    RUN_NEOGS_DIAGNOSTICS
+        ei
         jr      c, .diagnostics_failed
 
         ; ЭТАП 6 — ЗАГРУЗКА ВНЕШНЕГО НАБОРА ИЗ TR-DOS TEST.C.
