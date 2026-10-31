@@ -47,76 +47,78 @@
  20++ 0000
  21++ 0000              ; NeoGS Z80 local ports
  22++ 0000              MPAG            EQU #00
- 23++ 0000              ZXCMD           EQU #01
- 24++ 0000              ZXDATRD         EQU #02
- 25++ 0000              ZXDATWR         EQU #03
- 26++ 0000              ZXSTAT          EQU #04
- 27++ 0000              CLRCBIT         EQU #05
- 28++ 0000
- 29++ 0000              GSCFG0          EQU #0F
- 30++ 0000              B_NOROM         EQU 0
- 31++ 0000              M_NOROM         EQU #01
- 32++ 0000              B_RAMRO         EQU 1
- 33++ 0000              M_RAMRO         EQU #02
- 34++ 0000              B_8CHANS        EQU 2
- 35++ 0000              M_8CHANS        EQU #04
- 36++ 0000              B_EXPAG         EQU 3
- 37++ 0000              M_EXPAG         EQU #08
- 38++ 0000              B_CKSEL0        EQU 4
- 39++ 0000              M_CKSEL0        EQU #10
- 40++ 0000              B_CKSEL1        EQU 5
- 41++ 0000              M_CKSEL1        EQU #20
- 42++ 0000              C_10MHZ         EQU #30
- 43++ 0000              C_12MHZ         EQU #10
- 44++ 0000              C_20MHZ         EQU #20
- 45++ 0000              C_24MHZ         EQU #00
- 46++ 0000              B_PAN4CH        EQU 6
- 47++ 0000              M_PAN4CH        EQU #40
- 48++ 0000              B_INV7B         EQU 7
- 49++ 0000              M_INV7B         EQU #80
- 50++ 0000
- 51++ 0000              ; NeoGS DMA registers
- 52++ 0000              DMA_MOD         EQU #1B
- 53++ 0000              DMA_HAD         EQU #1C
- 54++ 0000              DMA_MAD         EQU #1D
- 55++ 0000              DMA_LAD         EQU #1E
- 56++ 0000              DMA_CST         EQU #1F
- 57++ 0000              C_DMA_NONE      EQU 0
- 58++ 0000              C_DMA_ZX        EQU 1
- 59++ 0000              C_DMA_SD        EQU 2
- 60++ 0000              C_DMA_MP3       EQU 3
- 61++ 0000
- 62++ 0000              ; Standard General Sound ROM commands.
- 63++ 0000              GS_CMD_RESET_FLAGS  EQU #00
- 64++ 0000              GS_CMD_GET_TOTAL_RAM EQU #20
- 65++ 0000              GS_CMD_LOAD_MODULE  EQU #30
- 66++ 0000              GS_CMD_RUN_MODULE   EQU #31
- 67++ 0000              GS_CMD_OPEN_STREAM  EQU #D1
- 68++ 0000              GS_CMD_CLOSE_STREAM EQU #D2
- 69++ 0000              GS_CMD_COLD_RESTART EQU #F4
- 70++ 0000              GS_CMD_JUMP_ADDRESS EQU #13
- 71++ 0000              GS_CMD_RECEIVE_BLOCK EQU #14
- 72++ 0000
- 73++ 0000              ; Project 124 private commands carried by GSCOM after custom firmware starts.
- 74++ 0000              CMD_RESET       EQU #01
- 75++ 0000              CMD_LOAD_X86    EQU #02
- 76++ 0000              CMD_RUN_X86     EQU #03
- 77++ 0000              CMD_GET_STATUS  EQU #04
- 78++ 0000
- 79++ 0000              ; Project 124 startup handshake bytes.
- 80++ 0000              NGS_BOOTSTRAP_READY_ACK EQU #A1
- 81++ 0000              NGS_BOOTSTRAP_LENGTH_ACK EQU #A3
- 82++ 0000              NGS_FIRMWARE_READY_ACK  EQU #A2
- 83++ 0000              NGS_BOOTSTRAP_ERROR_ACK EQU #E1
- 84++ 0000              NGS_RESULT_SIGNATURE   EQU #A5
- 85++ 0000
- 86++ 0000              NGS_STATUS_CBIT EQU M_CBIT
- 87++ 0000              NGS_STATUS_DBIT EQU M_DBIT
- 88++ 0000
- 89++ 0000              ; The x86 task is executed in logical $5002..$7FFF (12 KB window less header).
- 90++ 0000              NGS_X86_DMA_WINDOW_SIZE EQU #3000
- 91++ 0000              NGS_X86_MAX_CODE_SIZE   EQU #2FFE
- 92++ 0000
+ 23++ 0000              MPAGEX          EQU #10             ; independent 16 KiB page for C000-FFFF
+ 24++ 0000              ZXCMD           EQU #01
+ 25++ 0000              ZXDATRD         EQU #02
+ 26++ 0000              ZXDATWR         EQU #03
+ 27++ 0000              ZXSTAT          EQU #04
+ 28++ 0000              CLRCBIT         EQU #05
+ 29++ 0000
+ 30++ 0000              GSCFG0          EQU #0F
+ 31++ 0000              B_NOROM         EQU 0
+ 32++ 0000              M_NOROM         EQU #01
+ 33++ 0000              B_RAMRO         EQU 1
+ 34++ 0000              M_RAMRO         EQU #02
+ 35++ 0000              B_8CHANS        EQU 2
+ 36++ 0000              M_8CHANS        EQU #04
+ 37++ 0000              B_EXPAG         EQU 3
+ 38++ 0000              M_EXPAG         EQU #08
+ 39++ 0000              B_CKSEL0        EQU 4
+ 40++ 0000              M_CKSEL0        EQU #10
+ 41++ 0000              B_CKSEL1        EQU 5
+ 42++ 0000              M_CKSEL1        EQU #20
+ 43++ 0000              C_10MHZ         EQU #30
+ 44++ 0000              C_12MHZ         EQU #10
+ 45++ 0000              C_20MHZ         EQU #20
+ 46++ 0000              C_24MHZ         EQU #00
+ 47++ 0000              B_PAN4CH        EQU 6
+ 48++ 0000              M_PAN4CH        EQU #40
+ 49++ 0000              B_INV7B         EQU 7
+ 50++ 0000              M_INV7B         EQU #80
+ 51++ 0000
+ 52++ 0000              ; NeoGS DMA registers
+ 53++ 0000              DMA_MOD         EQU #1B
+ 54++ 0000              DMA_HAD         EQU #1C
+ 55++ 0000              DMA_MAD         EQU #1D
+ 56++ 0000              DMA_LAD         EQU #1E
+ 57++ 0000              DMA_CST         EQU #1F
+ 58++ 0000              C_DMA_NONE      EQU 0
+ 59++ 0000              C_DMA_ZX        EQU 1
+ 60++ 0000              C_DMA_SD        EQU 2
+ 61++ 0000              C_DMA_MP3       EQU 3
+ 62++ 0000
+ 63++ 0000              ; Standard General Sound ROM commands.
+ 64++ 0000              GS_CMD_RESET_FLAGS  EQU #00
+ 65++ 0000              GS_CMD_GET_TOTAL_RAM EQU #20
+ 66++ 0000              GS_CMD_LOAD_MODULE  EQU #30
+ 67++ 0000              GS_CMD_RUN_MODULE   EQU #31
+ 68++ 0000              GS_CMD_OPEN_STREAM  EQU #D1
+ 69++ 0000              GS_CMD_CLOSE_STREAM EQU #D2
+ 70++ 0000              GS_CMD_COLD_RESTART EQU #F4
+ 71++ 0000              GS_CMD_JUMP_ADDRESS EQU #13
+ 72++ 0000              GS_CMD_RECEIVE_BLOCK EQU #14
+ 73++ 0000
+ 74++ 0000              ; Project 124 private commands carried by GSCOM after custom firmware starts.
+ 75++ 0000              CMD_RESET       EQU #01
+ 76++ 0000              CMD_LOAD_X86    EQU #02
+ 77++ 0000              CMD_RUN_X86     EQU #03
+ 78++ 0000              CMD_GET_STATUS  EQU #04
+ 79++ 0000              CMD_MEM_TEST    EQU #05
+ 80++ 0000
+ 81++ 0000              ; Project 124 startup handshake bytes.
+ 82++ 0000              NGS_BOOTSTRAP_READY_ACK EQU #A1
+ 83++ 0000              NGS_BOOTSTRAP_LENGTH_ACK EQU #A3
+ 84++ 0000              NGS_FIRMWARE_READY_ACK  EQU #A2
+ 85++ 0000              NGS_BOOTSTRAP_ERROR_ACK EQU #E1
+ 86++ 0000              NGS_RESULT_SIGNATURE   EQU #A5
+ 87++ 0000
+ 88++ 0000              NGS_STATUS_CBIT EQU M_CBIT
+ 89++ 0000              NGS_STATUS_DBIT EQU M_DBIT
+ 90++ 0000
+ 91++ 0000              ; The x86 task is executed in logical $5002..$7FFF (12 KB window less header).
+ 92++ 0000              NGS_X86_DMA_WINDOW_SIZE EQU #3000
+ 93++ 0000              NGS_X86_MAX_CODE_SIZE   EQU #2FFE
+ 94++ 0000
 # file closed: neogs_io.inc
  16+  0000
  17+  0000                      ORG     $0000
@@ -148,24 +150,24 @@
  43+  010C D3 0F                out     (GSCFG0), a
  44+  010E
  45+  010E AF                   xor     a
- 46+  010F 32 7C 02             ld      (neo_dma_error), a
- 47+  0112 32 7D 02             ld      (saved_z80_ax), a
- 48+  0115 32 7E 02             ld      (saved_z80_ax+1), a
- 49+  0118 32 7F 02             ld      (saved_x86_ax), a
- 50+  011B 32 80 02             ld      (saved_x86_ax+1), a
- 51+  011E 32 04 06             ld      (x86_exit_status), a
- 52+  0121 32 7A 02             ld      (neo_command), a
- 53+  0124 32 7B 02             ld      (neo_tx_byte), a
+ 46+  010F 32 8A 02             ld      (neo_dma_error), a
+ 47+  0112 32 8B 02             ld      (saved_z80_ax), a
+ 48+  0115 32 8C 02             ld      (saved_z80_ax+1), a
+ 49+  0118 32 8D 02             ld      (saved_x86_ax), a
+ 50+  011B 32 8E 02             ld      (saved_x86_ax+1), a
+ 51+  011E 32 04 07             ld      (x86_exit_status), a
+ 52+  0121 32 88 02             ld      (neo_command), a
+ 53+  0124 32 89 02             ld      (neo_tx_byte), a
  54+  0127
  55+  0127                      ; Copy the ROM-return trampoline into unoverlaid RAM at $4000.
- 56+  0127 21 81 02             ld      hl, rom_return_trampoline_code
+ 56+  0127 21 8F 02             ld      hl, rom_return_trampoline_code
  57+  012A 11 00 40             ld      de, ROM_RETURN_TRAMPOLINE_ADDR
  58+  012D 01 09 00             ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
  59+  0130 ED B0                ldir
  60+  0132
  61+  0132                      ; Notify the Spectrum only after the new firmware is executing.
  62+  0132 3E A2                ld      a, NGS_FIRMWARE_READY_ACK
- 63+  0134 CD 50 02             call    neo_send_data_byte
+ 63+  0134 CD 5E 02             call    neo_send_data_byte
  64+  0137
  65+  0137              main_loop:
  66+  0137                      ; A command exists only while CBIT (ZXSTAT bit 0) is set.
@@ -175,657 +177,894 @@
  70+  013D
  71+  013D                      ; Read the command byte from ZXCMD. Reading it does NOT clear CBIT.
  72+  013D DB 01                in      a, (ZXCMD)
- 73+  013F 32 7A 02             ld      (neo_command), a
+ 73+  013F 32 88 02             ld      (neo_command), a
  74+  0142
  75+  0142                      ; Standard GS #F4 cold restart also returns this custom firmware to ROM.
  76+  0142 FE F4                cp      GS_CMD_COLD_RESTART
- 77+  0144 CA 61 01             jp      z, command_return_to_gsrom
+ 77+  0144 CA 66 01             jp      z, command_return_to_gsrom
  78+  0147 FE 01                cp      CMD_RESET
- 79+  0149 CA 64 01             jp      z, command_reset
+ 79+  0149 CA 69 01             jp      z, command_reset
  80+  014C FE 02                cp      CMD_LOAD_X86
- 81+  014E CA 7C 01             jp      z, command_load_x86
+ 81+  014E CA 81 01             jp      z, command_load_x86
  82+  0151 FE 03                cp      CMD_RUN_X86
- 83+  0153 CA C2 01             jp      z, command_run_x86
+ 83+  0153 CA C7 01             jp      z, command_run_x86
  84+  0156 FE 04                cp      CMD_GET_STATUS
- 85+  0158 CA 26 02             jp      z, command_get_status
- 86+  015B
- 87+  015B                      ; Unknown command: release CBIT so the host cannot deadlock.
- 88+  015B AF                   xor     a
- 89+  015C D3 05                out     (CLRCBIT), a
- 90+  015E C3 37 01             jp      main_loop
- 91+  0161
- 92+  0161              ; A #F4 command is also the standard GS105a cold-restart command.
- 93+  0161              ; If our firmware is running, reveal the stock ROM again and jump to its
- 94+  0161              ; reset vector. Leave CBIT asserted: the ROM's cold-start path clears it when
- 95+  0161              ; the standard firmware is ready, so the host's long wait is a real handshake.
- 96+  0161              command_return_to_gsrom:
- 97+  0161 C3 00 40             jp      ROM_RETURN_TRAMPOLINE_ADDR
- 98+  0164
- 99+  0164              command_reset:
-100+  0164 AF                   xor     a
-101+  0165 32 7C 02             ld      (neo_dma_error), a
-102+  0168 32 04 06             ld      (x86_exit_status), a
-103+  016B 32 7D 02             ld      (saved_z80_ax), a
-104+  016E 32 7E 02             ld      (saved_z80_ax+1), a
-105+  0171 32 7F 02             ld      (saved_x86_ax), a
-106+  0174 32 80 02             ld      (saved_x86_ax+1), a
-107+  0177 D3 05                out     (CLRCBIT), a
-108+  0179 C3 37 01             jp      main_loop
-109+  017C
-110+  017C              ; -------------------------------------------------------------------------
-111+  017C              ; CMD_LOAD_X86
-112+  017C              ; 1) Select ZX DMA module and set physical target $00D000.
-113+  017C              ; 2) Enable DMA by setting DMA_CST bit 7.
-114+  017C              ; 3) Clear CBIT: this is the READY indication to the host.
-115+  017C              ; 4) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
-116+  017C              ; 5) Disable DMA, then clear CBIT to acknowledge completion.
-117+  017C              ;
-118+  017C              ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
-119+  017C              ; -------------------------------------------------------------------------
-120+  017C              command_load_x86:
-121+  017C 3E 01                ld      a, C_DMA_ZX
-122+  017E D3 1B                out     (DMA_MOD), a
-123+  0180
-124+  0180 AF                   xor     a
-125+  0181 D3 1C                out     (DMA_HAD), a            ; physical address bits 21:16 = 0
-126+  0183 3E D0                ld      a, #D0
-127+  0185 D3 1D                out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
-128+  0187 AF                   xor     a
-129+  0188 D3 1E                out     (DMA_LAD), a            ; physical address bits 7:0 = 0
-130+  018A
-131+  018A 3E 80                ld      a, #80
-132+  018C D3 1F                out     (DMA_CST), a            ; DMA enable = bit 7
-133+  018E
-134+  018E AF                   xor     a
-135+  018F D3 05                out     (CLRCBIT), a            ; host may now start LDIR
-136+  0191
-137+  0191 16 08                ld      d, DMA_WAIT_OUTER
-138+  0193              .dma_wait_outer:
-139+  0193 01 FF FF             ld      bc, DMA_WAIT_LIMIT
-140+  0196              .dma_wait_host_end:
-141+  0196 DB 04                in      a, (ZXSTAT)
-142+  0198 CB 47                bit     B_CBIT, a
-143+  019A 20 1A                jr      nz, .dma_host_end
-144+  019C 0B                   dec     bc
-145+  019D 78                   ld      a, b
-146+  019E B1                   or      c
-147+  019F 20 F5                jr      nz, .dma_wait_host_end
-148+  01A1 15                   dec     d
-149+  01A2 20 EF                jr      nz, .dma_wait_outer
-150+  01A4
-151+  01A4                      ; Timeout: close DMA and release the host command line.
-152+  01A4 AF                   xor     a
-153+  01A5 D3 1F                out     (DMA_CST), a
-154+  01A7 D3 05                out     (CLRCBIT), a
-155+  01A9 3E 01                ld      a, 1
-156+  01AB 32 7C 02             ld      (neo_dma_error), a
-157+  01AE 3E 03                ld      a, 3
-158+  01B0 32 04 06             ld      (x86_exit_status), a
-159+  01B3 C3 37 01             jp      main_loop
-160+  01B6
-161+  01B6              .dma_host_end:
-162+  01B6 AF                   xor     a
-163+  01B7 D3 1F                out     (DMA_CST), a            ; disable DMA before leaving handler
-164+  01B9 D3 05                out     (CLRCBIT), a            ; acknowledge host's #FF marker
-165+  01BB AF                   xor     a
-166+  01BC 32 7C 02             ld      (neo_dma_error), a
-167+  01BF C3 37 01             jp      main_loop
-168+  01C2
-169+  01C2              ; -------------------------------------------------------------------------
-170+  01C2              ; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
-171+  01C2              ; -------------------------------------------------------------------------
-172+  01C2              command_run_x86:
-173+  01C2 CD CB 01             call    execute_neogs_x86
-174+  01C5 AF                   xor     a
-175+  01C6 D3 05                out     (CLRCBIT), a
-176+  01C8 C3 37 01             jp      main_loop
-177+  01CB
-178+  01CB              execute_neogs_x86:
-179+  01CB 3A 7C 02             ld      a, (neo_dma_error)
-180+  01CE B7                   or      a
-181+  01CF 28 0C                jr      z, .dma_ok
-182+  01D1 21 FF FF             ld      hl, $FFFF
-183+  01D4 22 7F 02             ld      (saved_x86_ax), hl
-184+  01D7 3E 03                ld      a, 3
-185+  01D9 32 04 06             ld      (x86_exit_status), a
-186+  01DC C9                   ret
-187+  01DD
-188+  01DD              .dma_ok:
-189+  01DD                      ; DMA frame begins with a little-endian x86 byte length at $5000.
-190+  01DD 2A 00 50             ld      hl, (X86_DMA_HEADER_ADDR)
-191+  01E0 7C                   ld      a, h
-192+  01E1 B5                   or      l
-193+  01E2 CA 17 02             jp      z, .invalid_x86_length
-194+  01E5
-195+  01E5                      ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
-196+  01E5 7C                   ld      a, h
-197+  01E6 FE 2F                cp      #2F
-198+  01E8 38 09                jr      c, .x86_length_valid
-199+  01EA C2 17 02             jp      nz, .invalid_x86_length
-200+  01ED 7D                   ld      a, l
-201+  01EE FE FF                cp      #FF
-202+  01F0 D2 17 02             jp      nc, .invalid_x86_length
-203+  01F3
-204+  01F3              .x86_length_valid:
-205+  01F3 11 02 50             ld      de, X86_RAM_RUN_ADDR
-206+  01F6 19                   add     hl, de
-207+  01F7 22 02 06             ld      (x86_program_end), hl
-208+  01FA
-209+  01FA 21 00 00             ld      hl, 0
-210+  01FD 22 7D 02             ld      (saved_z80_ax), hl
-211+  0200 21 FF FF             ld      hl, #FFFF
-212+  0203 22 00 06             ld      (x86_steps_remaining), hl
-213+  0206 AF                   xor     a
-214+  0207 32 04 06             ld      (x86_exit_status), a
-215+  020A
-216+  020A 01 02 50             ld      bc, X86_RAM_RUN_ADDR
-217+  020D CD 8A 02             call    x86_execute_loop
-218+  0210
-219+  0210 2A 7D 02             ld      hl, (saved_z80_ax)
-220+  0213 22 7F 02             ld      (saved_x86_ax), hl
-221+  0216 C9                   ret
-222+  0217
-223+  0217              .invalid_x86_length:
-224+  0217 21 FF FF             ld      hl, #FFFF
-225+  021A 22 7D 02             ld      (saved_z80_ax), hl
-226+  021D 22 7F 02             ld      (saved_x86_ax), hl
-227+  0220 3E 04                ld      a, 4
-228+  0222 32 04 06             ld      (x86_exit_status), a
-229+  0225 C9                   ret
-230+  0226
-231+  0226              ; -------------------------------------------------------------------------
-232+  0226              ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
-233+  0226              ;   A5 signature, exit status, AX low, AX high.
-234+  0226              ; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
-235+  0226              ; -------------------------------------------------------------------------
-236+  0226              command_get_status:
-237+  0226 3E A5                ld      a, NGS_RESULT_SIGNATURE
-238+  0228 CD 50 02             call    neo_send_data_byte
-239+  022B 38 1D                jr      c, .status_tx_failed
-240+  022D
-241+  022D 3A 04 06             ld      a, (x86_exit_status)
-242+  0230 CD 50 02             call    neo_send_data_byte
-243+  0233 38 15                jr      c, .status_tx_failed
-244+  0235
-245+  0235 2A 7F 02             ld      hl, (saved_x86_ax)
-246+  0238 7D                   ld      a, l
-247+  0239 CD 50 02             call    neo_send_data_byte
-248+  023C 38 0C                jr      c, .status_tx_failed
-249+  023E
-250+  023E 7C                   ld      a, h
-251+  023F CD 50 02             call    neo_send_data_byte
-252+  0242 38 06                jr      c, .status_tx_failed
-253+  0244
-254+  0244 AF                   xor     a
-255+  0245 D3 05                out     (CLRCBIT), a
-256+  0247 C3 37 01             jp      main_loop
-257+  024A
-258+  024A              .status_tx_failed:
-259+  024A AF                   xor     a
-260+  024B D3 05                out     (CLRCBIT), a
-261+  024D C3 37 01             jp      main_loop
-262+  0250
-263+  0250              ; -------------------------------------------------------------------------
-264+  0250              ; neo_send_data_byte
-265+  0250              ; IN: A = byte to send to Spectrum.
-266+  0250              ; Wait for DBIT=0, write ZXDATWR (#03), then wait for host read to clear DBIT.
-267+  0250              ; OUT: carry clear on success, carry set on timeout. Preserves HL and DE.
-268+  0250              ; -------------------------------------------------------------------------
-269+  0250              neo_send_data_byte:
-270+  0250 32 7B 02             ld      (neo_tx_byte), a
-271+  0253 01 FF FF             ld      bc, IPC_WAIT_LIMIT
-272+  0256              .tx_wait_slot:
-273+  0256 DB 04                in      a, (ZXSTAT)
-274+  0258 CB 7F                bit     B_DBIT, a
-275+  025A 28 07                jr      z, .tx_slot_free
-276+  025C 0B                   dec     bc
-277+  025D 78                   ld      a, b
-278+  025E B1                   or      c
-279+  025F 20 F5                jr      nz, .tx_wait_slot
-280+  0261 37                   scf
-281+  0262 C9                   ret
-282+  0263
-283+  0263              .tx_slot_free:
-284+  0263 3A 7B 02             ld      a, (neo_tx_byte)
-285+  0266 D3 03                out     (ZXDATWR), a
-286+  0268
-287+  0268 01 FF FF             ld      bc, IPC_WAIT_LIMIT
-288+  026B              .tx_wait_host_read:
-289+  026B DB 04                in      a, (ZXSTAT)
-290+  026D CB 7F                bit     B_DBIT, a
-291+  026F 28 07                jr      z, .tx_host_read
-292+  0271 0B                   dec     bc
-293+  0272 78                   ld      a, b
-294+  0273 B1                   or      c
-295+  0274 20 F5                jr      nz, .tx_wait_host_read
-296+  0276 37                   scf
-297+  0277 C9                   ret
-298+  0278
-299+  0278              .tx_host_read:
-300+  0278 B7                   or      a
-301+  0279 C9                   ret
-302+  027A
-303+  027A 00           neo_command:       db 0
-304+  027B 00           neo_tx_byte:       db 0
-305+  027C 00           neo_dma_error:     db 0
-306+  027D 00 00        saved_z80_ax:      dw 0
-307+  027F 00 00        saved_x86_ax:      dw 0
-308+  0281
-309+  0281              ; This code is copied to $4000 during startup. Its OUT changes the ROM map,
-310+  0281              ; but the following JP is still fetched from RAM because PC remains in $4000.
-311+  0281              rom_return_trampoline_code:
-312+  0281 DB 0F                in      a, (GSCFG0)
-313+  0283 E6 FE                and     #FE
-314+  0285 D3 0F                out     (GSCFG0), a
-315+  0287 C3 00 00             jp      0
-316+  028A              rom_return_trampoline_end:
-317+  028A
-318+  028A                      INCLUDE "x86_interpreter.asm"
+ 85+  0158 CA 34 02             jp      z, command_get_status
+ 86+  015B FE 05                cp      CMD_MEM_TEST
+ 87+  015D CA 2B 02             jp      z, command_mem_test
+ 88+  0160
+ 89+  0160                      ; Unknown command: release CBIT so the host cannot deadlock.
+ 90+  0160 AF                   xor     a
+ 91+  0161 D3 05                out     (CLRCBIT), a
+ 92+  0163 C3 37 01             jp      main_loop
+ 93+  0166
+ 94+  0166              ; A #F4 command is also the standard GS105a cold-restart command.
+ 95+  0166              ; If our firmware is running, reveal the stock ROM again and jump to its
+ 96+  0166              ; reset vector. Leave CBIT asserted: the ROM's cold-start path clears it when
+ 97+  0166              ; the standard firmware is ready, so the host's long wait is a real handshake.
+ 98+  0166              command_return_to_gsrom:
+ 99+  0166 C3 00 40             jp      ROM_RETURN_TRAMPOLINE_ADDR
+100+  0169
+101+  0169              command_reset:
+102+  0169 AF                   xor     a
+103+  016A 32 8A 02             ld      (neo_dma_error), a
+104+  016D 32 04 07             ld      (x86_exit_status), a
+105+  0170 32 8B 02             ld      (saved_z80_ax), a
+106+  0173 32 8C 02             ld      (saved_z80_ax+1), a
+107+  0176 32 8D 02             ld      (saved_x86_ax), a
+108+  0179 32 8E 02             ld      (saved_x86_ax+1), a
+109+  017C D3 05                out     (CLRCBIT), a
+110+  017E C3 37 01             jp      main_loop
+111+  0181
+112+  0181              ; -------------------------------------------------------------------------
+113+  0181              ; CMD_LOAD_X86
+114+  0181              ; 1) Select ZX DMA module and set physical target $00D000.
+115+  0181              ; 2) Enable DMA by setting DMA_CST bit 7.
+116+  0181              ; 3) Clear CBIT: this is the READY indication to the host.
+117+  0181              ; 4) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
+118+  0181              ; 5) Disable DMA, then clear CBIT to acknowledge completion.
+119+  0181              ;
+120+  0181              ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
+121+  0181              ; -------------------------------------------------------------------------
+122+  0181              command_load_x86:
+123+  0181 3E 01                ld      a, C_DMA_ZX
+124+  0183 D3 1B                out     (DMA_MOD), a
+125+  0185
+126+  0185 AF                   xor     a
+127+  0186 D3 1C                out     (DMA_HAD), a            ; physical address bits 21:16 = 0
+128+  0188 3E D0                ld      a, #D0
+129+  018A D3 1D                out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
+130+  018C AF                   xor     a
+131+  018D D3 1E                out     (DMA_LAD), a            ; physical address bits 7:0 = 0
+132+  018F
+133+  018F 3E 80                ld      a, #80
+134+  0191 D3 1F                out     (DMA_CST), a            ; DMA enable = bit 7
+135+  0193
+136+  0193 AF                   xor     a
+137+  0194 D3 05                out     (CLRCBIT), a            ; host may now start LDIR
+138+  0196
+139+  0196 16 08                ld      d, DMA_WAIT_OUTER
+140+  0198              .dma_wait_outer:
+141+  0198 01 FF FF             ld      bc, DMA_WAIT_LIMIT
+142+  019B              .dma_wait_host_end:
+143+  019B DB 04                in      a, (ZXSTAT)
+144+  019D CB 47                bit     B_CBIT, a
+145+  019F 20 1A                jr      nz, .dma_host_end
+146+  01A1 0B                   dec     bc
+147+  01A2 78                   ld      a, b
+148+  01A3 B1                   or      c
+149+  01A4 20 F5                jr      nz, .dma_wait_host_end
+150+  01A6 15                   dec     d
+151+  01A7 20 EF                jr      nz, .dma_wait_outer
+152+  01A9
+153+  01A9                      ; Timeout: close DMA and release the host command line.
+154+  01A9 AF                   xor     a
+155+  01AA D3 1F                out     (DMA_CST), a
+156+  01AC D3 05                out     (CLRCBIT), a
+157+  01AE 3E 01                ld      a, 1
+158+  01B0 32 8A 02             ld      (neo_dma_error), a
+159+  01B3 3E 03                ld      a, 3
+160+  01B5 32 04 07             ld      (x86_exit_status), a
+161+  01B8 C3 37 01             jp      main_loop
+162+  01BB
+163+  01BB              .dma_host_end:
+164+  01BB AF                   xor     a
+165+  01BC D3 1F                out     (DMA_CST), a            ; disable DMA before leaving handler
+166+  01BE D3 05                out     (CLRCBIT), a            ; acknowledge host's #FF marker
+167+  01C0 AF                   xor     a
+168+  01C1 32 8A 02             ld      (neo_dma_error), a
+169+  01C4 C3 37 01             jp      main_loop
+170+  01C7
+171+  01C7              ; -------------------------------------------------------------------------
+172+  01C7              ; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
+173+  01C7              ; -------------------------------------------------------------------------
+174+  01C7              command_run_x86:
+175+  01C7 CD D0 01             call    execute_neogs_x86
+176+  01CA AF                   xor     a
+177+  01CB D3 05                out     (CLRCBIT), a
+178+  01CD C3 37 01             jp      main_loop
+179+  01D0
+180+  01D0              execute_neogs_x86:
+181+  01D0 3A 8A 02             ld      a, (neo_dma_error)
+182+  01D3 B7                   or      a
+183+  01D4 28 0C                jr      z, .dma_ok
+184+  01D6 21 FF FF             ld      hl, $FFFF
+185+  01D9 22 8D 02             ld      (saved_x86_ax), hl
+186+  01DC 3E 03                ld      a, 3
+187+  01DE 32 04 07             ld      (x86_exit_status), a
+188+  01E1 C9                   ret
+189+  01E2
+190+  01E2              .dma_ok:
+191+  01E2                      ; DMA frame begins with a little-endian x86 byte length at $5000.
+192+  01E2 2A 00 50             ld      hl, (X86_DMA_HEADER_ADDR)
+193+  01E5 7C                   ld      a, h
+194+  01E6 B5                   or      l
+195+  01E7 CA 1C 02             jp      z, .invalid_x86_length
+196+  01EA
+197+  01EA                      ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
+198+  01EA 7C                   ld      a, h
+199+  01EB FE 2F                cp      #2F
+200+  01ED 38 09                jr      c, .x86_length_valid
+201+  01EF C2 1C 02             jp      nz, .invalid_x86_length
+202+  01F2 7D                   ld      a, l
+203+  01F3 FE FF                cp      #FF
+204+  01F5 D2 1C 02             jp      nc, .invalid_x86_length
+205+  01F8
+206+  01F8              .x86_length_valid:
+207+  01F8 11 02 50             ld      de, X86_RAM_RUN_ADDR
+208+  01FB 19                   add     hl, de
+209+  01FC 22 02 07             ld      (x86_program_end), hl
+210+  01FF
+211+  01FF 21 00 00             ld      hl, 0
+212+  0202 22 8B 02             ld      (saved_z80_ax), hl
+213+  0205 21 FF FF             ld      hl, #FFFF
+214+  0208 22 00 07             ld      (x86_steps_remaining), hl
+215+  020B AF                   xor     a
+216+  020C 32 04 07             ld      (x86_exit_status), a
+217+  020F
+218+  020F 01 02 50             ld      bc, X86_RAM_RUN_ADDR
+219+  0212 CD B1 03             call    x86_execute_loop
+220+  0215
+221+  0215 2A 8B 02             ld      hl, (saved_z80_ax)
+222+  0218 22 8D 02             ld      (saved_x86_ax), hl
+223+  021B C9                   ret
+224+  021C
+225+  021C              .invalid_x86_length:
+226+  021C 21 FF FF             ld      hl, #FFFF
+227+  021F 22 8B 02             ld      (saved_z80_ax), hl
+228+  0222 22 8D 02             ld      (saved_x86_ax), hl
+229+  0225 3E 04                ld      a, 4
+230+  0227 32 04 07             ld      (x86_exit_status), a
+231+  022A C9                   ret
+232+  022B
+233+  022B              ; -------------------------------------------------------------------------
+234+  022B              ; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
+235+  022B              ; Result is returned through the existing CMD_GET_STATUS frame.
+236+  022B              ; -------------------------------------------------------------------------
+237+  022B              command_mem_test:
+238+  022B CD D7 02             call    x86_mem_test
+239+  022E AF                   xor     a
+240+  022F D3 05                out     (CLRCBIT), a
+241+  0231 C3 37 01             jp      main_loop
+242+  0234
+243+  0234              ; -------------------------------------------------------------------------
+244+  0234              ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
+245+  0234              ;   A5 signature, exit status, AX low, AX high.
+246+  0234              ; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
+247+  0234              ; -------------------------------------------------------------------------
+248+  0234              command_get_status:
+249+  0234 3E A5                ld      a, NGS_RESULT_SIGNATURE
+250+  0236 CD 5E 02             call    neo_send_data_byte
+251+  0239 38 1D                jr      c, .status_tx_failed
+252+  023B
+253+  023B 3A 04 07             ld      a, (x86_exit_status)
+254+  023E CD 5E 02             call    neo_send_data_byte
+255+  0241 38 15                jr      c, .status_tx_failed
+256+  0243
+257+  0243 2A 8D 02             ld      hl, (saved_x86_ax)
+258+  0246 7D                   ld      a, l
+259+  0247 CD 5E 02             call    neo_send_data_byte
+260+  024A 38 0C                jr      c, .status_tx_failed
+261+  024C
+262+  024C 7C                   ld      a, h
+263+  024D CD 5E 02             call    neo_send_data_byte
+264+  0250 38 06                jr      c, .status_tx_failed
+265+  0252
+266+  0252 AF                   xor     a
+267+  0253 D3 05                out     (CLRCBIT), a
+268+  0255 C3 37 01             jp      main_loop
+269+  0258
+270+  0258              .status_tx_failed:
+271+  0258 AF                   xor     a
+272+  0259 D3 05                out     (CLRCBIT), a
+273+  025B C3 37 01             jp      main_loop
+274+  025E
+275+  025E              ; -------------------------------------------------------------------------
+276+  025E              ; neo_send_data_byte
+277+  025E              ; IN: A = byte to send to Spectrum.
+278+  025E              ; Wait for DBIT=0, write ZXDATWR (#03), then wait for host read to clear DBIT.
+279+  025E              ; OUT: carry clear on success, carry set on timeout. Preserves HL and DE.
+280+  025E              ; -------------------------------------------------------------------------
+281+  025E              neo_send_data_byte:
+282+  025E 32 89 02             ld      (neo_tx_byte), a
+283+  0261 01 FF FF             ld      bc, IPC_WAIT_LIMIT
+284+  0264              .tx_wait_slot:
+285+  0264 DB 04                in      a, (ZXSTAT)
+286+  0266 CB 7F                bit     B_DBIT, a
+287+  0268 28 07                jr      z, .tx_slot_free
+288+  026A 0B                   dec     bc
+289+  026B 78                   ld      a, b
+290+  026C B1                   or      c
+291+  026D 20 F5                jr      nz, .tx_wait_slot
+292+  026F 37                   scf
+293+  0270 C9                   ret
+294+  0271
+295+  0271              .tx_slot_free:
+296+  0271 3A 89 02             ld      a, (neo_tx_byte)
+297+  0274 D3 03                out     (ZXDATWR), a
+298+  0276
+299+  0276 01 FF FF             ld      bc, IPC_WAIT_LIMIT
+300+  0279              .tx_wait_host_read:
+301+  0279 DB 04                in      a, (ZXSTAT)
+302+  027B CB 7F                bit     B_DBIT, a
+303+  027D 28 07                jr      z, .tx_host_read
+304+  027F 0B                   dec     bc
+305+  0280 78                   ld      a, b
+306+  0281 B1                   or      c
+307+  0282 20 F5                jr      nz, .tx_wait_host_read
+308+  0284 37                   scf
+309+  0285 C9                   ret
+310+  0286
+311+  0286              .tx_host_read:
+312+  0286 B7                   or      a
+313+  0287 C9                   ret
+314+  0288
+315+  0288 00           neo_command:       db 0
+316+  0289 00           neo_tx_byte:       db 0
+317+  028A 00           neo_dma_error:     db 0
+318+  028B 00 00        saved_z80_ax:      dw 0
+319+  028D 00 00        saved_x86_ax:      dw 0
+320+  028F
+321+  028F              ; This code is copied to $4000 during startup. Its OUT changes the ROM map,
+322+  028F              ; but the following JP is still fetched from RAM because PC remains in $4000.
+323+  028F              rom_return_trampoline_code:
+324+  028F DB 0F                in      a, (GSCFG0)
+325+  0291 E6 FE                and     #FE
+326+  0293 D3 0F                out     (GSCFG0), a
+327+  0295 C3 00 00             jp      0
+328+  0298              rom_return_trampoline_end:
+329+  0298
+330+  0298                      INCLUDE "x86_memory.asm"
+# file opened: x86_memory.asm
+  1++ 0298              ; =========================================================================
+  2++ 0298              ; PROJECT 124 — 8086 physical memory backend for NeoGS GS105a
+  3++ 0298              ;
+  4++ 0298              ; x86 physical $00000-$FFFFF maps to NeoGS RAM pages 4..67
+  5++ 0298              ; (NeoGS physical base $010000, page size $4000 / 16 KiB).
+  6++ 0298              ; Window C000-FFFF is switched through MPAGEX. This keeps firmware in
+  7++ 0298              ; window 0 / page 0 and the current DMA frame in window 1 / page 3.
+  8++ 0298              ;
+  9++ 0298              ; x86_mem_addr is a 20-bit little-endian address:
+ 10++ 0298              ;   +0 = bits 7:0, +1 = bits 15:8, +2 = bits 19:16 (valid 0..0F).
+ 11++ 0298              ;
+ 12++ 0298              ; API:
+ 13++ 0298              ;   x86_mem_init: enable NOROM + EXPAG, preserving other GSCFG0 bits.
+ 14++ 0298              ;   x86_mem_read8:  IN x86_mem_addr; OUT A=value, carry=invalid address.
+ 15++ 0298              ;   x86_mem_write8: IN x86_mem_addr and x86_mem_value; carry=invalid address.
+ 16++ 0298              ;   x86_mem_test: destructive test of the reserved 1 MiB x86 RAM region.
+ 17++ 0298              ;                 status=0, AX=0001 on pass; status=5, AX=phase:page on fail.
+ 18++ 0298              ;
+ 19++ 0298              ; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX.
+ 20++ 0298              ; =========================================================================
+ 21++ 0298
+ 22++ 0298              X86_MEM_NGSPAGE_BASE EQU 4
+ 23++ 0298              X86_MEM_PAGE_COUNT   EQU 64
+ 24++ 0298
+ 25++ 0298              x86_mem_init:
+ 26++ 0298 DB 0F                in      a, (GSCFG0)
+ 27++ 029A F6 09                or      M_NOROM | M_EXPAG
+ 28++ 029C D3 0F                out     (GSCFG0), a
+ 29++ 029E C9                   ret
+ 30++ 029F
+ 31++ 029F              ; Convert x86_mem_addr into a Z80 pointer in C000-FFFF.
+ 32++ 029F              ; OUT: HL=window pointer, carry clear; carry set if address > FFFFF.
+ 33++ 029F              x86_mem_map_addr:
+ 34++ 029F 3A AD 03             ld      a, (x86_mem_addr+2)
+ 35++ 02A2 FE 10                cp      #10
+ 36++ 02A4 30 1E                jr      nc, .bad_address
+ 37++ 02A6
+ 38++ 02A6                      ; page = (physical >> 14) + 4
+ 39++ 02A6                      ; page index = (high_nibble << 2) | (middle_byte >> 6)
+ 40++ 02A6 87                   add     a, a
+ 41++ 02A7 87                   add     a, a
+ 42++ 02A8 47                   ld      b, a
+ 43++ 02A9 3A AC 03             ld      a, (x86_mem_addr+1)
+ 44++ 02AC 07                   rlca
+ 45++ 02AD 07                   rlca
+ 46++ 02AE E6 03                and     #03
+ 47++ 02B0 B0                   or      b
+ 48++ 02B1 C6 04                add     a, X86_MEM_NGSPAGE_BASE
+ 49++ 02B3
+ 50++ 02B3                      ; MPAGEX uses ROL8(page,1); send ROR8(page,1).
+ 51++ 02B3 0F                   rrca
+ 52++ 02B4 D3 10                out     (MPAGEX), a
+ 53++ 02B6
+ 54++ 02B6                      ; Window C000-FFFF maps the selected 16 KiB physical page.
+ 55++ 02B6 3A AC 03             ld      a, (x86_mem_addr+1)
+ 56++ 02B9 E6 3F                and     #3F
+ 57++ 02BB F6 C0                or      #C0
+ 58++ 02BD 67                   ld      h, a
+ 59++ 02BE 3A AB 03             ld      a, (x86_mem_addr)
+ 60++ 02C1 6F                   ld      l, a
+ 61++ 02C2 B7                   or      a
+ 62++ 02C3 C9                   ret
+ 63++ 02C4
+ 64++ 02C4              .bad_address:
+ 65++ 02C4 37                   scf
+ 66++ 02C5 C9                   ret
+ 67++ 02C6
+ 68++ 02C6              ; Read one byte. IN x86_mem_addr[0..2]. OUT A=byte, carry on invalid address.
+ 69++ 02C6              x86_mem_read8:
+ 70++ 02C6 CD 9F 02             call    x86_mem_map_addr
+ 71++ 02C9 D8                   ret     c
+ 72++ 02CA 7E                   ld      a, (hl)
+ 73++ 02CB B7                   or      a
+ 74++ 02CC C9                   ret
+ 75++ 02CD
+ 76++ 02CD              ; Write one byte. IN x86_mem_addr[0..2], x86_mem_value.
+ 77++ 02CD              x86_mem_write8:
+ 78++ 02CD CD 9F 02             call    x86_mem_map_addr
+ 79++ 02D0 D8                   ret     c
+ 80++ 02D1 3A AE 03             ld      a, (x86_mem_value)
+ 81++ 02D4 77                   ld      (hl), a
+ 82++ 02D5 B7                   or      a
+ 83++ 02D6 C9                   ret
+ 84++ 02D7
+ 85++ 02D7              ; -------------------------------------------------------------------------
+ 86++ 02D7              ; Destructive physical RAM mapping test.
+ 87++ 02D7              ; Every page receives unique values at offsets 0000 and 3FFF. A second pass
+ 88++ 02D7              ; verifies all 128 locations, detecting missing pages and page aliases.
+ 89++ 02D7              ; -------------------------------------------------------------------------
+ 90++ 02D7              x86_mem_test:
+ 91++ 02D7 CD 98 02             call    x86_mem_init
+ 92++ 02DA AF                   xor     a
+ 93++ 02DB 32 AF 03             ld      (x86_mem_page), a
+ 94++ 02DE 32 B0 03             ld      (x86_mem_phase), a
+ 95++ 02E1
+ 96++ 02E1              .write_page_loop:
+ 97++ 02E1 CD 70 03             call    x86_mem_build_page_start
+ 98++ 02E4 3A AF 03             ld      a, (x86_mem_page)
+ 99++ 02E7 EE 5A                xor     #5A
+100++ 02E9 32 AE 03             ld      (x86_mem_value), a
+101++ 02EC CD CD 02             call    x86_mem_write8
+102++ 02EF DA 4E 03             jp      c, x86_mem_test_write_start_fail
+103++ 02F2
+104++ 02F2 CD 8C 03             call    x86_mem_build_page_end
+105++ 02F5 3A AF 03             ld      a, (x86_mem_page)
+106++ 02F8 EE A5                xor     #A5
+107++ 02FA 32 AE 03             ld      (x86_mem_value), a
+108++ 02FD CD CD 02             call    x86_mem_write8
+109++ 0300 DA 52 03             jp      c, x86_mem_test_write_end_fail
+110++ 0303
+111++ 0303 3A AF 03             ld      a, (x86_mem_page)
+112++ 0306 3C                   inc     a
+113++ 0307 32 AF 03             ld      (x86_mem_page), a
+114++ 030A FE 40                cp      X86_MEM_PAGE_COUNT
+115++ 030C 38 D3                jr      c, .write_page_loop
+116++ 030E
+117++ 030E AF                   xor     a
+118++ 030F 32 AF 03             ld      (x86_mem_page), a
+119++ 0312
+120++ 0312              .verify_page_loop:
+121++ 0312 CD 70 03             call    x86_mem_build_page_start
+122++ 0315 CD C6 02             call    x86_mem_read8
+123++ 0318 DA 56 03             jp      c, x86_mem_test_verify_start_fail
+124++ 031B 47                   ld      b, a
+125++ 031C 3A AF 03             ld      a, (x86_mem_page)
+126++ 031F EE 5A                xor     #5A
+127++ 0321 B8                   cp      b
+128++ 0322 C2 56 03             jp      nz, x86_mem_test_verify_start_fail
+129++ 0325
+130++ 0325 CD 8C 03             call    x86_mem_build_page_end
+131++ 0328 CD C6 02             call    x86_mem_read8
+132++ 032B DA 5A 03             jp      c, x86_mem_test_verify_end_fail
+133++ 032E 47                   ld      b, a
+134++ 032F 3A AF 03             ld      a, (x86_mem_page)
+135++ 0332 EE A5                xor     #A5
+136++ 0334 B8                   cp      b
+137++ 0335 C2 5A 03             jp      nz, x86_mem_test_verify_end_fail
+138++ 0338
+139++ 0338 3A AF 03             ld      a, (x86_mem_page)
+140++ 033B 3C                   inc     a
+141++ 033C 32 AF 03             ld      (x86_mem_page), a
+142++ 033F FE 40                cp      X86_MEM_PAGE_COUNT
+143++ 0341 38 CF                jr      c, .verify_page_loop
+144++ 0343
+145++ 0343                      ; Success: AX=0001 means all 64 pages passed.
+146++ 0343 21 01 00             ld      hl, 1
+147++ 0346 22 8D 02             ld      (saved_x86_ax), hl
+148++ 0349 AF                   xor     a
+149++ 034A 32 04 07             ld      (x86_exit_status), a
+150++ 034D C9                   ret
+151++ 034E
+152++ 034E              x86_mem_test_write_start_fail:
+153++ 034E 3E 01                ld      a, 1
+154++ 0350 18 0A                jr      x86_mem_test_fail
+155++ 0352              x86_mem_test_write_end_fail:
+156++ 0352 3E 02                ld      a, 2
+157++ 0354 18 06                jr      x86_mem_test_fail
+158++ 0356              x86_mem_test_verify_start_fail:
+159++ 0356 3E 03                ld      a, 3
+160++ 0358 18 02                jr      x86_mem_test_fail
+161++ 035A              x86_mem_test_verify_end_fail:
+162++ 035A 3E 04                ld      a, 4
+163++ 035C
+164++ 035C              x86_mem_test_fail:
+165++ 035C 32 B0 03             ld      (x86_mem_phase), a
+166++ 035F 3A AF 03             ld      a, (x86_mem_page)
+167++ 0362 6F                   ld      l, a
+168++ 0363 3A B0 03             ld      a, (x86_mem_phase)
+169++ 0366 67                   ld      h, a
+170++ 0367 22 8D 02             ld      (saved_x86_ax), hl
+171++ 036A 3E 05                ld      a, 5
+172++ 036C 32 04 07             ld      (x86_exit_status), a
+173++ 036F C9                   ret
+174++ 0370
+175++ 0370              ; Build page * 4000h, offset 0000.
+176++ 0370              x86_mem_build_page_start:
+177++ 0370 AF                   xor     a
+178++ 0371 32 AB 03             ld      (x86_mem_addr), a
+179++ 0374 3A AF 03             ld      a, (x86_mem_page)
+180++ 0377 47                   ld      b, a
+181++ 0378 E6 03                and     #03
+182++ 037A 87                   add     a, a
+183++ 037B 87                   add     a, a
+184++ 037C 87                   add     a, a
+185++ 037D 87                   add     a, a
+186++ 037E 87                   add     a, a
+187++ 037F 87                   add     a, a
+188++ 0380 32 AC 03             ld      (x86_mem_addr+1), a
+189++ 0383 78                   ld      a, b
+190++ 0384 0F                   rrca
+191++ 0385 0F                   rrca
+192++ 0386 E6 0F                and     #0F
+193++ 0388 32 AD 03             ld      (x86_mem_addr+2), a
+194++ 038B C9                   ret
+195++ 038C
+196++ 038C              ; Build page * 4000h + 3FFFh.
+197++ 038C              x86_mem_build_page_end:
+198++ 038C 3E FF                ld      a, #FF
+199++ 038E 32 AB 03             ld      (x86_mem_addr), a
+200++ 0391 3A AF 03             ld      a, (x86_mem_page)
+201++ 0394 47                   ld      b, a
+202++ 0395 E6 03                and     #03
+203++ 0397 87                   add     a, a
+204++ 0398 87                   add     a, a
+205++ 0399 87                   add     a, a
+206++ 039A 87                   add     a, a
+207++ 039B 87                   add     a, a
+208++ 039C 87                   add     a, a
+209++ 039D F6 3F                or      #3F
+210++ 039F 32 AC 03             ld      (x86_mem_addr+1), a
+211++ 03A2 78                   ld      a, b
+212++ 03A3 0F                   rrca
+213++ 03A4 0F                   rrca
+214++ 03A5 E6 0F                and     #0F
+215++ 03A7 32 AD 03             ld      (x86_mem_addr+2), a
+216++ 03AA C9                   ret
+217++ 03AB
+218++ 03AB 00 00 00     x86_mem_addr:  db 0, 0, 0
+219++ 03AE 00           x86_mem_value: db 0
+220++ 03AF 00           x86_mem_page:  db 0
+221++ 03B0 00           x86_mem_phase: db 0
+222++ 03B1
+# file closed: x86_memory.asm
+331+  03B1                      INCLUDE "x86_interpreter.asm"
 # file opened: x86_interpreter.asm
-  1++ 028A              ; =========================================================================
-  2++ 028A              ; PROJECT 124 — minimal x86 interpreter core for NeoGS Z80
-  3++ 028A              ;
-  4++ 028A              ; Supported opcodes:
-  5++ 028A              ;   90       NOP
-  6++ 028A              ;   40       INC AX (8086 legacy one-byte register encoding)
-  7++ 028A              ;   B8 iw    MOV AX, imm16
-  8++ 028A              ;   F4       HLT (successful task termination)
-  9++ 028A              ;
- 10++ 028A              ; Unsupported opcode: status 2. Instruction budget exhausted: status 1.
- 11++ 028A              ; DMA error: status 3. Out-of-range/truncated instruction: status 4.
- 12++ 028A              ; x86_program_end is the exclusive logical address after the payload.
- 13++ 028A              ;
- 14++ 028A              ; Entry: BC = x86 IP in NeoGS Z80 logical address space; AX stored in
- 15++ 028A              ;        saved_z80_ax. Exit: saved_z80_ax and x86_exit_status are updated.
- 16++ 028A              ; =========================================================================
- 17++ 028A
- 18++ 028A              x86_execute_loop:
- 19++ 028A              x86_next_instruction:
- 20++ 028A                      ; Every opcode fetch must remain strictly below the exclusive end.
- 21++ 028A 2A 02 06             ld      hl, (x86_program_end)
- 22++ 028D B7                   or      a
- 23++ 028E ED 42                sbc     hl, bc
- 24++ 0290 DA FA 02             jp      c, x86_ip_out_of_range
- 25++ 0293 7C                   ld      a, h
- 26++ 0294 B5                   or      l
- 27++ 0295 CA FA 02             jp      z, x86_ip_out_of_range
- 28++ 0298
- 29++ 0298 2A 00 06             ld      hl, (x86_steps_remaining)
- 30++ 029B 7C                   ld      a, h
- 31++ 029C B5                   or      l
- 32++ 029D 20 09                jr      nz, .budget_ok
- 33++ 029F 3E 01                ld      a, 1
- 34++ 02A1 32 04 06             ld      (x86_exit_status), a
- 35++ 02A4 2A 7D 02             ld      hl, (saved_z80_ax)
- 36++ 02A7 C9                   ret
- 37++ 02A8
- 38++ 02A8              .budget_ok:
- 39++ 02A8 2B                   dec     hl
- 40++ 02A9 22 00 06             ld      (x86_steps_remaining), hl
- 41++ 02AC
- 42++ 02AC                      ; Fetch opcode and advance IP.
- 43++ 02AC 0A                   ld      a, (bc)
- 44++ 02AD 03                   inc     bc
- 45++ 02AE
- 46++ 02AE                      ; Resolve handler from 256-entry WORD table.
- 47++ 02AE 6F                   ld      l, a
- 48++ 02AF 26 00                ld      h, 0
- 49++ 02B1 29                   add     hl, hl
- 50++ 02B2 11 00 04             ld      de, x86_jump_table
- 51++ 02B5 19                   add     hl, de
- 52++ 02B6 5E                   ld      e, (hl)
- 53++ 02B7 23                   inc     hl
- 54++ 02B8 56                   ld      d, (hl)
- 55++ 02B9
- 56++ 02B9                      ; Restore AX in HL and jump to the selected handler. PUSH/RET is
- 57++ 02B9                      ; the Z80's safe indirect-jump idiom; BC remains the virtual x86 IP.
- 58++ 02B9 2A 7D 02             ld      hl, (saved_z80_ax)
- 59++ 02BC D5                   push    de
- 60++ 02BD C9                   ret
- 61++ 02BE
- 62++ 02BE              ; 90 — NOP
- 63++ 02BE              x86_nop:
- 64++ 02BE 22 7D 02             ld      (saved_z80_ax), hl
- 65++ 02C1 C3 8A 02             jp      x86_next_instruction
- 66++ 02C4
- 67++ 02C4              ; 40 — INC AX
- 68++ 02C4              x86_inc_ax:
- 69++ 02C4 23                   inc     hl
- 70++ 02C5 22 7D 02             ld      (saved_z80_ax), hl
- 71++ 02C8 C3 8A 02             jp      x86_next_instruction
- 72++ 02CB
- 73++ 02CB              ; B8 iw — MOV AX, imm16 (little-endian immediate)
- 74++ 02CB              x86_mov_ax_imm16:
- 75++ 02CB                      ; B8 requires two immediate bytes. Reject a truncated instruction.
- 76++ 02CB 2A 02 06             ld      hl, (x86_program_end)
- 77++ 02CE B7                   or      a
- 78++ 02CF ED 42                sbc     hl, bc
- 79++ 02D1 11 02 00             ld      de, 2
- 80++ 02D4 B7                   or      a
- 81++ 02D5 ED 52                sbc     hl, de
- 82++ 02D7 DA FA 02             jp      c, x86_ip_out_of_range
- 83++ 02DA
- 84++ 02DA 69                   ld      l, c
- 85++ 02DB 60                   ld      h, b
- 86++ 02DC 5E                   ld      e, (hl)
- 87++ 02DD 23                   inc     hl
- 88++ 02DE 56                   ld      d, (hl)
- 89++ 02DF 23                   inc     hl
- 90++ 02E0 44                   ld      b, h
- 91++ 02E1 4D                   ld      c, l
- 92++ 02E2 ED 53 7D 02          ld      (saved_z80_ax), de
- 93++ 02E6 C3 8A 02             jp      x86_next_instruction
- 94++ 02E9
- 95++ 02E9              ; F4 — HLT: successful end of task
- 96++ 02E9              x86_hlt:
- 97++ 02E9 22 7D 02             ld      (saved_z80_ax), hl
- 98++ 02EC AF                   xor     a
- 99++ 02ED 32 04 06             ld      (x86_exit_status), a
-100++ 02F0 C9                   ret
-101++ 02F1
-102++ 02F1              ; Unsupported instruction: stop rather than executing arbitrary memory.
-103++ 02F1              x86_unsupported:
-104++ 02F1 22 7D 02             ld      (saved_z80_ax), hl
-105++ 02F4 3E 02                ld      a, 2
-106++ 02F6 32 04 06             ld      (x86_exit_status), a
-107++ 02F9 C9                   ret
-108++ 02FA
-109++ 02FA              x86_ip_out_of_range:
-110++ 02FA 3E 04                ld      a, 4
-111++ 02FC 32 04 06             ld      (x86_exit_status), a
-112++ 02FF 2A 7D 02             ld      hl, (saved_z80_ax)
-113++ 0302 C9                   ret
-114++ 0303
-115++ 0303 00 00 00...          ALIGN   256
-116++ 0400              x86_jump_table:
-117++ 0400 F1 02                DW      x86_unsupported             ; 00
-118++ 0402 F1 02                DW      x86_unsupported             ; 01
-119++ 0404                      REPT    #40 - #02
-120++ 0404 F1 02       >        DW      x86_unsupported
-120++ 0406 F1 02       >        DW      x86_unsupported
-120++ 0408 F1 02       >        DW      x86_unsupported
-120++ 040A F1 02       >        DW      x86_unsupported
-120++ 040C F1 02       >        DW      x86_unsupported
-120++ 040E F1 02       >        DW      x86_unsupported
-120++ 0410 F1 02       >        DW      x86_unsupported
-120++ 0412 F1 02       >        DW      x86_unsupported
-120++ 0414 F1 02       >        DW      x86_unsupported
-120++ 0416 F1 02       >        DW      x86_unsupported
-120++ 0418 F1 02       >        DW      x86_unsupported
-120++ 041A F1 02       >        DW      x86_unsupported
-120++ 041C F1 02       >        DW      x86_unsupported
-120++ 041E F1 02       >        DW      x86_unsupported
-120++ 0420 F1 02       >        DW      x86_unsupported
-120++ 0422 F1 02       >        DW      x86_unsupported
-120++ 0424 F1 02       >        DW      x86_unsupported
-120++ 0426 F1 02       >        DW      x86_unsupported
-120++ 0428 F1 02       >        DW      x86_unsupported
-120++ 042A F1 02       >        DW      x86_unsupported
-120++ 042C F1 02       >        DW      x86_unsupported
-120++ 042E F1 02       >        DW      x86_unsupported
-120++ 0430 F1 02       >        DW      x86_unsupported
-120++ 0432 F1 02       >        DW      x86_unsupported
-120++ 0434 F1 02       >        DW      x86_unsupported
-120++ 0436 F1 02       >        DW      x86_unsupported
-120++ 0438 F1 02       >        DW      x86_unsupported
-120++ 043A F1 02       >        DW      x86_unsupported
-120++ 043C F1 02       >        DW      x86_unsupported
-120++ 043E F1 02       >        DW      x86_unsupported
-120++ 0440 F1 02       >        DW      x86_unsupported
-120++ 0442 F1 02       >        DW      x86_unsupported
-120++ 0444 F1 02       >        DW      x86_unsupported
-120++ 0446 F1 02       >        DW      x86_unsupported
-120++ 0448 F1 02       >        DW      x86_unsupported
-120++ 044A F1 02       >        DW      x86_unsupported
-120++ 044C F1 02       >        DW      x86_unsupported
-120++ 044E F1 02       >        DW      x86_unsupported
-120++ 0450 F1 02       >        DW      x86_unsupported
-120++ 0452 F1 02       >        DW      x86_unsupported
-120++ 0454 F1 02       >        DW      x86_unsupported
-120++ 0456 F1 02       >        DW      x86_unsupported
-120++ 0458 F1 02       >        DW      x86_unsupported
-120++ 045A F1 02       >        DW      x86_unsupported
-120++ 045C F1 02       >        DW      x86_unsupported
-120++ 045E F1 02       >        DW      x86_unsupported
-120++ 0460 F1 02       >        DW      x86_unsupported
-120++ 0462 F1 02       >        DW      x86_unsupported
-120++ 0464 F1 02       >        DW      x86_unsupported
-120++ 0466 F1 02       >        DW      x86_unsupported
-120++ 0468 F1 02       >        DW      x86_unsupported
-120++ 046A F1 02       >        DW      x86_unsupported
-120++ 046C F1 02       >        DW      x86_unsupported
-120++ 046E F1 02       >        DW      x86_unsupported
-120++ 0470 F1 02       >        DW      x86_unsupported
-120++ 0472 F1 02       >        DW      x86_unsupported
-120++ 0474 F1 02       >        DW      x86_unsupported
-120++ 0476 F1 02       >        DW      x86_unsupported
-120++ 0478 F1 02       >        DW      x86_unsupported
-120++ 047A F1 02       >        DW      x86_unsupported
-120++ 047C F1 02       >        DW      x86_unsupported
-120++ 047E F1 02       >        DW      x86_unsupported
-121++ 0480                      ENDR
-122++ 0480 C4 02                DW      x86_inc_ax                  ; 40
-123++ 0482                      REPT    #90 - #41
-124++ 0482 F1 02       >        DW      x86_unsupported
-124++ 0484 F1 02       >        DW      x86_unsupported
-124++ 0486 F1 02       >        DW      x86_unsupported
-124++ 0488 F1 02       >        DW      x86_unsupported
-124++ 048A F1 02       >        DW      x86_unsupported
-124++ 048C F1 02       >        DW      x86_unsupported
-124++ 048E F1 02       >        DW      x86_unsupported
-124++ 0490 F1 02       >        DW      x86_unsupported
-124++ 0492 F1 02       >        DW      x86_unsupported
-124++ 0494 F1 02       >        DW      x86_unsupported
-124++ 0496 F1 02       >        DW      x86_unsupported
-124++ 0498 F1 02       >        DW      x86_unsupported
-124++ 049A F1 02       >        DW      x86_unsupported
-124++ 049C F1 02       >        DW      x86_unsupported
-124++ 049E F1 02       >        DW      x86_unsupported
-124++ 04A0 F1 02       >        DW      x86_unsupported
-124++ 04A2 F1 02       >        DW      x86_unsupported
-124++ 04A4 F1 02       >        DW      x86_unsupported
-124++ 04A6 F1 02       >        DW      x86_unsupported
-124++ 04A8 F1 02       >        DW      x86_unsupported
-124++ 04AA F1 02       >        DW      x86_unsupported
-124++ 04AC F1 02       >        DW      x86_unsupported
-124++ 04AE F1 02       >        DW      x86_unsupported
-124++ 04B0 F1 02       >        DW      x86_unsupported
-124++ 04B2 F1 02       >        DW      x86_unsupported
-124++ 04B4 F1 02       >        DW      x86_unsupported
-124++ 04B6 F1 02       >        DW      x86_unsupported
-124++ 04B8 F1 02       >        DW      x86_unsupported
-124++ 04BA F1 02       >        DW      x86_unsupported
-124++ 04BC F1 02       >        DW      x86_unsupported
-124++ 04BE F1 02       >        DW      x86_unsupported
-124++ 04C0 F1 02       >        DW      x86_unsupported
-124++ 04C2 F1 02       >        DW      x86_unsupported
-124++ 04C4 F1 02       >        DW      x86_unsupported
-124++ 04C6 F1 02       >        DW      x86_unsupported
-124++ 04C8 F1 02       >        DW      x86_unsupported
-124++ 04CA F1 02       >        DW      x86_unsupported
-124++ 04CC F1 02       >        DW      x86_unsupported
-124++ 04CE F1 02       >        DW      x86_unsupported
-124++ 04D0 F1 02       >        DW      x86_unsupported
-124++ 04D2 F1 02       >        DW      x86_unsupported
-124++ 04D4 F1 02       >        DW      x86_unsupported
-124++ 04D6 F1 02       >        DW      x86_unsupported
-124++ 04D8 F1 02       >        DW      x86_unsupported
-124++ 04DA F1 02       >        DW      x86_unsupported
-124++ 04DC F1 02       >        DW      x86_unsupported
-124++ 04DE F1 02       >        DW      x86_unsupported
-124++ 04E0 F1 02       >        DW      x86_unsupported
-124++ 04E2 F1 02       >        DW      x86_unsupported
-124++ 04E4 F1 02       >        DW      x86_unsupported
-124++ 04E6 F1 02       >        DW      x86_unsupported
-124++ 04E8 F1 02       >        DW      x86_unsupported
-124++ 04EA F1 02       >        DW      x86_unsupported
-124++ 04EC F1 02       >        DW      x86_unsupported
-124++ 04EE F1 02       >        DW      x86_unsupported
-124++ 04F0 F1 02       >        DW      x86_unsupported
-124++ 04F2 F1 02       >        DW      x86_unsupported
-124++ 04F4 F1 02       >        DW      x86_unsupported
-124++ 04F6 F1 02       >        DW      x86_unsupported
-124++ 04F8 F1 02       >        DW      x86_unsupported
-124++ 04FA F1 02       >        DW      x86_unsupported
-124++ 04FC F1 02       >        DW      x86_unsupported
-124++ 04FE F1 02       >        DW      x86_unsupported
-124++ 0500 F1 02       >        DW      x86_unsupported
-124++ 0502 F1 02       >        DW      x86_unsupported
-124++ 0504 F1 02       >        DW      x86_unsupported
-124++ 0506 F1 02       >        DW      x86_unsupported
-124++ 0508 F1 02       >        DW      x86_unsupported
-124++ 050A F1 02       >        DW      x86_unsupported
-124++ 050C F1 02       >        DW      x86_unsupported
-124++ 050E F1 02       >        DW      x86_unsupported
-124++ 0510 F1 02       >        DW      x86_unsupported
-124++ 0512 F1 02       >        DW      x86_unsupported
-124++ 0514 F1 02       >        DW      x86_unsupported
-124++ 0516 F1 02       >        DW      x86_unsupported
-124++ 0518 F1 02       >        DW      x86_unsupported
-124++ 051A F1 02       >        DW      x86_unsupported
-124++ 051C F1 02       >        DW      x86_unsupported
-124++ 051E F1 02       >        DW      x86_unsupported
-125++ 0520                      ENDR
-126++ 0520 BE 02                DW      x86_nop                     ; 90
-127++ 0522                      REPT    #B8 - #91
-128++ 0522 F1 02       >        DW      x86_unsupported
-128++ 0524 F1 02       >        DW      x86_unsupported
-128++ 0526 F1 02       >        DW      x86_unsupported
-128++ 0528 F1 02       >        DW      x86_unsupported
-128++ 052A F1 02       >        DW      x86_unsupported
-128++ 052C F1 02       >        DW      x86_unsupported
-128++ 052E F1 02       >        DW      x86_unsupported
-128++ 0530 F1 02       >        DW      x86_unsupported
-128++ 0532 F1 02       >        DW      x86_unsupported
-128++ 0534 F1 02       >        DW      x86_unsupported
-128++ 0536 F1 02       >        DW      x86_unsupported
-128++ 0538 F1 02       >        DW      x86_unsupported
-128++ 053A F1 02       >        DW      x86_unsupported
-128++ 053C F1 02       >        DW      x86_unsupported
-128++ 053E F1 02       >        DW      x86_unsupported
-128++ 0540 F1 02       >        DW      x86_unsupported
-128++ 0542 F1 02       >        DW      x86_unsupported
-128++ 0544 F1 02       >        DW      x86_unsupported
-128++ 0546 F1 02       >        DW      x86_unsupported
-128++ 0548 F1 02       >        DW      x86_unsupported
-128++ 054A F1 02       >        DW      x86_unsupported
-128++ 054C F1 02       >        DW      x86_unsupported
-128++ 054E F1 02       >        DW      x86_unsupported
-128++ 0550 F1 02       >        DW      x86_unsupported
-128++ 0552 F1 02       >        DW      x86_unsupported
-128++ 0554 F1 02       >        DW      x86_unsupported
-128++ 0556 F1 02       >        DW      x86_unsupported
-128++ 0558 F1 02       >        DW      x86_unsupported
-128++ 055A F1 02       >        DW      x86_unsupported
-128++ 055C F1 02       >        DW      x86_unsupported
-128++ 055E F1 02       >        DW      x86_unsupported
-128++ 0560 F1 02       >        DW      x86_unsupported
-128++ 0562 F1 02       >        DW      x86_unsupported
-128++ 0564 F1 02       >        DW      x86_unsupported
-128++ 0566 F1 02       >        DW      x86_unsupported
-128++ 0568 F1 02       >        DW      x86_unsupported
-128++ 056A F1 02       >        DW      x86_unsupported
-128++ 056C F1 02       >        DW      x86_unsupported
-128++ 056E F1 02       >        DW      x86_unsupported
-129++ 0570                      ENDR
-130++ 0570 CB 02                DW      x86_mov_ax_imm16            ; B8
-131++ 0572                      REPT    #F4 - #B9
-132++ 0572 F1 02       >        DW      x86_unsupported
-132++ 0574 F1 02       >        DW      x86_unsupported
-132++ 0576 F1 02       >        DW      x86_unsupported
-132++ 0578 F1 02       >        DW      x86_unsupported
-132++ 057A F1 02       >        DW      x86_unsupported
-132++ 057C F1 02       >        DW      x86_unsupported
-132++ 057E F1 02       >        DW      x86_unsupported
-132++ 0580 F1 02       >        DW      x86_unsupported
-132++ 0582 F1 02       >        DW      x86_unsupported
-132++ 0584 F1 02       >        DW      x86_unsupported
-132++ 0586 F1 02       >        DW      x86_unsupported
-132++ 0588 F1 02       >        DW      x86_unsupported
-132++ 058A F1 02       >        DW      x86_unsupported
-132++ 058C F1 02       >        DW      x86_unsupported
-132++ 058E F1 02       >        DW      x86_unsupported
-132++ 0590 F1 02       >        DW      x86_unsupported
-132++ 0592 F1 02       >        DW      x86_unsupported
-132++ 0594 F1 02       >        DW      x86_unsupported
-132++ 0596 F1 02       >        DW      x86_unsupported
-132++ 0598 F1 02       >        DW      x86_unsupported
-132++ 059A F1 02       >        DW      x86_unsupported
-132++ 059C F1 02       >        DW      x86_unsupported
-132++ 059E F1 02       >        DW      x86_unsupported
-132++ 05A0 F1 02       >        DW      x86_unsupported
-132++ 05A2 F1 02       >        DW      x86_unsupported
-132++ 05A4 F1 02       >        DW      x86_unsupported
-132++ 05A6 F1 02       >        DW      x86_unsupported
-132++ 05A8 F1 02       >        DW      x86_unsupported
-132++ 05AA F1 02       >        DW      x86_unsupported
-132++ 05AC F1 02       >        DW      x86_unsupported
-132++ 05AE F1 02       >        DW      x86_unsupported
-132++ 05B0 F1 02       >        DW      x86_unsupported
-132++ 05B2 F1 02       >        DW      x86_unsupported
-132++ 05B4 F1 02       >        DW      x86_unsupported
-132++ 05B6 F1 02       >        DW      x86_unsupported
-132++ 05B8 F1 02       >        DW      x86_unsupported
-132++ 05BA F1 02       >        DW      x86_unsupported
-132++ 05BC F1 02       >        DW      x86_unsupported
-132++ 05BE F1 02       >        DW      x86_unsupported
-132++ 05C0 F1 02       >        DW      x86_unsupported
-132++ 05C2 F1 02       >        DW      x86_unsupported
-132++ 05C4 F1 02       >        DW      x86_unsupported
-132++ 05C6 F1 02       >        DW      x86_unsupported
-132++ 05C8 F1 02       >        DW      x86_unsupported
-132++ 05CA F1 02       >        DW      x86_unsupported
-132++ 05CC F1 02       >        DW      x86_unsupported
-132++ 05CE F1 02       >        DW      x86_unsupported
-132++ 05D0 F1 02       >        DW      x86_unsupported
-132++ 05D2 F1 02       >        DW      x86_unsupported
-132++ 05D4 F1 02       >        DW      x86_unsupported
-132++ 05D6 F1 02       >        DW      x86_unsupported
-132++ 05D8 F1 02       >        DW      x86_unsupported
-132++ 05DA F1 02       >        DW      x86_unsupported
-132++ 05DC F1 02       >        DW      x86_unsupported
-132++ 05DE F1 02       >        DW      x86_unsupported
-132++ 05E0 F1 02       >        DW      x86_unsupported
-132++ 05E2 F1 02       >        DW      x86_unsupported
-132++ 05E4 F1 02       >        DW      x86_unsupported
-132++ 05E6 F1 02       >        DW      x86_unsupported
-133++ 05E8                      ENDR
-134++ 05E8 E9 02                DW      x86_hlt                     ; F4
-135++ 05EA                      REPT    256 - #F5
-136++ 05EA F1 02       >        DW      x86_unsupported
-136++ 05EC F1 02       >        DW      x86_unsupported
-136++ 05EE F1 02       >        DW      x86_unsupported
-136++ 05F0 F1 02       >        DW      x86_unsupported
-136++ 05F2 F1 02       >        DW      x86_unsupported
-136++ 05F4 F1 02       >        DW      x86_unsupported
-136++ 05F6 F1 02       >        DW      x86_unsupported
-136++ 05F8 F1 02       >        DW      x86_unsupported
-136++ 05FA F1 02       >        DW      x86_unsupported
-136++ 05FC F1 02       >        DW      x86_unsupported
-136++ 05FE F1 02       >        DW      x86_unsupported
-137++ 0600                      ENDR
-138++ 0600
-139++ 0600 00 00        x86_steps_remaining: dw 0
-140++ 0602 00 00        x86_program_end:     dw 0
-141++ 0604 00           x86_exit_status:     db 0
-142++ 0605
+  1++ 03B1              ; =========================================================================
+  2++ 03B1              ; PROJECT 124 — minimal x86 interpreter core for NeoGS Z80
+  3++ 03B1              ;
+  4++ 03B1              ; Supported opcodes:
+  5++ 03B1              ;   90       NOP
+  6++ 03B1              ;   40       INC AX (8086 legacy one-byte register encoding)
+  7++ 03B1              ;   B8 iw    MOV AX, imm16
+  8++ 03B1              ;   F4       HLT (successful task termination)
+  9++ 03B1              ;
+ 10++ 03B1              ; Unsupported opcode: status 2. Instruction budget exhausted: status 1.
+ 11++ 03B1              ; DMA error: status 3. Out-of-range/truncated instruction: status 4.
+ 12++ 03B1              ; x86_program_end is the exclusive logical address after the payload.
+ 13++ 03B1              ;
+ 14++ 03B1              ; Entry: BC = x86 IP in NeoGS Z80 logical address space; AX stored in
+ 15++ 03B1              ;        saved_z80_ax. Exit: saved_z80_ax and x86_exit_status are updated.
+ 16++ 03B1              ; =========================================================================
+ 17++ 03B1
+ 18++ 03B1              x86_execute_loop:
+ 19++ 03B1              x86_next_instruction:
+ 20++ 03B1                      ; Every opcode fetch must remain strictly below the exclusive end.
+ 21++ 03B1 2A 02 07             ld      hl, (x86_program_end)
+ 22++ 03B4 B7                   or      a
+ 23++ 03B5 ED 42                sbc     hl, bc
+ 24++ 03B7 DA 21 04             jp      c, x86_ip_out_of_range
+ 25++ 03BA 7C                   ld      a, h
+ 26++ 03BB B5                   or      l
+ 27++ 03BC CA 21 04             jp      z, x86_ip_out_of_range
+ 28++ 03BF
+ 29++ 03BF 2A 00 07             ld      hl, (x86_steps_remaining)
+ 30++ 03C2 7C                   ld      a, h
+ 31++ 03C3 B5                   or      l
+ 32++ 03C4 20 09                jr      nz, .budget_ok
+ 33++ 03C6 3E 01                ld      a, 1
+ 34++ 03C8 32 04 07             ld      (x86_exit_status), a
+ 35++ 03CB 2A 8B 02             ld      hl, (saved_z80_ax)
+ 36++ 03CE C9                   ret
+ 37++ 03CF
+ 38++ 03CF              .budget_ok:
+ 39++ 03CF 2B                   dec     hl
+ 40++ 03D0 22 00 07             ld      (x86_steps_remaining), hl
+ 41++ 03D3
+ 42++ 03D3                      ; Fetch opcode and advance IP.
+ 43++ 03D3 0A                   ld      a, (bc)
+ 44++ 03D4 03                   inc     bc
+ 45++ 03D5
+ 46++ 03D5                      ; Resolve handler from 256-entry WORD table.
+ 47++ 03D5 6F                   ld      l, a
+ 48++ 03D6 26 00                ld      h, 0
+ 49++ 03D8 29                   add     hl, hl
+ 50++ 03D9 11 00 05             ld      de, x86_jump_table
+ 51++ 03DC 19                   add     hl, de
+ 52++ 03DD 5E                   ld      e, (hl)
+ 53++ 03DE 23                   inc     hl
+ 54++ 03DF 56                   ld      d, (hl)
+ 55++ 03E0
+ 56++ 03E0                      ; Restore AX in HL and jump to the selected handler. PUSH/RET is
+ 57++ 03E0                      ; the Z80's safe indirect-jump idiom; BC remains the virtual x86 IP.
+ 58++ 03E0 2A 8B 02             ld      hl, (saved_z80_ax)
+ 59++ 03E3 D5                   push    de
+ 60++ 03E4 C9                   ret
+ 61++ 03E5
+ 62++ 03E5              ; 90 — NOP
+ 63++ 03E5              x86_nop:
+ 64++ 03E5 22 8B 02             ld      (saved_z80_ax), hl
+ 65++ 03E8 C3 B1 03             jp      x86_next_instruction
+ 66++ 03EB
+ 67++ 03EB              ; 40 — INC AX
+ 68++ 03EB              x86_inc_ax:
+ 69++ 03EB 23                   inc     hl
+ 70++ 03EC 22 8B 02             ld      (saved_z80_ax), hl
+ 71++ 03EF C3 B1 03             jp      x86_next_instruction
+ 72++ 03F2
+ 73++ 03F2              ; B8 iw — MOV AX, imm16 (little-endian immediate)
+ 74++ 03F2              x86_mov_ax_imm16:
+ 75++ 03F2                      ; B8 requires two immediate bytes. Reject a truncated instruction.
+ 76++ 03F2 2A 02 07             ld      hl, (x86_program_end)
+ 77++ 03F5 B7                   or      a
+ 78++ 03F6 ED 42                sbc     hl, bc
+ 79++ 03F8 11 02 00             ld      de, 2
+ 80++ 03FB B7                   or      a
+ 81++ 03FC ED 52                sbc     hl, de
+ 82++ 03FE DA 21 04             jp      c, x86_ip_out_of_range
+ 83++ 0401
+ 84++ 0401 69                   ld      l, c
+ 85++ 0402 60                   ld      h, b
+ 86++ 0403 5E                   ld      e, (hl)
+ 87++ 0404 23                   inc     hl
+ 88++ 0405 56                   ld      d, (hl)
+ 89++ 0406 23                   inc     hl
+ 90++ 0407 44                   ld      b, h
+ 91++ 0408 4D                   ld      c, l
+ 92++ 0409 ED 53 8B 02          ld      (saved_z80_ax), de
+ 93++ 040D C3 B1 03             jp      x86_next_instruction
+ 94++ 0410
+ 95++ 0410              ; F4 — HLT: successful end of task
+ 96++ 0410              x86_hlt:
+ 97++ 0410 22 8B 02             ld      (saved_z80_ax), hl
+ 98++ 0413 AF                   xor     a
+ 99++ 0414 32 04 07             ld      (x86_exit_status), a
+100++ 0417 C9                   ret
+101++ 0418
+102++ 0418              ; Unsupported instruction: stop rather than executing arbitrary memory.
+103++ 0418              x86_unsupported:
+104++ 0418 22 8B 02             ld      (saved_z80_ax), hl
+105++ 041B 3E 02                ld      a, 2
+106++ 041D 32 04 07             ld      (x86_exit_status), a
+107++ 0420 C9                   ret
+108++ 0421
+109++ 0421              x86_ip_out_of_range:
+110++ 0421 3E 04                ld      a, 4
+111++ 0423 32 04 07             ld      (x86_exit_status), a
+112++ 0426 2A 8B 02             ld      hl, (saved_z80_ax)
+113++ 0429 C9                   ret
+114++ 042A
+115++ 042A 00 00 00...          ALIGN   256
+116++ 0500              x86_jump_table:
+117++ 0500 18 04                DW      x86_unsupported             ; 00
+118++ 0502 18 04                DW      x86_unsupported             ; 01
+119++ 0504                      REPT    #40 - #02
+120++ 0504 18 04       >        DW      x86_unsupported
+120++ 0506 18 04       >        DW      x86_unsupported
+120++ 0508 18 04       >        DW      x86_unsupported
+120++ 050A 18 04       >        DW      x86_unsupported
+120++ 050C 18 04       >        DW      x86_unsupported
+120++ 050E 18 04       >        DW      x86_unsupported
+120++ 0510 18 04       >        DW      x86_unsupported
+120++ 0512 18 04       >        DW      x86_unsupported
+120++ 0514 18 04       >        DW      x86_unsupported
+120++ 0516 18 04       >        DW      x86_unsupported
+120++ 0518 18 04       >        DW      x86_unsupported
+120++ 051A 18 04       >        DW      x86_unsupported
+120++ 051C 18 04       >        DW      x86_unsupported
+120++ 051E 18 04       >        DW      x86_unsupported
+120++ 0520 18 04       >        DW      x86_unsupported
+120++ 0522 18 04       >        DW      x86_unsupported
+120++ 0524 18 04       >        DW      x86_unsupported
+120++ 0526 18 04       >        DW      x86_unsupported
+120++ 0528 18 04       >        DW      x86_unsupported
+120++ 052A 18 04       >        DW      x86_unsupported
+120++ 052C 18 04       >        DW      x86_unsupported
+120++ 052E 18 04       >        DW      x86_unsupported
+120++ 0530 18 04       >        DW      x86_unsupported
+120++ 0532 18 04       >        DW      x86_unsupported
+120++ 0534 18 04       >        DW      x86_unsupported
+120++ 0536 18 04       >        DW      x86_unsupported
+120++ 0538 18 04       >        DW      x86_unsupported
+120++ 053A 18 04       >        DW      x86_unsupported
+120++ 053C 18 04       >        DW      x86_unsupported
+120++ 053E 18 04       >        DW      x86_unsupported
+120++ 0540 18 04       >        DW      x86_unsupported
+120++ 0542 18 04       >        DW      x86_unsupported
+120++ 0544 18 04       >        DW      x86_unsupported
+120++ 0546 18 04       >        DW      x86_unsupported
+120++ 0548 18 04       >        DW      x86_unsupported
+120++ 054A 18 04       >        DW      x86_unsupported
+120++ 054C 18 04       >        DW      x86_unsupported
+120++ 054E 18 04       >        DW      x86_unsupported
+120++ 0550 18 04       >        DW      x86_unsupported
+120++ 0552 18 04       >        DW      x86_unsupported
+120++ 0554 18 04       >        DW      x86_unsupported
+120++ 0556 18 04       >        DW      x86_unsupported
+120++ 0558 18 04       >        DW      x86_unsupported
+120++ 055A 18 04       >        DW      x86_unsupported
+120++ 055C 18 04       >        DW      x86_unsupported
+120++ 055E 18 04       >        DW      x86_unsupported
+120++ 0560 18 04       >        DW      x86_unsupported
+120++ 0562 18 04       >        DW      x86_unsupported
+120++ 0564 18 04       >        DW      x86_unsupported
+120++ 0566 18 04       >        DW      x86_unsupported
+120++ 0568 18 04       >        DW      x86_unsupported
+120++ 056A 18 04       >        DW      x86_unsupported
+120++ 056C 18 04       >        DW      x86_unsupported
+120++ 056E 18 04       >        DW      x86_unsupported
+120++ 0570 18 04       >        DW      x86_unsupported
+120++ 0572 18 04       >        DW      x86_unsupported
+120++ 0574 18 04       >        DW      x86_unsupported
+120++ 0576 18 04       >        DW      x86_unsupported
+120++ 0578 18 04       >        DW      x86_unsupported
+120++ 057A 18 04       >        DW      x86_unsupported
+120++ 057C 18 04       >        DW      x86_unsupported
+120++ 057E 18 04       >        DW      x86_unsupported
+121++ 0580                      ENDR
+122++ 0580 EB 03                DW      x86_inc_ax                  ; 40
+123++ 0582                      REPT    #90 - #41
+124++ 0582 18 04       >        DW      x86_unsupported
+124++ 0584 18 04       >        DW      x86_unsupported
+124++ 0586 18 04       >        DW      x86_unsupported
+124++ 0588 18 04       >        DW      x86_unsupported
+124++ 058A 18 04       >        DW      x86_unsupported
+124++ 058C 18 04       >        DW      x86_unsupported
+124++ 058E 18 04       >        DW      x86_unsupported
+124++ 0590 18 04       >        DW      x86_unsupported
+124++ 0592 18 04       >        DW      x86_unsupported
+124++ 0594 18 04       >        DW      x86_unsupported
+124++ 0596 18 04       >        DW      x86_unsupported
+124++ 0598 18 04       >        DW      x86_unsupported
+124++ 059A 18 04       >        DW      x86_unsupported
+124++ 059C 18 04       >        DW      x86_unsupported
+124++ 059E 18 04       >        DW      x86_unsupported
+124++ 05A0 18 04       >        DW      x86_unsupported
+124++ 05A2 18 04       >        DW      x86_unsupported
+124++ 05A4 18 04       >        DW      x86_unsupported
+124++ 05A6 18 04       >        DW      x86_unsupported
+124++ 05A8 18 04       >        DW      x86_unsupported
+124++ 05AA 18 04       >        DW      x86_unsupported
+124++ 05AC 18 04       >        DW      x86_unsupported
+124++ 05AE 18 04       >        DW      x86_unsupported
+124++ 05B0 18 04       >        DW      x86_unsupported
+124++ 05B2 18 04       >        DW      x86_unsupported
+124++ 05B4 18 04       >        DW      x86_unsupported
+124++ 05B6 18 04       >        DW      x86_unsupported
+124++ 05B8 18 04       >        DW      x86_unsupported
+124++ 05BA 18 04       >        DW      x86_unsupported
+124++ 05BC 18 04       >        DW      x86_unsupported
+124++ 05BE 18 04       >        DW      x86_unsupported
+124++ 05C0 18 04       >        DW      x86_unsupported
+124++ 05C2 18 04       >        DW      x86_unsupported
+124++ 05C4 18 04       >        DW      x86_unsupported
+124++ 05C6 18 04       >        DW      x86_unsupported
+124++ 05C8 18 04       >        DW      x86_unsupported
+124++ 05CA 18 04       >        DW      x86_unsupported
+124++ 05CC 18 04       >        DW      x86_unsupported
+124++ 05CE 18 04       >        DW      x86_unsupported
+124++ 05D0 18 04       >        DW      x86_unsupported
+124++ 05D2 18 04       >        DW      x86_unsupported
+124++ 05D4 18 04       >        DW      x86_unsupported
+124++ 05D6 18 04       >        DW      x86_unsupported
+124++ 05D8 18 04       >        DW      x86_unsupported
+124++ 05DA 18 04       >        DW      x86_unsupported
+124++ 05DC 18 04       >        DW      x86_unsupported
+124++ 05DE 18 04       >        DW      x86_unsupported
+124++ 05E0 18 04       >        DW      x86_unsupported
+124++ 05E2 18 04       >        DW      x86_unsupported
+124++ 05E4 18 04       >        DW      x86_unsupported
+124++ 05E6 18 04       >        DW      x86_unsupported
+124++ 05E8 18 04       >        DW      x86_unsupported
+124++ 05EA 18 04       >        DW      x86_unsupported
+124++ 05EC 18 04       >        DW      x86_unsupported
+124++ 05EE 18 04       >        DW      x86_unsupported
+124++ 05F0 18 04       >        DW      x86_unsupported
+124++ 05F2 18 04       >        DW      x86_unsupported
+124++ 05F4 18 04       >        DW      x86_unsupported
+124++ 05F6 18 04       >        DW      x86_unsupported
+124++ 05F8 18 04       >        DW      x86_unsupported
+124++ 05FA 18 04       >        DW      x86_unsupported
+124++ 05FC 18 04       >        DW      x86_unsupported
+124++ 05FE 18 04       >        DW      x86_unsupported
+124++ 0600 18 04       >        DW      x86_unsupported
+124++ 0602 18 04       >        DW      x86_unsupported
+124++ 0604 18 04       >        DW      x86_unsupported
+124++ 0606 18 04       >        DW      x86_unsupported
+124++ 0608 18 04       >        DW      x86_unsupported
+124++ 060A 18 04       >        DW      x86_unsupported
+124++ 060C 18 04       >        DW      x86_unsupported
+124++ 060E 18 04       >        DW      x86_unsupported
+124++ 0610 18 04       >        DW      x86_unsupported
+124++ 0612 18 04       >        DW      x86_unsupported
+124++ 0614 18 04       >        DW      x86_unsupported
+124++ 0616 18 04       >        DW      x86_unsupported
+124++ 0618 18 04       >        DW      x86_unsupported
+124++ 061A 18 04       >        DW      x86_unsupported
+124++ 061C 18 04       >        DW      x86_unsupported
+124++ 061E 18 04       >        DW      x86_unsupported
+125++ 0620                      ENDR
+126++ 0620 E5 03                DW      x86_nop                     ; 90
+127++ 0622                      REPT    #B8 - #91
+128++ 0622 18 04       >        DW      x86_unsupported
+128++ 0624 18 04       >        DW      x86_unsupported
+128++ 0626 18 04       >        DW      x86_unsupported
+128++ 0628 18 04       >        DW      x86_unsupported
+128++ 062A 18 04       >        DW      x86_unsupported
+128++ 062C 18 04       >        DW      x86_unsupported
+128++ 062E 18 04       >        DW      x86_unsupported
+128++ 0630 18 04       >        DW      x86_unsupported
+128++ 0632 18 04       >        DW      x86_unsupported
+128++ 0634 18 04       >        DW      x86_unsupported
+128++ 0636 18 04       >        DW      x86_unsupported
+128++ 0638 18 04       >        DW      x86_unsupported
+128++ 063A 18 04       >        DW      x86_unsupported
+128++ 063C 18 04       >        DW      x86_unsupported
+128++ 063E 18 04       >        DW      x86_unsupported
+128++ 0640 18 04       >        DW      x86_unsupported
+128++ 0642 18 04       >        DW      x86_unsupported
+128++ 0644 18 04       >        DW      x86_unsupported
+128++ 0646 18 04       >        DW      x86_unsupported
+128++ 0648 18 04       >        DW      x86_unsupported
+128++ 064A 18 04       >        DW      x86_unsupported
+128++ 064C 18 04       >        DW      x86_unsupported
+128++ 064E 18 04       >        DW      x86_unsupported
+128++ 0650 18 04       >        DW      x86_unsupported
+128++ 0652 18 04       >        DW      x86_unsupported
+128++ 0654 18 04       >        DW      x86_unsupported
+128++ 0656 18 04       >        DW      x86_unsupported
+128++ 0658 18 04       >        DW      x86_unsupported
+128++ 065A 18 04       >        DW      x86_unsupported
+128++ 065C 18 04       >        DW      x86_unsupported
+128++ 065E 18 04       >        DW      x86_unsupported
+128++ 0660 18 04       >        DW      x86_unsupported
+128++ 0662 18 04       >        DW      x86_unsupported
+128++ 0664 18 04       >        DW      x86_unsupported
+128++ 0666 18 04       >        DW      x86_unsupported
+128++ 0668 18 04       >        DW      x86_unsupported
+128++ 066A 18 04       >        DW      x86_unsupported
+128++ 066C 18 04       >        DW      x86_unsupported
+128++ 066E 18 04       >        DW      x86_unsupported
+129++ 0670                      ENDR
+130++ 0670 F2 03                DW      x86_mov_ax_imm16            ; B8
+131++ 0672                      REPT    #F4 - #B9
+132++ 0672 18 04       >        DW      x86_unsupported
+132++ 0674 18 04       >        DW      x86_unsupported
+132++ 0676 18 04       >        DW      x86_unsupported
+132++ 0678 18 04       >        DW      x86_unsupported
+132++ 067A 18 04       >        DW      x86_unsupported
+132++ 067C 18 04       >        DW      x86_unsupported
+132++ 067E 18 04       >        DW      x86_unsupported
+132++ 0680 18 04       >        DW      x86_unsupported
+132++ 0682 18 04       >        DW      x86_unsupported
+132++ 0684 18 04       >        DW      x86_unsupported
+132++ 0686 18 04       >        DW      x86_unsupported
+132++ 0688 18 04       >        DW      x86_unsupported
+132++ 068A 18 04       >        DW      x86_unsupported
+132++ 068C 18 04       >        DW      x86_unsupported
+132++ 068E 18 04       >        DW      x86_unsupported
+132++ 0690 18 04       >        DW      x86_unsupported
+132++ 0692 18 04       >        DW      x86_unsupported
+132++ 0694 18 04       >        DW      x86_unsupported
+132++ 0696 18 04       >        DW      x86_unsupported
+132++ 0698 18 04       >        DW      x86_unsupported
+132++ 069A 18 04       >        DW      x86_unsupported
+132++ 069C 18 04       >        DW      x86_unsupported
+132++ 069E 18 04       >        DW      x86_unsupported
+132++ 06A0 18 04       >        DW      x86_unsupported
+132++ 06A2 18 04       >        DW      x86_unsupported
+132++ 06A4 18 04       >        DW      x86_unsupported
+132++ 06A6 18 04       >        DW      x86_unsupported
+132++ 06A8 18 04       >        DW      x86_unsupported
+132++ 06AA 18 04       >        DW      x86_unsupported
+132++ 06AC 18 04       >        DW      x86_unsupported
+132++ 06AE 18 04       >        DW      x86_unsupported
+132++ 06B0 18 04       >        DW      x86_unsupported
+132++ 06B2 18 04       >        DW      x86_unsupported
+132++ 06B4 18 04       >        DW      x86_unsupported
+132++ 06B6 18 04       >        DW      x86_unsupported
+132++ 06B8 18 04       >        DW      x86_unsupported
+132++ 06BA 18 04       >        DW      x86_unsupported
+132++ 06BC 18 04       >        DW      x86_unsupported
+132++ 06BE 18 04       >        DW      x86_unsupported
+132++ 06C0 18 04       >        DW      x86_unsupported
+132++ 06C2 18 04       >        DW      x86_unsupported
+132++ 06C4 18 04       >        DW      x86_unsupported
+132++ 06C6 18 04       >        DW      x86_unsupported
+132++ 06C8 18 04       >        DW      x86_unsupported
+132++ 06CA 18 04       >        DW      x86_unsupported
+132++ 06CC 18 04       >        DW      x86_unsupported
+132++ 06CE 18 04       >        DW      x86_unsupported
+132++ 06D0 18 04       >        DW      x86_unsupported
+132++ 06D2 18 04       >        DW      x86_unsupported
+132++ 06D4 18 04       >        DW      x86_unsupported
+132++ 06D6 18 04       >        DW      x86_unsupported
+132++ 06D8 18 04       >        DW      x86_unsupported
+132++ 06DA 18 04       >        DW      x86_unsupported
+132++ 06DC 18 04       >        DW      x86_unsupported
+132++ 06DE 18 04       >        DW      x86_unsupported
+132++ 06E0 18 04       >        DW      x86_unsupported
+132++ 06E2 18 04       >        DW      x86_unsupported
+132++ 06E4 18 04       >        DW      x86_unsupported
+132++ 06E6 18 04       >        DW      x86_unsupported
+133++ 06E8                      ENDR
+134++ 06E8 10 04                DW      x86_hlt                     ; F4
+135++ 06EA                      REPT    256 - #F5
+136++ 06EA 18 04       >        DW      x86_unsupported
+136++ 06EC 18 04       >        DW      x86_unsupported
+136++ 06EE 18 04       >        DW      x86_unsupported
+136++ 06F0 18 04       >        DW      x86_unsupported
+136++ 06F2 18 04       >        DW      x86_unsupported
+136++ 06F4 18 04       >        DW      x86_unsupported
+136++ 06F6 18 04       >        DW      x86_unsupported
+136++ 06F8 18 04       >        DW      x86_unsupported
+136++ 06FA 18 04       >        DW      x86_unsupported
+136++ 06FC 18 04       >        DW      x86_unsupported
+136++ 06FE 18 04       >        DW      x86_unsupported
+137++ 0700                      ENDR
+138++ 0700
+139++ 0700 00 00        x86_steps_remaining: dw 0
+140++ 0702 00 00        x86_program_end:     dw 0
+141++ 0704 00           x86_exit_status:     db 0
+142++ 0705
 # file closed: x86_interpreter.asm
-319+  0605
-320+  0605                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
-321+  0605                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
-322+  0605
-323+  0605              neogs_firmware_end:
-324+  0605
+332+  0705
+333+  0705                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+334+  0705                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
+335+  0705
+336+  0705              neogs_firmware_end:
+337+  0705
 # file closed: main.asm
- 10   0605
- 11   0605              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
- 12   0605              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
- 13   0605                      ASSERT neogs_firmware_end <= $3000
- 14   0605                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
- 15   0605                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
- 16   0605
- 17   0605              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
- 18   0605                      ORG     $4000
+ 10   0705
+ 11   0705              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
+ 12   0705              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
+ 13   0705                      ASSERT neogs_firmware_end <= $3000
+ 14   0705                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+ 15   0705                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+ 16   0705
+ 17   0705              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+ 18   0705                      ORG     $4000
  19   4000                      INCLUDE "bootstrap.asm"
 # file opened: bootstrap.asm
   1+  4000              ; =========================================================================
@@ -854,12 +1093,12 @@
  24+  400C
  25+  400C                      ; Tell Spectrum that the tiny loader is running and waiting for length.
  26+  400C 3E A1                ld      a, NGS_BOOTSTRAP_READY_ACK
- 27+  400E CD 51 40             call    bootstrap_send_data_byte
+ 27+  400E CD 8B 40             call    bootstrap_send_data_byte
  28+  4011
  29+  4011                      ; Host sends length low byte, then high byte.
- 30+  4011 CD 48 40             call    bootstrap_receive_data_byte
+ 30+  4011 CD 77 40             call    bootstrap_receive_data_byte
  31+  4014 5F                   ld      e, a
- 32+  4015 CD 48 40             call    bootstrap_receive_data_byte
+ 32+  4015 CD 77 40             call    bootstrap_receive_data_byte
  33+  4018 57                   ld      d, a
  34+  4019
  35+  4019                      ; Reject zero length and any image larger than the reserved low RAM area.
@@ -878,14 +1117,14 @@
  48+  4028                      ; Explicitly acknowledge that the length is accepted before the host
  49+  4028                      ; starts streaming the firmware payload.
  50+  4028 3E A3                ld      a, NGS_BOOTSTRAP_LENGTH_ACK
- 51+  402A CD 51 40             call    bootstrap_send_data_byte
+ 51+  402A CD 8B 40             call    bootstrap_send_data_byte
  52+  402D 21 00 00             ld      hl, 0
  53+  4030
  54+  4030              bootstrap_copy_loop:
  55+  4030 7A                   ld      a, d
  56+  4031 B3                   or      e
  57+  4032 28 08                jr      z, bootstrap_start_firmware
- 58+  4034 CD 48 40             call    bootstrap_receive_data_byte
+ 58+  4034 CD 77 40             call    bootstrap_receive_data_byte
  59+  4037 77                   ld      (hl), a
  60+  4038 23                   inc     hl
  61+  4039 1B                   dec     de
@@ -896,45 +1135,100 @@
  66+  403F
  67+  403F              bootstrap_error:
  68+  403F 3E E1                ld      a, NGS_BOOTSTRAP_ERROR_ACK
- 69+  4041 CD 51 40             call    bootstrap_send_data_byte
- 70+  4044              .bootstrap_halt:
- 71+  4044 F3                   di
- 72+  4045 76                   halt
- 73+  4046 18 FC                jr      .bootstrap_halt
- 74+  4048
- 75+  4048              ; Wait for one byte from Spectrum. Reading ZXDATRD clears DBIT.
- 76+  4048              bootstrap_receive_data_byte:
- 77+  4048              .rx_wait:
- 78+  4048 DB 04                in      a, (ZXSTAT)
- 79+  404A CB 7F                bit     B_DBIT, a
- 80+  404C 28 FA                jr      z, .rx_wait
- 81+  404E DB 02                in      a, (ZXDATRD)
- 82+  4050 C9                   ret
- 83+  4051
- 84+  4051              ; Send one byte to Spectrum. Host reads GSDAT and clears DBIT.
- 85+  4051              bootstrap_send_data_byte:
- 86+  4051 32 66 40             ld      (bootstrap_tx_byte), a
- 87+  4054              .tx_free:
- 88+  4054 DB 04                in      a, (ZXSTAT)
- 89+  4056 CB 7F                bit     B_DBIT, a
- 90+  4058 20 FA                jr      nz, .tx_free
- 91+  405A 3A 66 40             ld      a, (bootstrap_tx_byte)
- 92+  405D D3 03                out     (ZXDATWR), a
- 93+  405F              .tx_wait_read:
- 94+  405F DB 04                in      a, (ZXSTAT)
- 95+  4061 CB 7F                bit     B_DBIT, a
- 96+  4063 20 FA                jr      nz, .tx_wait_read
- 97+  4065 C9                   ret
- 98+  4066
- 99+  4066              bootstrap_tx_byte:
-100+  4066 00                   db      0
-101+  4067
-102+  4067              neogs_bootstrap_end:
-103+  4067
+ 69+  4041 CD 8B 40             call    bootstrap_send_data_byte
+ 70+  4044 C3 47 40             jp      bootstrap_halt
+ 71+  4047
+ 72+  4047              ; Terminal state used when the host stops responding or cannot consume data.
+ 73+  4047              ; Never leave a bootstrap polling loop running forever with no timeout.
+ 74+  4047              bootstrap_halt:
+ 75+  4047 F3                   di
+ 76+  4048              .bootstrap_halt_loop:
+ 77+  4048 76                   halt
+ 78+  4049 18 FD                jr      .bootstrap_halt_loop
+ 79+  404B
+ 80+  404B              ; Best-effort error ACK after a receive timeout. This path has its own
+ 81+  404B              ; bounded waits and never calls bootstrap_send_data_byte recursively.
+ 82+  404B              bootstrap_timeout:
+ 83+  404B 3E E1                ld      a, NGS_BOOTSTRAP_ERROR_ACK
+ 84+  404D 32 B6 40             ld      (bootstrap_tx_byte), a
+ 85+  4050 01 FF FF             ld      bc, #FFFF
+ 86+  4053              .timeout_wait_slot:
+ 87+  4053 DB 04                in      a, (ZXSTAT)
+ 88+  4055 CB 7F                bit     B_DBIT, a
+ 89+  4057 28 08                jr      z, .timeout_slot_ready
+ 90+  4059 0B                   dec     bc
+ 91+  405A 78                   ld      a, b
+ 92+  405B B1                   or      c
+ 93+  405C 20 F5                jr      nz, .timeout_wait_slot
+ 94+  405E C3 47 40             jp      bootstrap_halt
+ 95+  4061              .timeout_slot_ready:
+ 96+  4061 3A B6 40             ld      a, (bootstrap_tx_byte)
+ 97+  4064 D3 03                out     (ZXDATWR), a
+ 98+  4066 01 FF FF             ld      bc, #FFFF
+ 99+  4069              .timeout_wait_host:
+100+  4069 DB 04                in      a, (ZXSTAT)
+101+  406B CB 7F                bit     B_DBIT, a
+102+  406D 28 D8                jr      z, bootstrap_halt
+103+  406F 0B                   dec     bc
+104+  4070 78                   ld      a, b
+105+  4071 B1                   or      c
+106+  4072 20 F5                jr      nz, .timeout_wait_host
+107+  4074 C3 47 40             jp      bootstrap_halt
+108+  4077
+109+  4077              ; Wait for one byte from Spectrum. Reading ZXDATRD clears DBIT.
+110+  4077              bootstrap_receive_data_byte:
+111+  4077 01 FF FF             ld      bc, #FFFF
+112+  407A              .rx_wait:
+113+  407A DB 04                in      a, (ZXSTAT)
+114+  407C CB 7F                bit     B_DBIT, a
+115+  407E 20 08                jr      nz, .rx_ready
+116+  4080 0B                   dec     bc
+117+  4081 78                   ld      a, b
+118+  4082 B1                   or      c
+119+  4083 20 F5                jr      nz, .rx_wait
+120+  4085 C3 4B 40             jp      bootstrap_timeout
+121+  4088              .rx_ready:
+122+  4088 DB 02                in      a, (ZXDATRD)
+123+  408A C9                   ret
+124+  408B
+125+  408B              ; Send one byte to Spectrum. Host reads GSDAT and clears DBIT.
+126+  408B              bootstrap_send_data_byte:
+127+  408B 32 B6 40             ld      (bootstrap_tx_byte), a
+128+  408E 01 FF FF             ld      bc, #FFFF
+129+  4091              .tx_free:
+130+  4091 DB 04                in      a, (ZXSTAT)
+131+  4093 CB 7F                bit     B_DBIT, a
+132+  4095 28 08                jr      z, .tx_slot_free
+133+  4097 0B                   dec     bc
+134+  4098 78                   ld      a, b
+135+  4099 B1                   or      c
+136+  409A 20 F5                jr      nz, .tx_free
+137+  409C C3 47 40             jp      bootstrap_halt
+138+  409F              .tx_slot_free:
+139+  409F 3A B6 40             ld      a, (bootstrap_tx_byte)
+140+  40A2 D3 03                out     (ZXDATWR), a
+141+  40A4 01 FF FF             ld      bc, #FFFF
+142+  40A7              .tx_wait_read:
+143+  40A7 DB 04                in      a, (ZXSTAT)
+144+  40A9 CB 7F                bit     B_DBIT, a
+145+  40AB 28 08                jr      z, .tx_done
+146+  40AD 0B                   dec     bc
+147+  40AE 78                   ld      a, b
+148+  40AF B1                   or      c
+149+  40B0 20 F5                jr      nz, .tx_wait_read
+150+  40B2 C3 47 40             jp      bootstrap_halt
+151+  40B5              .tx_done:
+152+  40B5 C9                   ret
+153+  40B6
+154+  40B6              bootstrap_tx_byte:
+155+  40B6 00                   db      0
+156+  40B7
+157+  40B7              neogs_bootstrap_end:
+158+  40B7
 # file closed: bootstrap.asm
- 20   4067                      ASSERT neogs_bootstrap_start = $4000
- 21   4067                      ASSERT neogs_bootstrap_end <= $7FFF
- 22   4067                      SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
- 23   4067                      SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
- 24   4067
+ 20   40B7                      ASSERT neogs_bootstrap_start = $4000
+ 21   40B7                      ASSERT neogs_bootstrap_end <= $7FFF
+ 22   40B7                      SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+ 23   40B7                      SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+ 24   40B7
 # file closed: build_firmware.asm

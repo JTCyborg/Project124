@@ -67,33 +67,88 @@ bootstrap_start_firmware:
 bootstrap_error:
         ld      a, NGS_BOOTSTRAP_ERROR_ACK
         call    bootstrap_send_data_byte
-.bootstrap_halt:
+        jp      bootstrap_halt
+
+; Terminal state used when the host stops responding or cannot consume data.
+; Never leave a bootstrap polling loop running forever with no timeout.
+bootstrap_halt:
         di
+.bootstrap_halt_loop:
         halt
-        jr      .bootstrap_halt
+        jr      .bootstrap_halt_loop
+
+; Best-effort error ACK after a receive timeout. This path has its own
+; bounded waits and never calls bootstrap_send_data_byte recursively.
+bootstrap_timeout:
+        ld      a, NGS_BOOTSTRAP_ERROR_ACK
+        ld      (bootstrap_tx_byte), a
+        ld      bc, #FFFF
+.timeout_wait_slot:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, .timeout_slot_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .timeout_wait_slot
+        jp      bootstrap_halt
+.timeout_slot_ready:
+        ld      a, (bootstrap_tx_byte)
+        out     (ZXDATWR), a
+        ld      bc, #FFFF
+.timeout_wait_host:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, bootstrap_halt
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .timeout_wait_host
+        jp      bootstrap_halt
 
 ; Wait for one byte from Spectrum. Reading ZXDATRD clears DBIT.
 bootstrap_receive_data_byte:
+        ld      bc, #FFFF
 .rx_wait:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
-        jr      z, .rx_wait
+        jr      nz, .rx_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .rx_wait
+        jp      bootstrap_timeout
+.rx_ready:
         in      a, (ZXDATRD)
         ret
 
 ; Send one byte to Spectrum. Host reads GSDAT and clears DBIT.
 bootstrap_send_data_byte:
         ld      (bootstrap_tx_byte), a
+        ld      bc, #FFFF
 .tx_free:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
+        jr      z, .tx_slot_free
+        dec     bc
+        ld      a, b
+        or      c
         jr      nz, .tx_free
+        jp      bootstrap_halt
+.tx_slot_free:
         ld      a, (bootstrap_tx_byte)
         out     (ZXDATWR), a
+        ld      bc, #FFFF
 .tx_wait_read:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
+        jr      z, .tx_done
+        dec     bc
+        ld      a, b
+        or      c
         jr      nz, .tx_wait_read
+        jp      bootstrap_halt
+.tx_done:
         ret
 
 bootstrap_tx_byte:

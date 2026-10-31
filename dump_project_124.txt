@@ -27,6 +27,7 @@ C_GLED          EQU #20
 
 ; NeoGS Z80 local ports
 MPAG            EQU #00
+MPAGEX          EQU #10             ; independent 16 KiB page for C000-FFFF
 ZXCMD           EQU #01
 ZXDATRD         EQU #02
 ZXDATWR         EQU #03
@@ -82,6 +83,7 @@ CMD_RESET       EQU #01
 CMD_LOAD_X86    EQU #02
 CMD_RUN_X86     EQU #03
 CMD_GET_STATUS  EQU #04
+CMD_MEM_TEST    EQU #05
 
 ; Project 124 startup handshake bytes.
 NGS_BOOTSTRAP_READY_ACK EQU #A1
@@ -136,6 +138,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/main.asm",
                     "neogs_sub/bootstrap.asm",
                     "neogs_sub/x86_interpreter.asm",
+                    "neogs_sub/x86_memory.asm",
                     "neogs_sub/build_firmware.asm"
                 }
 
@@ -983,6 +986,18 @@ EXECUTE_X86_FILE_STAGE::
         ; Expected result: status=0, AX=BBAB.
         ; -------------------------------------------------------------
         MACRO_EF_STRING P124_msg_ipc_diag_start
+
+        ; Exercise unknown-command release and explicit firmware reset before DMA.
+        ld      a, #FE
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        jp      c, .diag_protocol_error
+
+        ld      a, CMD_RESET
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        jp      c, .diag_protocol_error
+
         ld      hl, x86_diag_program
         ld      bc, x86_diag_program_end - x86_diag_program
         call    neogs_send_dma_block
@@ -1004,6 +1019,67 @@ EXECUTE_X86_FILE_STAGE::
         ld      hl, (P124_X86_RESULT_AX)
         MACRO_EF_HEX16 hl
         MACRO_EF_CHAR 13
+
+        ; -------------------------------------------------------------
+        ; Extended interpreter/transport self-test.
+        ; Each case is sent through the real CBIT -> DMA -> DBIT path.
+        ; Expected non-zero interpreter statuses are deliberate test results.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_ipc_edge_start
+
+        ld      hl, x86_diag_inc_wrap
+        ld      bc, x86_diag_inc_wrap_end - x86_diag_inc_wrap
+        xor     a
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_nop_hlt
+        ld      bc, x86_diag_nop_hlt_end - x86_diag_nop_hlt
+        xor     a
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_unsupported
+        ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
+        ld      a, 2
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_truncated_mov
+        ld      bc, x86_diag_truncated_mov_end - x86_diag_truncated_mov
+        ld      a, 4
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_fallthrough
+        ld      bc, x86_diag_fallthrough_end - x86_diag_fallthrough
+        ld      a, 4
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        MACRO_EF_STRING P124_msg_ipc_edge_pass
+
+        ; -------------------------------------------------------------
+        ; NeoGS 1 MiB x86 physical RAM mapping test: 64 pages x 16 KiB.
+        ; This is destructive only to the reserved x86 memory region.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_memtest_start
+        call    neogs_mem_test_and_get_result
+        jp      c, .diag_extended_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .diag_memtest_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, .diag_memtest_fail
+        MACRO_EF_STRING P124_msg_memtest_pass
 
         ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
@@ -1192,6 +1268,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.diag_extended_fail:
+        MACRO_EF_STRING P124_msg_ipc_edge_fail
+        scf
+        jp      .loader_restore_stack
+
+.diag_memtest_fail:
+        MACRO_EF_STRING P124_msg_memtest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_wrong_result:
         MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
         ld      hl, (P124_X86_RESULT_AX)
@@ -1330,7 +1424,16 @@ neogs_run_and_get_result:
         out     (GSCOM), a
         call    neogs_wait_command_done_long
         ret     c
+        jp      neogs_get_result_frame
 
+; Run the NeoGS physical-memory self-test and fetch its result frame.
+neogs_mem_test_and_get_result:
+        ld      a, CMD_MEM_TEST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+
+neogs_get_result_frame:
         ld      a, CMD_GET_STATUS
         out     (GSCOM), a
 
@@ -1365,9 +1468,57 @@ neogs_run_and_get_result:
         ret
 
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
+P124_msg_memtest_start: DEFB "[MEM] Testing 64 x 16 KiB NeoGS pages for x86 RAM...", 13, 0
+P124_msg_memtest_pass:  DEFB "[MEM] PASS: all 64 x86 RAM pages verified.", 13, 0
+P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / phase:page = ", 0
+
 x86_diag_program:
         defb    #B8, #AA, #BB, #40, #90, #F4
 x86_diag_program_end:
+
+; Additional interpreter edge cases, each transferred through actual DMA.
+x86_diag_inc_wrap:
+        defb    #B8, #FF, #FF, #40, #F4       ; AX wraps to 0000
+x86_diag_inc_wrap_end:
+x86_diag_nop_hlt:
+        defb    #90, #F4                      ; NOP followed by HLT
+x86_diag_nop_hlt_end:
+x86_diag_unsupported:
+        defb    #CC                            ; unsupported opcode -> status 2
+x86_diag_unsupported_end:
+x86_diag_truncated_mov:
+        defb    #B8, #34                       ; MOV AX,imm16 missing high byte
+x86_diag_truncated_mov_end:
+x86_diag_fallthrough:
+        defb    #90                            ; IP reaches exclusive end -> status 4
+x86_diag_fallthrough_end:
+
+; Run one diagnostic payload through DMA, execute it, and compare both
+; interpreter status and AX. IN: HL=payload, BC=length, A=expected status,
+; DE=expected AX. OUT: carry clear on exact match, set on any transport/result
+; mismatch. This deliberately accepts the expected error statuses above.
+neogs_run_diag_case:
+        ld      (P124_DIAG_EXPECT_STATUS), a
+        ld      (P124_DIAG_EXPECT_AX), de
+        call    neogs_send_dma_block
+        ret     c
+        call    neogs_run_and_get_result
+        ret     c
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      b, a
+        ld      a, (P124_DIAG_EXPECT_STATUS)
+        cp      b
+        jr      nz, .diag_case_failed
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, (P124_DIAG_EXPECT_AX)
+        or      a
+        sbc     hl, de
+        jr      nz, .diag_case_failed
+        or      a
+        ret
+.diag_case_failed:
+        scf
+        ret
 
 ; Data/state
 P124_X86_LOADER_SP_BACKUP: dw 0
@@ -1384,6 +1535,8 @@ P124_X86_READ_SECTOR:      db 0
 P124_X86_RESULT_MAGIC:     db 0
 P124_X86_RESULT_STATUS:    db 0
 P124_X86_RESULT_AX:        dw 0
+P124_DIAG_EXPECT_STATUS:    db 0
+P124_DIAG_EXPECT_AX:        dw 0
 
 ; Strings
 P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
@@ -1393,6 +1546,9 @@ P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake time
 P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
 P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter status is not zero: #", 0
 P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
+P124_msg_ipc_edge_start:      defb "[IPC TEST] Running 5 interpreter edge cases through DMA.", 13, 0
+P124_msg_ipc_edge_pass:       defb "[IPC TEST] PASS: 5 interpreter edge cases; DMA/IPC stable.", 13, 0
+P124_msg_ipc_edge_fail:       defb "[IPC TEST] FAIL: interpreter edge-case or repeated DMA test.", 13, 0
 P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
 P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
 P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
@@ -2629,6 +2785,8 @@ main_loop:
         jp      z, command_run_x86
         cp      CMD_GET_STATUS
         jp      z, command_get_status
+        cp      CMD_MEM_TEST
+        jp      z, command_mem_test
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -2775,6 +2933,16 @@ execute_neogs_x86:
         ret
 
 ; -------------------------------------------------------------------------
+; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
+; Result is returned through the existing CMD_GET_STATUS frame.
+; -------------------------------------------------------------------------
+command_mem_test:
+        call    x86_mem_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
 ;   A5 signature, exit status, AX low, AX high.
 ; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
@@ -2861,6 +3029,7 @@ rom_return_trampoline_code:
         jp      0
 rom_return_trampoline_end:
 
+        INCLUDE "x86_memory.asm"
         INCLUDE "x86_interpreter.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
@@ -2941,33 +3110,88 @@ bootstrap_start_firmware:
 bootstrap_error:
         ld      a, NGS_BOOTSTRAP_ERROR_ACK
         call    bootstrap_send_data_byte
-.bootstrap_halt:
+        jp      bootstrap_halt
+
+; Terminal state used when the host stops responding or cannot consume data.
+; Never leave a bootstrap polling loop running forever with no timeout.
+bootstrap_halt:
         di
+.bootstrap_halt_loop:
         halt
-        jr      .bootstrap_halt
+        jr      .bootstrap_halt_loop
+
+; Best-effort error ACK after a receive timeout. This path has its own
+; bounded waits and never calls bootstrap_send_data_byte recursively.
+bootstrap_timeout:
+        ld      a, NGS_BOOTSTRAP_ERROR_ACK
+        ld      (bootstrap_tx_byte), a
+        ld      bc, #FFFF
+.timeout_wait_slot:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, .timeout_slot_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .timeout_wait_slot
+        jp      bootstrap_halt
+.timeout_slot_ready:
+        ld      a, (bootstrap_tx_byte)
+        out     (ZXDATWR), a
+        ld      bc, #FFFF
+.timeout_wait_host:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, bootstrap_halt
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .timeout_wait_host
+        jp      bootstrap_halt
 
 ; Wait for one byte from Spectrum. Reading ZXDATRD clears DBIT.
 bootstrap_receive_data_byte:
+        ld      bc, #FFFF
 .rx_wait:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
-        jr      z, .rx_wait
+        jr      nz, .rx_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .rx_wait
+        jp      bootstrap_timeout
+.rx_ready:
         in      a, (ZXDATRD)
         ret
 
 ; Send one byte to Spectrum. Host reads GSDAT and clears DBIT.
 bootstrap_send_data_byte:
         ld      (bootstrap_tx_byte), a
+        ld      bc, #FFFF
 .tx_free:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
+        jr      z, .tx_slot_free
+        dec     bc
+        ld      a, b
+        or      c
         jr      nz, .tx_free
+        jp      bootstrap_halt
+.tx_slot_free:
         ld      a, (bootstrap_tx_byte)
         out     (ZXDATWR), a
+        ld      bc, #FFFF
 .tx_wait_read:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
+        jr      z, .tx_done
+        dec     bc
+        ld      a, b
+        or      c
         jr      nz, .tx_wait_read
+        jp      bootstrap_halt
+.tx_done:
         ret
 
 bootstrap_tx_byte:
@@ -3120,6 +3344,232 @@ x86_jump_table:
 x86_steps_remaining: dw 0
 x86_program_end:     dw 0
 x86_exit_status:     db 0
+
+
+; =========================================================================
+; FILE: neogs_sub/x86_memory.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — 8086 physical memory backend for NeoGS GS105a
+;
+; x86 physical $00000-$FFFFF maps to NeoGS RAM pages 4..67
+; (NeoGS physical base $010000, page size $4000 / 16 KiB).
+; Window C000-FFFF is switched through MPAGEX. This keeps firmware in
+; window 0 / page 0 and the current DMA frame in window 1 / page 3.
+;
+; x86_mem_addr is a 20-bit little-endian address:
+;   +0 = bits 7:0, +1 = bits 15:8, +2 = bits 19:16 (valid 0..0F).
+;
+; API:
+;   x86_mem_init: enable NOROM + EXPAG, preserving other GSCFG0 bits.
+;   x86_mem_read8:  IN x86_mem_addr; OUT A=value, carry=invalid address.
+;   x86_mem_write8: IN x86_mem_addr and x86_mem_value; carry=invalid address.
+;   x86_mem_test: destructive test of the reserved 1 MiB x86 RAM region.
+;                 status=0, AX=0001 on pass; status=5, AX=phase:page on fail.
+;
+; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX.
+; =========================================================================
+
+X86_MEM_NGSPAGE_BASE EQU 4
+X86_MEM_PAGE_COUNT   EQU 64
+
+x86_mem_init:
+        in      a, (GSCFG0)
+        or      M_NOROM | M_EXPAG
+        out     (GSCFG0), a
+        ret
+
+; Convert x86_mem_addr into a Z80 pointer in C000-FFFF.
+; OUT: HL=window pointer, carry clear; carry set if address > FFFFF.
+x86_mem_map_addr:
+        ld      a, (x86_mem_addr+2)
+        cp      #10
+        jr      nc, .bad_address
+
+        ; page = (physical >> 14) + 4
+        ; page index = (high_nibble << 2) | (middle_byte >> 6)
+        add     a, a
+        add     a, a
+        ld      b, a
+        ld      a, (x86_mem_addr+1)
+        rlca
+        rlca
+        and     #03
+        or      b
+        add     a, X86_MEM_NGSPAGE_BASE
+
+        ; MPAGEX uses ROL8(page,1); send ROR8(page,1).
+        rrca
+        out     (MPAGEX), a
+
+        ; Window C000-FFFF maps the selected 16 KiB physical page.
+        ld      a, (x86_mem_addr+1)
+        and     #3F
+        or      #C0
+        ld      h, a
+        ld      a, (x86_mem_addr)
+        ld      l, a
+        or      a
+        ret
+
+.bad_address:
+        scf
+        ret
+
+; Read one byte. IN x86_mem_addr[0..2]. OUT A=byte, carry on invalid address.
+x86_mem_read8:
+        call    x86_mem_map_addr
+        ret     c
+        ld      a, (hl)
+        or      a
+        ret
+
+; Write one byte. IN x86_mem_addr[0..2], x86_mem_value.
+x86_mem_write8:
+        call    x86_mem_map_addr
+        ret     c
+        ld      a, (x86_mem_value)
+        ld      (hl), a
+        or      a
+        ret
+
+; -------------------------------------------------------------------------
+; Destructive physical RAM mapping test.
+; Every page receives unique values at offsets 0000 and 3FFF. A second pass
+; verifies all 128 locations, detecting missing pages and page aliases.
+; -------------------------------------------------------------------------
+x86_mem_test:
+        call    x86_mem_init
+        xor     a
+        ld      (x86_mem_page), a
+        ld      (x86_mem_phase), a
+
+.write_page_loop:
+        call    x86_mem_build_page_start
+        ld      a, (x86_mem_page)
+        xor     #5A
+        ld      (x86_mem_value), a
+        call    x86_mem_write8
+        jp      c, x86_mem_test_write_start_fail
+
+        call    x86_mem_build_page_end
+        ld      a, (x86_mem_page)
+        xor     #A5
+        ld      (x86_mem_value), a
+        call    x86_mem_write8
+        jp      c, x86_mem_test_write_end_fail
+
+        ld      a, (x86_mem_page)
+        inc     a
+        ld      (x86_mem_page), a
+        cp      X86_MEM_PAGE_COUNT
+        jr      c, .write_page_loop
+
+        xor     a
+        ld      (x86_mem_page), a
+
+.verify_page_loop:
+        call    x86_mem_build_page_start
+        call    x86_mem_read8
+        jp      c, x86_mem_test_verify_start_fail
+        ld      b, a
+        ld      a, (x86_mem_page)
+        xor     #5A
+        cp      b
+        jp      nz, x86_mem_test_verify_start_fail
+
+        call    x86_mem_build_page_end
+        call    x86_mem_read8
+        jp      c, x86_mem_test_verify_end_fail
+        ld      b, a
+        ld      a, (x86_mem_page)
+        xor     #A5
+        cp      b
+        jp      nz, x86_mem_test_verify_end_fail
+
+        ld      a, (x86_mem_page)
+        inc     a
+        ld      (x86_mem_page), a
+        cp      X86_MEM_PAGE_COUNT
+        jr      c, .verify_page_loop
+
+        ; Success: AX=0001 means all 64 pages passed.
+        ld      hl, 1
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        ret
+
+x86_mem_test_write_start_fail:
+        ld      a, 1
+        jr      x86_mem_test_fail
+x86_mem_test_write_end_fail:
+        ld      a, 2
+        jr      x86_mem_test_fail
+x86_mem_test_verify_start_fail:
+        ld      a, 3
+        jr      x86_mem_test_fail
+x86_mem_test_verify_end_fail:
+        ld      a, 4
+
+x86_mem_test_fail:
+        ld      (x86_mem_phase), a
+        ld      a, (x86_mem_page)
+        ld      l, a
+        ld      a, (x86_mem_phase)
+        ld      h, a
+        ld      (saved_x86_ax), hl
+        ld      a, 5
+        ld      (x86_exit_status), a
+        ret
+
+; Build page * 4000h, offset 0000.
+x86_mem_build_page_start:
+        xor     a
+        ld      (x86_mem_addr), a
+        ld      a, (x86_mem_page)
+        ld      b, a
+        and     #03
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        ld      (x86_mem_addr+1), a
+        ld      a, b
+        rrca
+        rrca
+        and     #0F
+        ld      (x86_mem_addr+2), a
+        ret
+
+; Build page * 4000h + 3FFFh.
+x86_mem_build_page_end:
+        ld      a, #FF
+        ld      (x86_mem_addr), a
+        ld      a, (x86_mem_page)
+        ld      b, a
+        and     #03
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a
+        or      #3F
+        ld      (x86_mem_addr+1), a
+        ld      a, b
+        rrca
+        rrca
+        and     #0F
+        ld      (x86_mem_addr+2), a
+        ret
+
+x86_mem_addr:  db 0, 0, 0
+x86_mem_value: db 0
+x86_mem_page:  db 0
+x86_mem_phase: db 0
 
 
 ; =========================================================================
