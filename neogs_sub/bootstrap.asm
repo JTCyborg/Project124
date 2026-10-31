@@ -1,5 +1,5 @@
 ; =========================================================================
-; PROJECT 124 — first-stage NeoGS bootstrap module
+; PROJECT 124 — first-stage NeoGS executable bootstrap
 ;
 ; Loaded by the stock GS105a ROM using the standard General Sound protocol:
 ;   #30 LOAD MODULE, #D1 OPEN STREAM, bytes, #D2 CLOSE STREAM, #31 RUN MODULE.
@@ -9,8 +9,7 @@
 ; exactly that many bytes through the documented ZX data channel, stores the
 ; custom firmware at RAM address $0000, then jumps to $0000.
 ;
-; This deliberately remains below $6000: the GS105a software uses $6000-$7FFF
-; for DAC-related work. The forum's documented safe resident area is $5B00-$5FFF.
+; It executes from the fixed RAM window $4000-$7FFF and keeps its stack below $4000.
 ; =========================================================================
 
 neogs_bootstrap_start:
