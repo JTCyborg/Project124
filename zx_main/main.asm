@@ -166,7 +166,12 @@ START_APPLICATION:
 .firmware_upload_done:
 
         ; ЭТАП 3 — ИНИЦИАЛИЗАЦИЯ И ОТРИСОВКА ИНТЕРФЕЙСА ОКОН И ДВУХ ШРИФТОВ
-        call    INIT_PROGRAM_INTERFACE 
+        call    INIT_PROGRAM_INTERFACE
+
+        ; Frame 1: capture the freshly rendered UI before startup log text.
+        ld      a, 1
+        call    P124_DumpLowerScreen
+
         MACRO_EF_STRING msg_stage3_ok
 
         ; ЭТАП 4 — ВЫВОД СТАРТОВОГО ОТЧЕТА В НИЖНЕЕ ОКНО ЛОГОВ COMMANDER
@@ -193,6 +198,10 @@ START_APPLICATION:
         call    EXECUTE_X86_FILE_STAGE
         ei
         jr      c, .x86_stage_failed
+
+        ; Frame 2: capture the lower screen after BIOS INT 10h test output.
+        ld      a, 2
+        call    P124_DumpLowerScreen
 
         ; Финальная точка останова ядра после завершения всех этапов
 .core_halt:
