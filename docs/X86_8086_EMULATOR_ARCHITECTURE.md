@@ -31,7 +31,7 @@ Implement a memory abstraction before adding instructions that access memory:
 - `x86_mem_read8`, `x86_mem_read16`, `x86_mem_write8`, `x86_mem_write16`.
 - A documented physical-memory backend with explicit region map and bounds checks.
 - No instruction handler may directly dereference arbitrary Z80 addresses for an x86 physical address.
-- Decide and document the supported physical RAM size and mapping from GS105a hardware before claiming full 1 MiB memory compatibility.
+- Initial implementation maps x86 physical `$00000-$FFFFF` to NeoGS physical `$010000-$10FFFF` (pages 4..67) through MPAGEX/window 3; see `docs/NEOGS_X86_MEMORY_MAP.md`. This mapping is emulator/model-backed and still requires the user's emulator log and later physical-board validation before claiming hardware compatibility.
 - Preserve correct 16-bit offset wrap behavior for accesses crossing offset FFFFh; do not silently substitute a flat 20-bit increment where the CPU wraps an offset within a segment.
 
 ## CPU state interface
