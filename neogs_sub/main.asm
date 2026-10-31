@@ -89,6 +89,8 @@ main_loop:
         jp      z, command_bios_post
         cp      CMD_INT_TEST
         jp      z, command_int_test
+        cp      CMD_INT_GUEST_TEST
+        jp      z, command_int_guest_test
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -258,6 +260,13 @@ command_int_test:
         out     (CLRCBIT), a
         jp      main_loop
 
+; Stage 2B: execute a guest INT handler through CS:IP and return with IRET.
+command_int_guest_test:
+        call    x86_real_mode_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
 ; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
 ;   A5 signature, exit status, AX low, AX high.
@@ -350,6 +359,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_modrm.asm"
         INCLUDE "x86_interpreter.asm"
         INCLUDE "x86_interrupt.asm"
+        INCLUDE "x86_real_mode.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000

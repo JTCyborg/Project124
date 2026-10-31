@@ -86,6 +86,7 @@ CMD_GET_STATUS  EQU #04
 CMD_MEM_TEST    EQU #05
 CMD_BIOS_POST   EQU #07
 CMD_INT_TEST    EQU #08
+CMD_INT_GUEST_TEST EQU #09
 
 ; Project 124 startup handshake bytes.
 NGS_BOOTSTRAP_READY_ACK EQU #A1
@@ -143,6 +144,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/x86_memory.asm",
                     "neogs_sub/bios/bios_core.asm",
                     "neogs_sub/x86_interrupt.asm",
+                    "neogs_sub/x86_real_mode.asm",
                     "neogs_sub/build_firmware.asm"
                 }
 
@@ -1118,6 +1120,23 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_test_pass
 
         ; -------------------------------------------------------------
+        ; Stage 2B: execute a guest INT 20h handler through CS:IP, then IRET.
+        ; The guest handler changes AX and returns to the caller's HLT.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_int_guest_start
+        call    neogs_int_guest_test_and_get_result
+        jp      c, .int_guest_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .int_guest_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #1A02
+        or      a
+        sbc     hl, de
+        jp      nz, .int_guest_fail
+        MACRO_EF_STRING P124_msg_int_guest_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -1345,6 +1364,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.int_guest_transport_fail:
+        MACRO_EF_STRING P124_msg_int_guest_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.int_guest_fail:
+        MACRO_EF_STRING P124_msg_int_guest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -1514,6 +1551,14 @@ neogs_int_test_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run a real guest INT/IRET handler test and fetch the result frame.
+neogs_int_guest_test_and_get_result:
+        ld      a, CMD_INT_GUEST_TEST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -1566,6 +1611,10 @@ P124_msg_int_test_start: DEFB "[INT] Stage 2A: checking IVT lookup and 8086 inte
 P124_msg_int_test_pass: DEFB "[INT] PASS: FLAGS/CS/IP frame, IF/TF clear, IRET restore and SP balance.", 13, 0
 P124_msg_int_test_transport_fail: DEFB "[INT] FAIL: interrupt test command/result timeout.", 13, 0
 P124_msg_int_test_fail: DEFB "[INT] FAIL: status/detail = ", 0
+P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler and IRET...", 13, 0
+P124_msg_int_guest_pass: DEFB "[INT] PASS: guest handler executed through CS:IP; IRET returned to caller.", 13, 0
+P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
+P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
@@ -2887,6 +2936,8 @@ main_loop:
         jp      z, command_bios_post
         cp      CMD_INT_TEST
         jp      z, command_int_test
+        cp      CMD_INT_GUEST_TEST
+        jp      z, command_int_guest_test
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -3056,6 +3107,13 @@ command_int_test:
         out     (CLRCBIT), a
         jp      main_loop
 
+; Stage 2B: execute a guest INT handler through CS:IP and return with IRET.
+command_int_guest_test:
+        call    x86_real_mode_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
 ; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
 ;   A5 signature, exit status, AX low, AX high.
@@ -3148,6 +3206,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_modrm.asm"
         INCLUDE "x86_interpreter.asm"
         INCLUDE "x86_interrupt.asm"
+        INCLUDE "x86_real_mode.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
@@ -4514,6 +4573,313 @@ x86_int_vector:    db 0
 x86_int_word:      dw 0
 x86_int_target_ip: dw 0
 x86_int_target_cs: dw 0
+
+
+; =========================================================================
+; FILE: neogs_sub/x86_real_mode.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
+;
+; This first executable slice runs guest instructions through CS:IP and the
+; physical-memory backend. Supported: NOP, INC AX, MOV AX,imm16, HLT,
+; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
+;
+; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
+; handler at 0000:5100, then executes:
+;   MOV AX,0000 / INT 20h / HLT
+; handler:
+;   MOV AX,1234 / IRET
+; The test checks AX, CS:IP return path, FLAGS and SP balance.
+; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
+; =========================================================================
+
+X86_REAL_STEP_LIMIT EQU 32
+
+x86_real_mode_test:
+        call    x86_mem_init
+
+        ; Copy main guest program to physical 0000:5002.
+        ld      hl, x86_guest_main_image
+        ld      de, #5002
+        ld      bc, x86_guest_main_image_end - x86_guest_main_image
+        call    x86_real_copy_image
+        jp      c, x86_real_test_fail_1
+
+        ; Copy interrupt handler to physical 0000:5100.
+        ld      hl, x86_guest_handler_image
+        ld      de, #5100
+        ld      bc, x86_guest_handler_image_end - x86_guest_handler_image
+        call    x86_real_copy_image
+        jp      c, x86_real_test_fail_1
+
+        ; Install IVT[20h] = 0000:5100.
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0080
+        ld      (x86_mem_offset), hl
+        ld      hl, #5100
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        jp      c, x86_real_test_fail_2
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0082
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        jp      c, x86_real_test_fail_2
+
+        ; Initialize guest architectural state.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      (x86_reg_es), hl
+        ld      (x86_reg_ds), hl
+        ld      (x86_reg_cs), hl
+        ld      hl, #5002
+        ld      (x86_reg_ip), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0302
+        ld      (x86_reg_flags), hl
+
+        call    x86_real_execute
+        jp      c, x86_real_test_fail_3
+
+        ; Handler's MOV AX,1234 must execute before guest IRET returns to HLT.
+        ld      hl, (x86_reg_ax)
+        ld      de, #1234
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_4
+
+        ; Verify original control-flow context and stack were restored.
+        ld      hl, (x86_reg_cs)
+        ld      de, 0
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_ip)
+        ld      de, #5008
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_sp)
+        ld      de, #0100
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_flags)
+        ld      de, #0302
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+
+        call    x86_real_clear_vector
+        jp      c, x86_real_test_fail_6
+
+        ld      hl, #1A02
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+; IN: HL=source in firmware, DE=physical x86 destination, BC=length.
+x86_real_copy_image:
+        ld      (x86_real_copy_source), hl
+        ld      (x86_real_copy_dest), de
+        ld      (x86_real_copy_count), bc
+x86_real_copy_loop:
+        ld      bc, (x86_real_copy_count)
+        ld      a, b
+        or      c
+        ret     z
+        ld      hl, (x86_real_copy_source)
+        ld      a, (hl)
+        ld      (x86_mem_value), a
+        ld      hl, (x86_real_copy_dest)
+        ld      (x86_mem_addr), hl
+        xor     a
+        ld      (x86_mem_addr+2), a
+        call    x86_mem_write8
+        ret     c
+        ld      hl, (x86_real_copy_source)
+        inc     hl
+        ld      (x86_real_copy_source), hl
+        ld      hl, (x86_real_copy_dest)
+        inc     hl
+        ld      (x86_real_copy_dest), hl
+        ld      hl, (x86_real_copy_count)
+        dec     hl
+        ld      (x86_real_copy_count), hl
+        jr      x86_real_copy_loop
+
+; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
+; OUT A=byte; guest IP advances only after a successful memory read.
+x86_real_fetch8:
+        ld      hl, (x86_reg_ip)
+        ld      (x86_mem_offset_work), hl
+        ld      hl, (x86_reg_cs)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_calc_phys
+        call    x86_mem_read8
+        ret     c
+        push    af
+        ld      hl, (x86_reg_ip)
+        inc     hl
+        ld      (x86_reg_ip), hl
+        pop     af
+        or      a
+        ret
+
+x86_real_execute:
+        ld      hl, X86_REAL_STEP_LIMIT
+        ld      (x86_real_steps), hl
+x86_real_next:
+        ld      hl, (x86_real_steps)
+        ld      a, h
+        or      l
+        jp      z, x86_real_budget_fail
+        dec     hl
+        ld      (x86_real_steps), hl
+
+        call    x86_real_fetch8
+        ret     c
+
+        cp      #90
+        jp      z, x86_real_nop
+        cp      #40
+        jp      z, x86_real_inc_ax
+        cp      #B8
+        jp      z, x86_real_mov_ax_imm16
+        cp      #F4
+        jp      z, x86_real_hlt
+        cp      #CD
+        jp      z, x86_real_int_imm8
+        cp      #CC
+        jp      z, x86_real_int3
+        cp      #CF
+        jp      z, x86_real_iret
+
+        ld      a, 2
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_real_nop:
+        jp      x86_real_next
+
+x86_real_inc_ax:
+        ld      hl, (x86_reg_ax)
+        inc     hl
+        ld      (x86_reg_ax), hl
+        jp      x86_real_next
+
+x86_real_mov_ax_imm16:
+        call    x86_real_fetch8
+        ret     c
+        ld      l, a
+        call    x86_real_fetch8
+        ret     c
+        ld      h, a
+        ld      (x86_reg_ax), hl
+        jp      x86_real_next
+
+x86_real_int_imm8:
+        call    x86_real_fetch8
+        ret     c
+        call    x86_int_enter
+        ret     c
+        jp      x86_real_next
+
+x86_real_int3:
+        ld      a, 3
+        call    x86_int_enter
+        ret     c
+        jp      x86_real_next
+
+x86_real_iret:
+        call    x86_iret_return
+        ret     c
+        jp      x86_real_next
+
+x86_real_hlt:
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+x86_real_budget_fail:
+        ld      a, 1
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_real_clear_vector:
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0080
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        ret     c
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0082
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_word_value), hl
+        jp      x86_mem_write16
+
+x86_real_test_fail_1:
+        ld      a, 1
+        jr      x86_real_test_fail
+x86_real_test_fail_2:
+        ld      a, 2
+        jr      x86_real_test_fail
+x86_real_test_fail_3:
+        ld      a, 3
+        jr      x86_real_test_fail
+x86_real_test_fail_4:
+        ld      a, 4
+        jr      x86_real_test_fail
+x86_real_test_fail_5:
+        ld      a, 5
+        jr      x86_real_test_fail
+x86_real_test_fail_6:
+        ld      a, 6
+x86_real_test_fail:
+        ld      l, a
+        ld      h, #1B
+        ld      (saved_x86_ax), hl
+        ld      a, 9
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_real_steps:       dw 0
+x86_real_copy_source: dw 0
+x86_real_copy_dest:   dw 0
+x86_real_copy_count:  dw 0
+
+x86_guest_main_image:
+        db #B8,#00,#00,#CD,#20,#F4
+x86_guest_main_image_end:
+x86_guest_handler_image:
+        db #B8,#34,#12,#CF
+x86_guest_handler_image_end:
+
 
 
 ; =========================================================================
