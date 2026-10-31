@@ -106,10 +106,16 @@ bios_int10_set_cursor:
         ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
         ld      a, h
         cp      BIOS_VIDEO_ROWS
-        ret     nc
+        jr      c, .row_valid
+        or      a
+        ret
+.row_valid:
         ld      a, l
         cp      BIOS_VIDEO_COLUMNS
-        ret     nc
+        jr      c, .col_valid
+        or      a
+        ret
+.col_valid:
         ld      a, h
         ld      (bios_video_row), a
         ld      a, l
@@ -216,9 +222,11 @@ bios_video_store_cursor:
 
 ; IN: HL=physical address, A=value.
 bios_video_write_byte:
+        ld      (bios_video_write_value), a
         ld      (x86_mem_addr), hl
         xor     a
         ld      (x86_mem_addr+2), a
+        ld      a, (bios_video_write_value)
         ld      (x86_mem_value), a
         jp      x86_mem_write8
 
@@ -365,6 +373,7 @@ bios_video_test_fail:
 bios_video_row: db 0
 bios_video_col: db 0
 bios_video_char: db 0
+bios_video_write_value: db 0
 
 ; Guest program is assembled as a byte stream at physical 0000:5002.
 x86_bios_video_test_image:
