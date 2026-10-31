@@ -112,6 +112,23 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_ipc_edge_pass
 
         ; -------------------------------------------------------------
+        ; NeoGS 1 MiB x86 physical RAM mapping test: 64 pages x 16 KiB.
+        ; This is destructive only to the reserved x86 memory region.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_memtest_start
+        call    neogs_mem_test_and_get_result
+        jp      c, .diag_extended_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .diag_memtest_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, .diag_memtest_fail
+        MACRO_EF_STRING P124_msg_memtest_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -303,6 +320,19 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.diag_memtest_fail:
+        MACRO_EF_STRING P124_msg_memtest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_wrong_result:
         MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
         ld      hl, (P124_X86_RESULT_AX)
@@ -441,7 +471,16 @@ neogs_run_and_get_result:
         out     (GSCOM), a
         call    neogs_wait_command_done_long
         ret     c
+        jp      neogs_get_result_frame
 
+; Run the NeoGS physical-memory self-test and fetch its result frame.
+neogs_mem_test_and_get_result:
+        ld      a, CMD_MEM_TEST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+
+neogs_get_result_frame:
         ld      a, CMD_GET_STATUS
         out     (GSCOM), a
 
@@ -476,6 +515,10 @@ neogs_run_and_get_result:
         ret
 
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
+P124_msg_memtest_start: DEFB "[MEM] Testing 64 x 16 KiB NeoGS pages for x86 RAM...", 13, 0
+P124_msg_memtest_pass:  DEFB "[MEM] PASS: all 64 x86 RAM pages verified.", 13, 0
+P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / phase:page = ", 0
+
 x86_diag_program:
         defb    #B8, #AA, #BB, #40, #90, #F4
 x86_diag_program_end:
