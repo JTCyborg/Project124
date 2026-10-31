@@ -280,8 +280,28 @@ bios_int10_video_test:
         call    x86_real_copy_image
         jp      c, bios_video_test_fail_1
 
-        call    bios_int10_install_vector
+        ; Verify POST installed IVT[10h] -> 0000:5200.
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0040
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
         jp      c, bios_video_test_fail_2
+        ld      de, #5200
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_2
+
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0042
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, bios_video_test_fail_2
+        ld      de, 0
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_2
 
         ; Initialize guest registers and real-mode stack.
         ld      hl, 0
