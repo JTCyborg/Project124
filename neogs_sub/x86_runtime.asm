@@ -43,8 +43,7 @@ execute_neogs_x86:
         xor     a
         ld      (x86_exit_status), a
 
-        ld      hl, neo_debug_msg_x86_started
-        call    neo_debug_puts
+        call    x86_sys_log_started
         ld      bc, X86_RAM_RUN_ADDR
         call    x86_execute_loop
 
