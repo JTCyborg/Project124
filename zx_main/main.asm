@@ -148,7 +148,7 @@ START_APPLICATION:
         ld      h, 0
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
-        MACRO_EF_STRING msg_stage2_handle
+        MACRO_EF_STRING msg_stage2_bootstrap
         ld      hl, (neo_fw_bootstrap_address)
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
@@ -218,7 +218,7 @@ msg_stage2_phase:
         DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
 msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
-msg_stage2_handle:
+msg_stage2_bootstrap:
         DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
 
 ; =========================================================================
