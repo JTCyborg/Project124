@@ -112,8 +112,8 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_ipc_edge_pass
 
         ; -------------------------------------------------------------
-        ; NeoGS 1 MiB x86 physical RAM mapping test: 64 pages x 16 KiB.
-        ; This is destructive only to the reserved x86 memory region.
+        ; NeoGS x86 memory test: 64 pages plus word/segment addressing cases.
+        ; Destructive only to the reserved x86 memory region.
         ; -------------------------------------------------------------
         MACRO_EF_STRING P124_msg_memtest_start
         call    neogs_mem_test_and_get_result
@@ -515,8 +515,8 @@ neogs_get_result_frame:
         ret
 
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
-P124_msg_memtest_start: DEFB "[MEM] Testing 64 x 16 KiB NeoGS pages for x86 RAM...", 13, 0
-P124_msg_memtest_pass:  DEFB "[MEM] PASS: all 64 x86 RAM pages verified.", 13, 0
+P124_msg_memtest_start: DEFB "[MEM] Testing x86 RAM pages and 8086 word/segment addressing...", 13, 0
+P124_msg_memtest_pass:  DEFB "[MEM] PASS: 64 pages + word access + segment/offset wrap verified.", 13, 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / phase:page = ", 0
 
 x86_diag_program:
