@@ -162,6 +162,93 @@ RUN_NEOGS_DIAGNOSTICS::
         ret
 
 ; =========================================================================
+; External TR-DOS x86 test runner.
+; TEST.C is assembled from tests/TEST.ASM on the PC, stored on disk, loaded
+; by the host Z80 into #C000, then transferred to NeoGS through DMA.
+; The first fixture expects MOV AX,BBAA / INC AX / NOP / HLT -> AX=BBAB.
+; =========================================================================
+RUN_TRDOS_X86_TEST::
+        MACRO_EF_STRING P124_msg_external_test_start
+
+        ld      hl, P124_test_filename
+        ld      a, 'C'
+        call    neogs_load_trdos_file
+        jp      c, .test_file_load_failed
+
+        ; The TR-DOS loader returns the exact file size in neo_trdos_file_length.
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      bc, (neo_trdos_file_length)
+        call    neogs_send_dma_block
+        jp      c, .test_dma_failed
+
+        call    neogs_run_and_get_result
+        jp      c, .test_protocol_failed
+
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .test_execution_failed
+
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #BBAB
+        or      a
+        sbc     hl, de
+        jp      nz, .test_result_failed
+
+        MACRO_EF_STRING P124_msg_external_test_pass
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        or      a
+        ret
+
+.test_file_load_failed:
+        MACRO_EF_STRING P124_msg_external_test_file_fail
+        ld      a, (neo_trdos_error)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        ret
+
+.test_dma_failed:
+        MACRO_EF_STRING P124_msg_external_test_dma_fail
+        scf
+        ret
+
+.test_protocol_failed:
+        MACRO_EF_STRING P124_msg_external_test_protocol_fail
+        scf
+        ret
+
+.test_execution_failed:
+        MACRO_EF_STRING P124_msg_external_test_exec_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        ret
+
+.test_result_failed:
+        MACRO_EF_STRING P124_msg_external_test_result_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        ret
+
+P124_test_filename:            defb "TEST    "
+P124_msg_external_test_start:  defb "[X86 TEST] Loading TEST.C from TR-DOS and sending it to NeoGS.", 13, 0
+P124_msg_external_test_pass:   defb "[X86 TEST] PASS: external TEST.C executed; AX=#", 0
+P124_msg_external_test_file_fail: defb "[X86 TEST] FAIL: TEST.C load error = #", 0
+P124_msg_external_test_dma_fail: defb "[X86 TEST] FAIL: DMA transfer timeout or invalid test length.", 13, 0
+P124_msg_external_test_protocol_fail: defb "[X86 TEST] FAIL: NeoGS execution/result protocol error.", 13, 0
+P124_msg_external_test_exec_fail: defb "[X86 TEST] FAIL: x86 execution status = #", 0
+P124_msg_external_test_result_fail: defb "[X86 TEST] FAIL: expected AX=#BBAB, actual AX=#", 0
+
+; =========================================================================
 ; NeoGS transport helpers — CBIT/DBIT protocol
 ; =========================================================================
 
