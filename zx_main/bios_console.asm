@@ -116,18 +116,22 @@ BIOS_DebugConsole_PrintChar::
         add     hl, de
         ld      (bios_dbg_font_ptr), hl
 
-        ; Pixel X = column * 6, so 42 cells occupy 252 of 256 pixels.
+        ; Eight scanlines share the same character-cell X origin.
+        ; Reset the pixel coordinate for every glyph scanline.
+        xor     a
+        ld      (bios_dbg_scan), a
+
+.glyph_scanline:
+        ; Pixel X = column * 6. Recompute on EVERY scanline:
+        ; glyph_pixel advances bios_dbg_xpixel by six pixels, so carrying
+        ; that value into the next scanline causes diagonal glyph rendering.
         ld      a, (bios_dbg_col)
-        ld      b, a
         add     a, a
         ld      c, a
         add     a, a
         add     a, c
         ld      (bios_dbg_xpixel), a
-        xor     a
-        ld      (bios_dbg_scan), a
 
-.glyph_scanline:
         ld      hl, (bios_dbg_font_ptr)
         ld      a, (hl)
         ld      (bios_dbg_bits), a
