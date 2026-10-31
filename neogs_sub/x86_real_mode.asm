@@ -208,10 +208,12 @@ x86_real_inc_ax:
 x86_real_mov_ax_imm16:
         call    x86_real_fetch8
         ret     c
-        ld      l, a
+        ld      (x86_real_imm_low), a
         call    x86_real_fetch8
         ret     c
         ld      h, a
+        ld      a, (x86_real_imm_low)
+        ld      l, a
         ld      (x86_reg_ax), hl
         jp      x86_real_next
 
@@ -292,6 +294,7 @@ x86_real_steps:       dw 0
 x86_real_copy_source: dw 0
 x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
+x86_real_imm_low:    db 0
 
 x86_guest_main_image:
         db #B8,#00,#00,#CD,#20,#F4
