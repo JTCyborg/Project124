@@ -392,6 +392,7 @@ gs_boot_receive_data_byte:
         ret
 .receive_ready:
         in      a, (GSDAT)
+        ld      (neo_fw_last_rx_byte), a
         or      a
         ret
 
@@ -465,6 +466,7 @@ neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
 neo_fw_result_byte:     db 0
+neo_fw_last_rx_byte:    db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
 neo_fw_last_status:     db 0
