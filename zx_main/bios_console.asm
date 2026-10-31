@@ -206,7 +206,7 @@ BIOS_DebugConsole_PrintChar::
         inc     a
         ld      (bios_dbg_scan), a
         cp      8
-        jr      c, .glyph_scanline
+        jp      c, .glyph_scanline
 
         ; The full-screen glyph test suppresses only the final auto-wrap,
         ; so row 11 remains visible instead of scrolling the test's first row.
