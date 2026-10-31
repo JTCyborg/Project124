@@ -391,13 +391,13 @@ x86_bios_video_test_image:
         db #B4,#0E,#B0,#49,#CD,#10 ; I
         db #B4,#0E,#B0,#4E,#CD,#10 ; N
         db #B4,#0E,#B0,#54,#CD,#10 ; T
-        db #B8,#31,#0E,#CD,#10 ; 1
+        db #B4,#0E,#B0,#31,#CD,#10 ; 1
         db #B4,#0E,#B0,#30,#CD,#10 ; 0
-        db #B8,#20,#0E,#CD,#10 ; space
-        db #B8,#50,#0E,#CD,#10 ; P
+        db #B4,#0E,#B0,#20,#CD,#10 ; space
+        db #B4,#0E,#B0,#50,#CD,#10 ; P
         db #B4,#0E,#B0,#41,#CD,#10 ; A
         db #B4,#0E,#B0,#53,#CD,#10 ; S
-        db #B8,#53,#0E,#CD,#10 ; S
+        db #B4,#0E,#B0,#53,#CD,#10 ; S
         ; AH=03h get cursor, then AH=0Fh get mode/columns.
         db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
         db #B4,#0F,#B0,#00,#CD,#10
