@@ -113,6 +113,8 @@ command_reset:
         ld      (saved_z80_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
+        ld      (x86_last_ip), a
+        ld      (x86_last_ip+1), a
         out     (CLRCBIT), a
         jp      main_loop
 
@@ -192,6 +194,8 @@ execute_neogs_x86:
         ld      (saved_x86_ax), hl
         ld      a, 3
         ld      (x86_exit_status), a
+        ld      hl, 0
+        ld      (x86_last_ip), hl
         ret
 
 .dma_ok:
