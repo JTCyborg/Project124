@@ -14,8 +14,8 @@
 x86_decode_modrm16:
         ld      (x86_modrm_byte), a
         and     #C0
-        rrca
-        rrca
+        rlca
+        rlca
         ld      (x86_modrm_mod), a
 
         ld      a, (x86_modrm_byte)
@@ -24,7 +24,7 @@ x86_decode_modrm16:
 
         ld      a, (x86_modrm_mod)
         cp      3
-        jr      nz, .memory_operand
+        jp      nz, .memory_operand
 
         ; Register-direct operand: no displacement or memory access.
         ld      a, 1
@@ -39,74 +39,73 @@ x86_decode_modrm16:
         ld      (x86_ea_is_reg), a
         ld      hl, 0
         ld      (x86_ea_offset), hl
-        ld      a, 0
-        ld      (x86_ea_segment), a
-        ld      (x86_ea_segment+1), a
+        ld      hl, (x86_reg_ds)
+        ld      (x86_ea_segment), hl
 
         ; Decode base/index pair. Use explicit 8086 addressing combinations.
         ld      a, (x86_modrm_mod)
         or      a
-        jr      nz, .not_direct
+        jp      nz, .not_direct
         ld      a, (x86_modrm_rm)
         cp      6
-        jr      nz, .not_direct
+        jp      nz, .not_direct
 
         ; mod=00,r/m=110: [disp16], no base register.
         call    x86_modrm_fetch_disp16
         ret     c
         ld      (x86_ea_offset), hl
-        jr      .apply_displacement
+        jp      .apply_displacement
 
 .not_direct:
         ld      a, (x86_modrm_rm)
         cp      0
-        jr      z, .bx_si
+        jp      z, .bx_si
         cp      1
-        jr      z, .bx_di
+        jp      z, .bx_di
         cp      2
-        jr      z, .bp_si
+        jp      z, .bp_si
         cp      3
-        jr      z, .bp_di
+        jp      z, .bp_di
         cp      4
-        jr      z, .si_only
+        jp      z, .si_only
         cp      5
-        jr      z, .di_only
+        jp      z, .di_only
         cp      6
-        jr      z, .bp_only
-        jr      .bx_only
+        jp      z, .bp_only
+        jp      .bx_only
 
 .bx_si:
         ld      hl, (x86_reg_bx)
         ld      de, (x86_reg_si)
         add     hl, de
-        jr      .base_ready
+        jp      .base_ready
 .bx_di:
         ld      hl, (x86_reg_bx)
         ld      de, (x86_reg_di)
         add     hl, de
-        jr      .base_ready
+        jp      .base_ready
 .bp_si:
         call    x86_modrm_set_ss
         ld      hl, (x86_reg_bp)
         ld      de, (x86_reg_si)
         add     hl, de
-        jr      .base_ready
+        jp      .base_ready
 .bp_di:
         call    x86_modrm_set_ss
         ld      hl, (x86_reg_bp)
         ld      de, (x86_reg_di)
         add     hl, de
-        jr      .base_ready
+        jp      .base_ready
 .si_only:
         ld      hl, (x86_reg_si)
-        jr      .base_ready
+        jp      .base_ready
 .di_only:
         ld      hl, (x86_reg_di)
-        jr      .base_ready
+        jp      .base_ready
 .bp_only:
         call    x86_modrm_set_ss
         ld      hl, (x86_reg_bp)
-        jr      .base_ready
+        jp      .base_ready
 .bx_only:
         ld      hl, (x86_reg_bx)
 
@@ -116,9 +115,9 @@ x86_decode_modrm16:
 .apply_displacement:
         ld      a, (x86_modrm_mod)
         cp      1
-        jr      z, .disp8
+        jp      z, .disp8
         cp      2
-        jr      z, .disp16
+        jp      z, .disp16
         or      a
         ret
 
@@ -129,7 +128,7 @@ x86_decode_modrm16:
         ld      e, a
         ld      d, 0
         bit     7, a
-        jr      z, .disp8_add
+        jp      z, .disp8_add
         dec     d
 .disp8_add:
         ld      hl, (x86_ea_offset)
@@ -173,7 +172,7 @@ x86_modrm_fetch_disp16:
         jp      c, x86_modrm_truncated
         ld      a, h
         or      a
-        jr      nz, .enough
+        jp      nz, .enough
         ld      a, l
         cp      2
         jp      c, x86_modrm_truncated
