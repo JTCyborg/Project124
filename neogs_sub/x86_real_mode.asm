@@ -6,11 +6,9 @@
 ; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
-; handler at 0000:5100, then executes:
-;   MOV AX,0000 / INT 20h / HLT
-; handler:
-;   MOV AX,1234 / IRET
-; The test checks MOV r16,imm16 for all eight registers, INT/IRET, FLAGS and SP.
+; handler at 0000:5100. The guest loads all eight general registers with
+; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
+; The test checks all MOV destinations, interrupt return, FLAGS and SP.
 ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
 ; =========================================================================
 
