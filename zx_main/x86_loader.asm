@@ -56,6 +56,50 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_CHAR 13
 
         ; -------------------------------------------------------------
+        ; Extended interpreter/transport self-test.
+        ; Each case is sent through the real CBIT -> DMA -> DBIT path.
+        ; Expected non-zero interpreter statuses are deliberate test results.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_ipc_edge_start
+
+        ld      hl, x86_diag_inc_wrap
+        ld      bc, x86_diag_inc_wrap_end - x86_diag_inc_wrap
+        xor     a
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_nop_hlt
+        ld      bc, x86_diag_nop_hlt_end - x86_diag_nop_hlt
+        xor     a
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_unsupported
+        ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
+        ld      a, 2
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_truncated_mov
+        ld      bc, x86_diag_truncated_mov_end - x86_diag_truncated_mov
+        ld      a, 4
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        ld      hl, x86_diag_fallthrough
+        ld      bc, x86_diag_fallthrough_end - x86_diag_fallthrough
+        ld      a, 4
+        ld      de, #0000
+        call    neogs_run_diag_case
+        jp      c, .diag_extended_fail
+
+        MACRO_EF_STRING P124_msg_ipc_edge_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -242,6 +286,11 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.diag_extended_fail:
+        MACRO_EF_STRING P124_msg_ipc_edge_fail
+        scf
+        jp      .loader_restore_stack
+
 .diag_wrong_result:
         MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
         ld      hl, (P124_X86_RESULT_AX)
@@ -419,6 +468,50 @@ x86_diag_program:
         defb    #B8, #AA, #BB, #40, #90, #F4
 x86_diag_program_end:
 
+; Additional interpreter edge cases, each transferred through actual DMA.
+x86_diag_inc_wrap:
+        defb    #B8, #FF, #FF, #40, #F4       ; AX wraps to 0000
+x86_diag_inc_wrap_end:
+x86_diag_nop_hlt:
+        defb    #90, #F4                      ; NOP followed by HLT
+x86_diag_nop_hlt_end:
+x86_diag_unsupported:
+        defb    #CC                            ; unsupported opcode -> status 2
+x86_diag_unsupported_end:
+x86_diag_truncated_mov:
+        defb    #B8, #34                       ; MOV AX,imm16 missing high byte
+x86_diag_truncated_mov_end:
+x86_diag_fallthrough:
+        defb    #90                            ; IP reaches exclusive end -> status 4
+x86_diag_fallthrough_end:
+
+; Run one diagnostic payload through DMA, execute it, and compare both
+; interpreter status and AX. IN: HL=payload, BC=length, A=expected status,
+; DE=expected AX. OUT: carry clear on exact match, set on any transport/result
+; mismatch. This deliberately accepts the expected error statuses above.
+neogs_run_diag_case:
+        ld      (P124_DIAG_EXPECT_STATUS), a
+        ld      (P124_DIAG_EXPECT_AX), de
+        call    neogs_send_dma_block
+        ret     c
+        call    neogs_run_and_get_result
+        ret     c
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      b, a
+        ld      a, (P124_DIAG_EXPECT_STATUS)
+        cp      b
+        jr      nz, .diag_case_failed
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, (P124_DIAG_EXPECT_AX)
+        or      a
+        sbc     hl, de
+        jr      nz, .diag_case_failed
+        or      a
+        ret
+.diag_case_failed:
+        scf
+        ret
+
 ; Data/state
 P124_X86_LOADER_SP_BACKUP: dw 0
 P124_DMA_SOURCE:           dw 0
@@ -434,6 +527,8 @@ P124_X86_READ_SECTOR:      db 0
 P124_X86_RESULT_MAGIC:     db 0
 P124_X86_RESULT_STATUS:    db 0
 P124_X86_RESULT_AX:        dw 0
+P124_DIAG_EXPECT_STATUS:    db 0
+P124_DIAG_EXPECT_AX:        dw 0
 
 ; Strings
 P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
@@ -443,6 +538,9 @@ P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake time
 P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
 P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter status is not zero: #", 0
 P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
+P124_msg_ipc_edge_start:      defb "[IPC TEST] Running 5 interpreter edge cases through DMA.", 13, 0
+P124_msg_ipc_edge_pass:       defb "[IPC TEST] PASS: 5 interpreter edge cases; DMA/IPC stable.", 13, 0
+P124_msg_ipc_edge_fail:       defb "[IPC TEST] FAIL: interpreter edge-case or repeated DMA test.", 13, 0
 P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
 P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
 P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
