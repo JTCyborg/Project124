@@ -44,8 +44,8 @@ start_neoprogram:
 
         xor     a
         ld      (neo_dma_error), a
-        ld      (saved_z80_ax), a
-        ld      (saved_z80_ax+1), a
+        ld      (x86_reg_ax), a
+        ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
         ld      (x86_exit_status), a
@@ -109,8 +109,8 @@ command_reset:
         xor     a
         ld      (neo_dma_error), a
         ld      (x86_exit_status), a
-        ld      (saved_z80_ax), a
-        ld      (saved_z80_ax+1), a
+        ld      (x86_reg_ax), a
+        ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
         ld      (x86_last_ip), a
@@ -378,7 +378,6 @@ neo_startup_message:
 neo_debug_msg_memtest_started: db "[NEOGS] MEMORY TEST STARTED.", 13, 0
 neo_debug_msg_memtest_pass: db "[NEOGS] MEMORY TEST PASS.", 13, 0
 neo_debug_msg_memtest_fail: db "[NEOGS] MEMORY TEST FAIL.", 13, 0
-saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
 x86_last_ip:       dw 0
 
