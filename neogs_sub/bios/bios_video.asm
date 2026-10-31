@@ -378,28 +378,28 @@ x86_bios_video_test_image:
         db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
         ; 43 printable characters: the 43rd must wrap to row 1, column 1.
         REPT 43
-        db #B8,#41,#0E,#CD,#10
+        db #B4,#0E,#B0,#41,#CD,#10
         ENDR
         ; CR then LF; output a 15-character marker on row 2.
-        db #B8,#0D,#0E,#CD,#10
-        db #B8,#0A,#0E,#CD,#10
-        db #B8,#50,#0E,#CD,#10 ; P
+        db #B4,#0E,#B0,#0D,#CD,#10
+        db #B4,#0E,#B0,#0A,#CD,#10
+        db #B4,#0E,#B0,#50,#CD,#10 ; P
+        db #B4,#0E,#B0,#31,#CD,#10 ; 1
+        db #B4,#0E,#B0,#32,#CD,#10 ; 2
+        db #B4,#0E,#B0,#34,#CD,#10 ; 4
+        db #B4,#0E,#B0,#20,#CD,#10 ; space
+        db #B4,#0E,#B0,#49,#CD,#10 ; I
+        db #B4,#0E,#B0,#4E,#CD,#10 ; N
+        db #B4,#0E,#B0,#54,#CD,#10 ; T
         db #B8,#31,#0E,#CD,#10 ; 1
-        db #B8,#32,#0E,#CD,#10 ; 2
-        db #B8,#34,#0E,#CD,#10 ; 4
-        db #B8,#20,#0E,#CD,#10 ; space
-        db #B8,#49,#0E,#CD,#10 ; I
-        db #B8,#4E,#0E,#CD,#10 ; N
-        db #B8,#54,#0E,#CD,#10 ; T
-        db #B8,#31,#0E,#CD,#10 ; 1
-        db #B8,#30,#0E,#CD,#10 ; 0
+        db #B4,#0E,#B0,#30,#CD,#10 ; 0
         db #B8,#20,#0E,#CD,#10 ; space
         db #B8,#50,#0E,#CD,#10 ; P
-        db #B8,#41,#0E,#CD,#10 ; A
-        db #B8,#53,#0E,#CD,#10 ; S
+        db #B4,#0E,#B0,#41,#CD,#10 ; A
+        db #B4,#0E,#B0,#53,#CD,#10 ; S
         db #B8,#53,#0E,#CD,#10 ; S
         ; AH=03h get cursor, then AH=0Fh get mode/columns.
-        db #B8,#00,#03,#BB,#00,#00,#CD,#10
-        db #B8,#00,#0F,#CD,#10
+        db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
+        db #B4,#0F,#B0,#00,#CD,#10
         db #F4
 x86_bios_video_test_image_end:
