@@ -99,14 +99,14 @@ x86_mem_test:
         xor     #5A
         ld      (x86_mem_value), a
         call    x86_mem_write8
-        jr      c, x86_mem_test_write_start_fail
+        jp      c, x86_mem_test_write_start_fail
 
         call    x86_mem_build_page_end
         ld      a, (x86_mem_page)
         xor     #A5
         ld      (x86_mem_value), a
         call    x86_mem_write8
-        jr      c, x86_mem_test_write_end_fail
+        jp      c, x86_mem_test_write_end_fail
 
         ld      a, (x86_mem_page)
         inc     a
@@ -120,21 +120,21 @@ x86_mem_test:
 .verify_page_loop:
         call    x86_mem_build_page_start
         call    x86_mem_read8
-        jr      c, x86_mem_test_verify_start_fail
+        jp      c, x86_mem_test_verify_start_fail
         ld      b, a
         ld      a, (x86_mem_page)
         xor     #5A
         cp      b
-        jr      nz, x86_mem_test_verify_start_fail
+        jp      nz, x86_mem_test_verify_start_fail
 
         call    x86_mem_build_page_end
         call    x86_mem_read8
-        jr      c, x86_mem_test_verify_end_fail
+        jp      c, x86_mem_test_verify_end_fail
         ld      b, a
         ld      a, (x86_mem_page)
         xor     #A5
         cp      b
-        jr      nz, x86_mem_test_verify_end_fail
+        jp      nz, x86_mem_test_verify_end_fail
 
         ld      a, (x86_mem_page)
         inc     a
