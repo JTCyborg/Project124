@@ -142,6 +142,18 @@ START_APPLICATION:
         ld      h, 0
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_rx
+        ld      a, (neo_fw_last_rx_byte)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_handle
+        ld      a, (neo_fw_module_handle)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
         di
 .firmware_upload_halt:
         halt
@@ -206,6 +218,10 @@ msg_stage2_status:
         DEFB "[FW] LAST GSSTAT #BB = ", 0
 msg_stage2_phase:
         DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#00,4=#30,5=#D1,6=STREAM,7=#D2,8=#31,9=LEN,10=FW,11=READY) = ", 0
+msg_stage2_rx:
+        DEFB "[FW] LAST RX BYTE = ", 0
+msg_stage2_handle:
+        DEFB "[FW] MODULE HANDLE = ", 0
 
 ; =========================================================================
 ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
