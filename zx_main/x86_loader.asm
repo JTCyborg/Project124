@@ -128,6 +128,20 @@ EXECUTE_X86_FILE_STAGE::
         jp      nz, .diag_memtest_fail
         MACRO_EF_STRING P124_msg_memtest_pass
 
+        ; BIOS foundation POST. Uses the same command/result channel; DMA is untouched.
+        MACRO_EF_STRING P124_msg_bios_post_start
+        call    neogs_bios_post_and_get_result
+        jp      c, .bios_post_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .bios_post_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #B105
+        or      a
+        sbc     hl, de
+        jp      nz, .bios_post_fail
+        MACRO_EF_STRING P124_msg_bios_post_pass
+
         ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
@@ -320,6 +334,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.bios_post_transport_fail:
+        MACRO_EF_STRING P124_msg_bios_post_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.bios_post_fail:
+        MACRO_EF_STRING P124_msg_bios_post_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -473,6 +505,14 @@ neogs_run_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run the BIOS low-memory POST and fetch the existing four-byte result frame.
+neogs_bios_post_and_get_result:
+        ld      a, CMD_BIOS_POST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -517,6 +557,10 @@ neogs_get_result_frame:
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
 P124_msg_memtest_start: DEFB "[MEM] Testing x86 RAM pages and 8086 word/segment addressing...", 13, 0
 P124_msg_memtest_pass:  DEFB "[MEM] PASS: 64 pages + word access + segment/offset wrap verified.", 13, 0
+P124_msg_bios_post_start: DEFB "[BIOS] Stage 1: initialize IVT and BIOS Data Area...", 13, 0
+P124_msg_bios_post_pass: DEFB "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
+P124_msg_bios_post_transport_fail: DEFB "[BIOS] FAIL: POST command/result timeout.", 13, 0
+P124_msg_bios_post_fail: DEFB "[BIOS] FAIL: POST status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
