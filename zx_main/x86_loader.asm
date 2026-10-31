@@ -33,6 +33,18 @@ EXECUTE_X86_FILE_STAGE::
         ; Expected result: status=0, AX=BBAB.
         ; -------------------------------------------------------------
         MACRO_EF_STRING P124_msg_ipc_diag_start
+
+        ; Exercise unknown-command release and explicit firmware reset before DMA.
+        ld      a, #FE
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        jp      c, .diag_protocol_error
+
+        ld      a, CMD_RESET
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        jp      c, .diag_protocol_error
+
         ld      hl, x86_diag_program
         ld      bc, x86_diag_program_end - x86_diag_program
         call    neogs_send_dma_block
