@@ -175,30 +175,168 @@ RUN_TRDOS_X86_TEST::
         call    neogs_load_trdos_file
         jp      c, .test_file_load_failed
 
-        ; The TR-DOS loader returns the exact file size in neo_trdos_file_length.
+        ; Validate the X86T container header before reading any record.
         ld      hl, TRDOS_PANEL_BUFFER
-        ld      bc, (neo_trdos_file_length)
+        ld      a, (hl)
+        cp      'X'
+        jp      nz, .test_format_failed
+        inc     hl
+        ld      a, (hl)
+        cp      '8'
+        jp      nz, .test_format_failed
+        inc     hl
+        ld      a, (hl)
+        cp      '6'
+        jp      nz, .test_format_failed
+        inc     hl
+        ld      a, (hl)
+        cp      'T'
+        jp      nz, .test_format_failed
+        inc     hl
+        ld      a, (hl)
+        cp      1
+        jp      nz, .test_format_failed
+        inc     hl
+        ld      a, (hl)
+        or      a
+        jp      z, .test_format_failed
+        ld      (P124_TESTS_REMAINING), a
+        xor     a
+        ld      (P124_TESTS_PASSED), a
+        ld      (P124_TESTS_FAILED), a
+        inc     hl
+        ld      (P124_TEST_RECORD_PTR), hl
+
+.test_record_loop:
+        ; Record: ID word, expected status byte, expected AX word,
+        ; code length word, then exact x86 machine-code bytes.
+        ld      hl, (P124_TEST_RECORD_PTR)
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_ID), de
+
+        ld      a, (hl)
+        inc     hl
+        ld      (P124_TEST_EXPECT_STATUS), a
+
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_EXPECT_AX), de
+
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_LENGTH), de
+        ld      (P124_TEST_PAYLOAD), hl
+
+        ; Reject zero-length records and records larger than the DMA window.
+        ld      a, d
+        or      e
+        jp      z, .test_format_failed
+        ld      a, d
+        cp      #30
+        jr      c, .test_length_valid
+        jp      nz, .test_format_failed
+        ld      a, e
+        or      a
+        jp      nz, .test_format_failed
+.test_length_valid:
+        push    hl
+        ld      de, (P124_TEST_LENGTH)
+        add     hl, de
+        ld      (P124_TEST_NEXT_RECORD), hl
+        pop     hl
+
+        ; Transfer only the x86 payload, not the container metadata.
+        ld      bc, (P124_TEST_LENGTH)
         call    neogs_send_dma_block
         jp      c, .test_dma_failed
 
         call    neogs_run_and_get_result
         jp      c, .test_protocol_failed
 
+        ; Print the complete machine-readable test result as a human report.
+        MACRO_EF_STRING P124_msg_test_id
+        ld      hl, (P124_TEST_ID)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_expected_status
+        ld      a, (P124_TEST_EXPECT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_expected_ax
+        ld      hl, (P124_TEST_EXPECT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_actual_status
         ld      a, (P124_X86_RESULT_STATUS)
-        or      a
-        jp      nz, .test_execution_failed
-
-        ld      hl, (P124_X86_RESULT_AX)
-        ld      de, #BBAB
-        or      a
-        sbc     hl, de
-        jp      nz, .test_result_failed
-
-        MACRO_EF_STRING P124_msg_external_test_pass
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_actual_ax
         ld      hl, (P124_X86_RESULT_AX)
         MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_ip
+        ld      hl, (P124_X86_RESULT_IP)
+        MACRO_EF_HEX16 hl
         MACRO_EF_CHAR 13
+
+        ; A test passes only when both expected status and AX match.
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      b, a
+        ld      a, (P124_TEST_EXPECT_STATUS)
+        cp      b
+        jr      nz, .test_record_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, (P124_TEST_EXPECT_AX)
         or      a
+        sbc     hl, de
+        jr      nz, .test_record_fail
+
+        ld      a, (P124_TESTS_PASSED)
+        inc     a
+        ld      (P124_TESTS_PASSED), a
+        jr      .test_record_next
+
+.test_record_fail:
+        ld      a, (P124_TESTS_FAILED)
+        inc     a
+        ld      (P124_TESTS_FAILED), a
+
+.test_record_next:
+        ld      hl, (P124_TEST_NEXT_RECORD)
+        ld      (P124_TEST_RECORD_PTR), hl
+        ld      a, (P124_TESTS_REMAINING)
+        dec     a
+        ld      (P124_TESTS_REMAINING), a
+        jr      nz, .test_record_loop
+
+        MACRO_EF_STRING P124_msg_test_summary
+        ld      a, (P124_TESTS_PASSED)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      a, (P124_TESTS_FAILED)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+
+        ld      a, (P124_TESTS_FAILED)
+        or      a
+        jr      nz, .test_suite_failed
+        MACRO_EF_STRING P124_msg_external_test_pass
+        or      a
+        ret
+
+.test_suite_failed:
+        MACRO_EF_STRING P124_msg_external_test_fail
+        scf
         ret
 
 .test_file_load_failed:
@@ -208,6 +346,11 @@ RUN_TRDOS_X86_TEST::
         ld      h, 0
         MACRO_EF_HEX16 hl
         MACRO_EF_CHAR 13
+        scf
+        ret
+
+.test_format_failed:
+        MACRO_EF_STRING P124_msg_external_test_format_fail
         scf
         ret
 
@@ -221,32 +364,31 @@ RUN_TRDOS_X86_TEST::
         scf
         ret
 
-.test_execution_failed:
-        MACRO_EF_STRING P124_msg_external_test_exec_fail
-        ld      a, (P124_X86_RESULT_STATUS)
-        ld      l, a
-        ld      h, 0
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-        scf
-        ret
-
-.test_result_failed:
-        MACRO_EF_STRING P124_msg_external_test_result_fail
-        ld      hl, (P124_X86_RESULT_AX)
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-        scf
-        ret
-
-P124_test_filename:            defb "TEST    "
-P124_msg_external_test_start:  defb "[X86 TEST] Loading TEST.C from TR-DOS and sending it to NeoGS.", 13, 0
-P124_msg_external_test_pass:   defb "[X86 TEST] PASS: external TEST.C executed; AX=#", 0
+P124_test_filename:               defb "TEST    "
+P124_TEST_RECORD_PTR:             dw 0
+P124_TEST_NEXT_RECORD:            dw 0
+P124_TEST_PAYLOAD:                dw 0
+P124_TEST_LENGTH:                 dw 0
+P124_TEST_ID:                     dw 0
+P124_TEST_EXPECT_STATUS:          db 0
+P124_TEST_EXPECT_AX:              dw 0
+P124_TESTS_REMAINING:             db 0
+P124_TESTS_PASSED:                db 0
+P124_TESTS_FAILED:                db 0
+P124_msg_external_test_start:     defb "[X86 TEST] Loading TEST.C container from TR-DOS.", 13, 0
+P124_msg_external_test_pass:      defb "[X86 TEST] SUITE PASS.", 13, 0
+P124_msg_external_test_fail:      defb "[X86 TEST] SUITE FAIL.", 13, 0
 P124_msg_external_test_file_fail: defb "[X86 TEST] FAIL: TEST.C load error = #", 0
-P124_msg_external_test_dma_fail: defb "[X86 TEST] FAIL: DMA transfer timeout or invalid test length.", 13, 0
+P124_msg_external_test_format_fail: defb "[X86 TEST] FAIL: invalid X86T header, version, count or record length.", 13, 0
+P124_msg_external_test_dma_fail:  defb "[X86 TEST] FAIL: DMA transfer timeout.", 13, 0
 P124_msg_external_test_protocol_fail: defb "[X86 TEST] FAIL: NeoGS execution/result protocol error.", 13, 0
-P124_msg_external_test_exec_fail: defb "[X86 TEST] FAIL: x86 execution status = #", 0
-P124_msg_external_test_result_fail: defb "[X86 TEST] FAIL: expected AX=#BBAB, actual AX=#", 0
+P124_msg_test_id:                 defb "[TEST] ID=#", 0
+P124_msg_test_expected_status:    defb " EXPECT_STATUS=#", 0
+P124_msg_test_expected_ax:        defb " EXPECT_AX=#", 0
+P124_msg_test_actual_status:      defb " ACTUAL_STATUS=#", 0
+P124_msg_test_actual_ax:          defb " ACTUAL_AX=#", 0
+P124_msg_test_ip:                 defb " IP=#", 0
+P124_msg_test_summary:            defb "[X86 TEST] SUMMARY PASS/FAIL = ", 0
 
 ; =========================================================================
 ; NeoGS transport helpers — CBIT/DBIT protocol
