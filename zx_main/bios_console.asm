@@ -256,11 +256,6 @@ bios_dbg_calc_addr:
         ld      h, a
         ld      a, d
         and     #07
-        rlca
-        rlca
-        rlca
-        rlca
-        rlca
         or      h
         or      #40
         ld      h, a
