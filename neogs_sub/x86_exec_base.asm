@@ -4,13 +4,13 @@
 ; =========================================================================
 ; 90 — NOP
 x86_nop:
-        ld      (saved_z80_ax), hl
+        ld      (x86_reg_ax), hl
         jp      x86_next_instruction
 
 ; 40 — INC AX
 x86_inc_ax:
         inc     hl
-        ld      (saved_z80_ax), hl
+        ld      (x86_reg_ax), hl
         jp      x86_next_instruction
 
 ; B8 iw — MOV AX, imm16 (little-endian immediate)
@@ -32,12 +32,12 @@ x86_mov_ax_imm16:
         inc     hl
         ld      b, h
         ld      c, l
-        ld      (saved_z80_ax), de
+        ld      (x86_reg_ax), de
         jp      x86_next_instruction
 
 ; F4 — HLT: successful end of task
 x86_hlt:
-        ld      (saved_z80_ax), hl
+        ld      (x86_reg_ax), hl
         call    x86_sys_log_hlt
         xor     a
         ld      (x86_exit_status), a
@@ -45,7 +45,7 @@ x86_hlt:
 
 ; Unsupported instruction: stop rather than executing arbitrary memory.
 x86_unsupported:
-        ld      (saved_z80_ax), hl
+        ld      (x86_reg_ax), hl
         call    x86_sys_log_unsupported
         ld      a, 2
         ld      (x86_exit_status), a
@@ -55,5 +55,5 @@ x86_ip_out_of_range:
         ld      a, 4
         ld      (x86_exit_status), a
         call    x86_sys_log_bounds
-        ld      hl, (saved_z80_ax)
+        ld      hl, (x86_reg_ax)
         ret
