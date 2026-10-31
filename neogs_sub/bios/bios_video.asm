@@ -176,6 +176,14 @@ bios_int10_teletype:
         ret     nz
         ld      a, (x86_reg_ax)
         ld      (bios_video_char), a
+        or      a
+        ret     z                       ; NUL is reserved for stream control frames.
+        cp      128
+        jr      c, .teletype_ascii
+        ld      a, '?'
+        ld      (bios_video_char), a
+.teletype_ascii:
+        ld      a, (bios_video_char)
         call    neo_send_data_byte
         ret     c
 
