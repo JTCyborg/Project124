@@ -59,11 +59,11 @@ Handle_Enter_Gate:
         CP      1
         JP      Z, MAIN_INTERFACE_LOOP
 
-        ; neoprog.C — системная прошивка NeoGS, а не запускаемая программа Spectrum.
+        ; Проверяем имя файла. Если это "neoprog ", запускаем сквозной IPC-стрим в карту
         PUSH    HL
         PUSH    DE
         PUSH    BC
-        LD      DE, neogs_firmware_filename ; Имя системной прошивки "neoprog "
+        LD      DE, task_filename       ; Указатель на строку "neoprog "
         LD      BC, 8                   ; Проверяем ровно 8 символов имени
 .check_name_loop:
         LD      A, (DE)
@@ -76,14 +76,26 @@ Handle_Enter_Gate:
         OR      C
         JR      NZ, .check_name_loop
 
-        ; Имя совпало: это прошивка NeoGS. Она уже загружена на этапе
-        ; старта системы и не должна исполняться основным Z80 как файл *.C.
+        ; ИМЯ СОВПАЛО! Запускаем аппаратный конвейер трансляции в NeoGS
         POP     BC
         POP     DE
-        POP     HL
+        POP     HL                      ; Восстанавливаем регистры
 
-        LD      HL, .str_neogs_firmware_not_executable
-        CALL    LOG_WriteMessageToBuffer
+        LD      HL, msg_log_exec_x86
+        CALL    LOG_WriteMessageToBuffer  
+
+        ; --- ЗАЩИЩЕННЫЙ КОНТЕКСТ ДЛЯ БЕЗОПАСНОЙ РАБОТЫ С ПЗУ TR-DOS ---
+        DI                              
+        LD      (APP_SP_BACKUP), SP     
+        LD      SP, (OLD_SP)            ; Восстанавливаем оригинальный системный стек TR-DOS
+        
+        LD      HL, task_filename
+        LD      A, 'C'
+        CALL    EXECUTE_X86_FILE_STAGE ; Считываем neoprog.C в буфер и выплескиваем в NeoGS с хекс-дампом
+        
+        LD      SP, (APP_SP_BACKUP)     ; Переносим стек обратно в приложение 124
+        EI                              
+        
         CALL    WaitKeyRelease_Safe
         JP      MAIN_INTERFACE_LOOP
 
@@ -135,8 +147,6 @@ Execute_Selected_File:
 
 ; --- Строковые ресурсы ---
 .str_err_type: DEFB "[EXEC_ERROR] CAN ONLY EXECUTE BINARY CODE FILES (*.C)", #0D, #0A, 0
-.str_neogs_firmware_not_executable:
-        DEFB "[EXEC_ERROR] neoprog.C IS SYSTEM NEOGS FIRMWARE; IT IS LOADED AT STARTUP.", #0D, #0A, 0
 
 ; =========================================================================
 ; ОБРАБОТЧИК ОЖИДАНИЯ И ОТПУСКАНИЯ КЛАВИШИ SPACE С ФИКСИРОВАННЫМ ТРЕЙСОМ

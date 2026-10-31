@@ -108,36 +108,16 @@ START_APPLICATION:
         out     (#EF), a
         MACRO_EF_STRING msg_stage1
 
-        ; ЭТАП 2 — ЗАГРУЗКА ПРОШИВКИ NEOGS ИЗ TR-DOS
-        ; neoprog.C является полным бинарным образом прошивки NeoGS.
-        ; Сначала читаем его секторами в #C000, затем штатный bootstrap
-        ; передаёт этот буфер в NeoGS RAM по адресу #0000.
-        ld      hl, neogs_firmware_filename
-        ld      a, 'C'
-        call    neogs_load_trdos_file
-        jr      c, .firmware_file_failed
-        MACRO_EF_STRING msg_stage2_file_loaded
-        ld      hl, (neo_trdos_file_length)
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-        ld      hl, TRDOS_PANEL_BUFFER
-        ld      de, (neo_trdos_file_length)
+        ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
+        ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
+        ; команда #13 запускает его, после чего он включает RAM-over-ROM,
+        ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
+        ld      hl, neogs_binary_start
+        ld      de, neogs_binary_end - neogs_binary_start
         call    upload_firmware
         jr      c, .firmware_upload_failed
         MACRO_EF_STRING msg_stage2
         jp      .firmware_upload_done
-
-.firmware_file_failed:
-        MACRO_EF_STRING msg_stage2_file_fail
-        ld      a, (neo_trdos_error)
-        ld      l, a
-        ld      h, 0
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-        di
-.firmware_file_halt:
-        halt
-        jr      .firmware_file_halt
 
 .firmware_upload_failed:
         MACRO_EF_STRING msg_stage2_fail
@@ -195,13 +175,18 @@ START_APPLICATION:
         MACRO_EF_CHAR   13
         MACRO_EF_STRING msg_stage4
 
-        ; ЭТАП 5 — ДИАГНОСТИКА УЖЕ ЗАГРУЖЕННОЙ ПРОШИВКИ NEOGS.
-        ; x86-тесты находятся в основном проекте и передаются по DMA.
-        ; neoprog.C повторно не читается и не исполняется как x86-код.
+        ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
+        ld      hl, task_filename
+        ld      a, 'C'
+        
+        ; ВАЖНО: не переключаемся на старый TR-DOS SP (#Cxxx).
+        ; Буфер чтения начинается с #C000 и перезаписывает эту область.
+        ; Stage 5 сам временно переносит рабочий стек на #BFFF, а этот
+        ; CALL остаётся на безопасном прикладном стеке (#AFFF).
         di
-        call    RUN_NEOGS_DIAGNOSTICS
+        call    EXECUTE_X86_FILE_STAGE
         ei
-        jr      c, .diagnostics_failed
+        jr      c, .x86_stage_failed
 
         ; Финальная точка останова ядра после завершения всех этапов
 .core_halt:
@@ -210,20 +195,16 @@ START_APPLICATION:
         halt
         jr      .core_halt
 
-; Ошибка выполнения диагностики загруженной прошивки NeoGS.
-.diagnostics_failed:
+; Ошибка выполнения этапа загрузки/запуска x86-задачи.
+.x86_stage_failed:
         MACRO_EF_STRING msg_stage5_fail
         di
-.diagnostics_failed_halt:
+.x86_stage_failed_halt:
         halt
-        jr      .diagnostics_failed_halt
+        jr      .x86_stage_failed_halt
 
 msg_stage5_fail:
-        DEFB "[CORE] ERROR: NeoGS diagnostics failed; startup halted.", 13, 0
-msg_stage2_file_loaded:
-        DEFB "[FW] TR-DOS neoprog.C bytes = ", 0
-msg_stage2_file_fail:
-        DEFB "[FW] ERROR: cannot load TR-DOS neoprog.C; loader error = ", 0
+        DEFB "[CORE] ERROR: x86 task pipeline failed; startup halted.", 13, 0
 
 ; Ошибка загрузки прошивки NeoGS. Не продолжаем работу с неподтвержденным ядром.
 msg_stage2_fail:
@@ -255,12 +236,16 @@ msg_stage2_bootstrap:
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
-; Bootstrap NeoGS встраивается в host-код; основная прошивка хранится
-; отдельно в TR-DOS-файле neoprog.C и загружается оттуда при старте.
+; Переключение на Банк 0 ОЗУ хоста для хранения двух NeoGS бинарников.
+; Оба файла создаются командой sjasmplus neogs_sub/build_firmware.asm.
         PAGE    0
 neogs_bootstrap_start:
         INCBIN "neogs_bootstrap.bin"
 neogs_bootstrap_end:
+
+neogs_binary_start:
+        INCBIN "neogs_code.bin"
+neogs_binary_end:
 
 ProgramEnd:
         ; Code/data must end before the application stack at #AFFF and well
@@ -276,23 +261,14 @@ ProgramEnd:
 ; =========================================================================
 ; СЕКТОР ФИНАЛЬНОГО ОКОНЧАТЕЛЬНОГО ЭКСПОРТА НА ДИСК
 ; =========================================================================
-        ; Сначала экспортируем основной Z80-код и BASIC-загрузчик.
-        PAGE    0
+        PAGE    0                       ; Возвращаем базовый нулевой банк памяти хоста
+
+        ; Синхронный экспорт бинарных блоков в образ TRD
         SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
         SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
-
-        ; neoprog.C — НЕ x86-тест. Это полный бинарник ядра NeoGS,
-        ; собранный первым этапом build.bat. Временно размещаем его
-        ; в верхней RAM-странице только для экспорта в TR-DOS.
-        ; Эти байты не входят в proj124.C и не встраиваются в host runtime.
-        PAGE    0
-        ORG     #C000
-neogs_firmware_disk_start:
-        INCBIN  "neogs_code.bin"
-neogs_firmware_disk_end:
-        ASSERT  neogs_firmware_disk_end - neogs_firmware_disk_start <= #3000
-        ASSERT  neogs_firmware_disk_end <= #F000
-        SAVETRD "disk_A.trd", "neoprog.C", neogs_firmware_disk_start, neogs_firmware_disk_end - neogs_firmware_disk_start
+        ; Диагностический x86 payload для проверки TR-DOS -> DMA -> interpreter.
+        ; Это тест из 6 байт, а не полноценное x86-ядро/операционная система.
+        SAVETRD "disk_A.trd", "neoprog.C", x86_diag_program, x86_diag_program_end - x86_diag_program
 
 
 ; =========================================================================
