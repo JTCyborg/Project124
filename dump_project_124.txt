@@ -276,7 +276,8 @@ START_APPLICATION:
 .firmware_upload_done:
 
         ; ЭТАП 3 — ИНИЦИАЛИЗАЦИЯ И ОТРИСОВКА ИНТЕРФЕЙСА ОКОН И ДВУХ ШРИФТОВ
-        call    INIT_PROGRAM_INTERFACE 
+        call    INIT_PROGRAM_INTERFACE
+
         MACRO_EF_STRING msg_stage3_ok
 
         ; ЭТАП 4 — ВЫВОД СТАРТОВОГО ОТЧЕТА В НИЖНЕЕ ОКНО ЛОГОВ COMMANDER
@@ -290,6 +291,10 @@ START_APPLICATION:
         MACRO_EF_CHAR   13
         MACRO_EF_STRING msg_stage4
         call    BIOS_DebugConsole_Init
+
+        ; Full-screen 42x12 glyph test through the active 6x8 console renderer.
+        MACRO_EF_STRING msg_bios_glyph_test
+        call    BIOS_DebugConsole_TestPattern
 
         ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
         ld      hl, task_filename
@@ -318,6 +323,9 @@ START_APPLICATION:
 .x86_stage_failed_halt:
         halt
         jr      .x86_stage_failed_halt
+
+msg_bios_glyph_test:
+        DEFB "[BIOS] 42x12 GLYPH TEST: rows A-L, 42 columns each.", 13, 0
 
 msg_stage5_fail:
         DEFB "[CORE] ERROR: x86 task pipeline failed; startup halted.", 13, 0
@@ -2190,6 +2198,149 @@ Util_Internal_ScreenHex8::
 
 
 ; =========================================================================
+; =========================================================================
+; LOWER SCREEN BITMAP HEX DUMP — PORT #EF
+; Dumps ONLY the Spectrum bitmap for the lower half: Y=96..191, 3072 bytes.
+; Color attributes are deliberately excluded.
+; Output is ASCII HEX with scanline labels and Spectrum bitmap addresses.
+; IN: A = frame number.
+; =========================================================================
+P124_DumpLowerScreen::
+        push    af
+        push    bc
+        push    de
+        push    hl
+        ld      (P124_VRAM_FRAME), a
+        ld      hl, P124_VRAM_DUMP_HEADER
+        call    P124_VRAM_DumpString
+        ld      a, (P124_VRAM_FRAME)
+        call    P124_VRAM_DumpHex8
+        ld      hl, P124_VRAM_BITMAP_HEADER
+        call    P124_VRAM_DumpString
+
+        ld      a, 96
+        ld      (P124_VRAM_Y), a
+.bitmap_line:
+        ld      a, (P124_VRAM_Y)
+        ld      c, 0
+        call    bios_dbg_calc_addr
+        ld      (P124_VRAM_PTR), hl
+
+        ld      hl, P124_VRAM_Y_LABEL
+        call    P124_VRAM_DumpString
+        ld      a, (P124_VRAM_Y)
+        call    P124_VRAM_DumpHex8
+        ld      a, ' '
+        call    P124_VRAM_DumpPutChar
+        ld      a, '@'
+        call    P124_VRAM_DumpPutChar
+        ld      hl, (P124_VRAM_PTR)
+        call    P124_VRAM_DumpHex16
+        ld      a, ':'
+        call    P124_VRAM_DumpPutChar
+        ld      a, ' '
+        call    P124_VRAM_DumpPutChar
+
+        ld      b, 32
+.bitmap_byte:
+        ld      hl, (P124_VRAM_PTR)
+        ld      a, (hl)
+        call    P124_VRAM_DumpHex8
+        ld      hl, (P124_VRAM_PTR)
+        inc     hl
+        ld      (P124_VRAM_PTR), hl
+        ld      a, ' '
+        call    P124_VRAM_DumpPutChar
+        djnz    .bitmap_byte
+
+        call    P124_VRAM_DumpCRLF
+        ld      a, (P124_VRAM_Y)
+        inc     a
+        ld      (P124_VRAM_Y), a
+        cp      192
+        jr      c, .bitmap_line
+
+        ld      hl, P124_VRAM_DUMP_END
+        call    P124_VRAM_DumpString
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+P124_VRAM_DumpString:
+        push    hl
+.string_next:
+        ld      a, (hl)
+        or      a
+        jr      z, .string_done
+        call    P124_VRAM_DumpPutChar
+        inc     hl
+        jr      .string_next
+.string_done:
+        pop     hl
+        ret
+
+; A = byte, output two uppercase hexadecimal digits.
+P124_VRAM_DumpHex8:
+        push    af
+        rrca
+        rrca
+        rrca
+        rrca
+        call    P124_VRAM_DumpNibble
+        pop     af
+        call    P124_VRAM_DumpNibble
+        ret
+
+; HL = 16-bit value, output four uppercase hexadecimal digits.
+P124_VRAM_DumpHex16:
+        push    hl
+        ld      a, h
+        call    P124_VRAM_DumpHex8
+        ld      a, l
+        call    P124_VRAM_DumpHex8
+        pop     hl
+        ret
+
+P124_VRAM_DumpNibble:
+        and     #0F
+        cp      10
+        jr      c, .nibble_digit
+        add     a, 7
+.nibble_digit:
+        add     a, '0'
+        jp      P124_VRAM_DumpPutChar
+
+; A = ASCII character. Preserve caller registers used by dump loops.
+P124_VRAM_DumpPutChar:
+        push    af
+        push    bc
+        ld      bc, #00EF
+        out     (c), a
+        pop     bc
+        pop     af
+        ret
+
+P124_VRAM_DumpCRLF:
+        push    af
+        ld      a, 13
+        call    P124_VRAM_DumpPutChar
+        ld      a, 10
+        call    P124_VRAM_DumpPutChar
+        pop     af
+        ret
+
+P124_VRAM_DUMP_HEADER:   defb 13,10,"===== P124 BITMAP FRAME ",0
+P124_VRAM_BITMAP_HEADER: defb " LOWER SCREEN PIXELS Y=96..191 (32 BYTES/SCANLINE) =====",13,10,0
+P124_VRAM_Y_LABEL:       defb "Y=",0
+P124_VRAM_DUMP_END:      defb "===== END P124 BITMAP FRAME =====",13,10,0
+P124_VRAM_FRAME:         db 0
+P124_VRAM_Y:             db 0
+P124_VRAM_PTR:           dw 0
+
+
+; =========================================================================
 ; FILE: zx_main/display.asm
 ; =========================================================================
 ; =========================================================================
@@ -2496,18 +2647,22 @@ BIOS_DebugConsole_PrintChar::
         add     hl, de
         ld      (bios_dbg_font_ptr), hl
 
-        ; Pixel X = column * 6, so 42 cells occupy 252 of 256 pixels.
+        ; Eight scanlines share the same character-cell X origin.
+        ; Reset the pixel coordinate for every glyph scanline.
+        xor     a
+        ld      (bios_dbg_scan), a
+
+.glyph_scanline:
+        ; Pixel X = column * 6. Recompute on EVERY scanline:
+        ; glyph_pixel advances bios_dbg_xpixel by six pixels, so carrying
+        ; that value into the next scanline causes diagonal glyph rendering.
         ld      a, (bios_dbg_col)
-        ld      b, a
         add     a, a
         ld      c, a
         add     a, a
         add     a, c
         ld      (bios_dbg_xpixel), a
-        xor     a
-        ld      (bios_dbg_scan), a
 
-.glyph_scanline:
         ld      hl, (bios_dbg_font_ptr)
         ld      a, (hl)
         ld      (bios_dbg_bits), a
@@ -2582,8 +2737,13 @@ BIOS_DebugConsole_PrintChar::
         inc     a
         ld      (bios_dbg_scan), a
         cp      8
-        jr      c, .glyph_scanline
+        jp      c, .glyph_scanline
 
+        ; The full-screen glyph test suppresses only the final auto-wrap,
+        ; so row 11 remains visible instead of scrolling the test's first row.
+        ld      a, (bios_dbg_no_wrap)
+        or      a
+        jr      nz, .done
         ld      a, (bios_dbg_col)
         inc     a
         ld      (bios_dbg_col), a
@@ -2612,6 +2772,94 @@ BIOS_DebugConsole_PrintChar::
         pop     de
         pop     bc
         pop     af
+        ret
+
+; Full-screen renderer test: 12 rows, 42 identical glyphs per row.
+; Rows A-L are drawn through the same 6x8 PrintChar routine used by INT 10h.
+; The final glyph suppresses automatic wrap to prevent scrolling row A away.
+BIOS_DebugConsole_TestPattern::
+        call    BIOS_DebugConsole_Clear
+        xor     a
+        ld      (bios_dbg_test_row), a
+        ld      a, 'A'
+        ld      (bios_dbg_test_char), a
+
+.test_row:
+        ld      a, (bios_dbg_test_row)
+        ld      c, 0
+        call    BIOS_DebugConsole_SetCursor
+        ld      a, (bios_dbg_test_row)
+        cp      BIOS_DEBUG_ROWS - 1
+        jr      nz, .row_started
+        xor     a
+        ld      (bios_dbg_test_col), a
+        ld      b, BIOS_DEBUG_COLUMNS
+        jr      .test_char
+.row_started:
+        xor     a
+        ld      (bios_dbg_test_col), a
+        ld      b, BIOS_DEBUG_COLUMNS
+
+.test_char:
+        ld      a, (bios_dbg_test_row)
+        cp      BIOS_DEBUG_ROWS - 1
+        jr      nz, .emit_char
+        ld      a, (bios_dbg_test_col)
+        cp      BIOS_DEBUG_COLUMNS - 1
+        jr      nz, .emit_char
+        ld      a, 1
+        ld      (bios_dbg_no_wrap), a
+.emit_char:
+        ld      a, (bios_dbg_test_char)
+        ; Preserve B: it is the 42-character loop counter.
+        push    bc
+        ld      bc, #00EF
+        out     (c), a
+        pop     bc
+        call    BIOS_DebugConsole_PrintChar
+        xor     a
+        ld      (bios_dbg_no_wrap), a
+        ld      a, (bios_dbg_test_col)
+        inc     a
+        ld      (bios_dbg_test_col), a
+
+        ; Frame 1: capture the first three glyphs (AAA) on row 0.
+        ld      a, (bios_dbg_test_col)
+        cp      3
+        jr      nz, .check_full_row_frame
+        ld      a, 1
+        call    P124_DumpLowerScreen
+
+.check_full_row_frame:
+        ; Frame 2: capture the complete 42-character first row.
+        ld      a, (bios_dbg_test_col)
+        cp      BIOS_DEBUG_COLUMNS
+        jr      nz, .continue_test_row
+        ld      a, 2
+        call    P124_DumpLowerScreen
+
+.continue_test_row:
+        djnz    .test_char
+
+        ; Add line endings to the emulator log only; the screen has already
+        ; advanced by the console's normal 42-column automatic wrap.
+        ld      a, 13
+        out     (#EF), a
+        ld      a, 10
+        out     (#EF), a
+
+        ld      a, (bios_dbg_test_row)
+        inc     a
+        ld      (bios_dbg_test_row), a
+        cp      BIOS_DEBUG_ROWS
+        jr      nc, .test_done
+        ld      a, (bios_dbg_test_char)
+        inc     a
+        ld      (bios_dbg_test_char), a
+        jr      .test_row
+.test_done:
+        xor     a
+        ld      (bios_dbg_no_wrap), a
         ret
 
 ; IN: HL=16-bit value. Render four hexadecimal digits in the 6x8 console.
@@ -2691,6 +2939,10 @@ bios_dbg_bits:      db 0
 bios_dbg_mask:      db 0
 bios_dbg_font_ptr:  dw 0
 bios_dbg_clear_y:   db 0
+bios_dbg_no_wrap:   db 0
+bios_dbg_test_row:  db 0
+bios_dbg_test_col:  db 0
+bios_dbg_test_char: db 0
 
 
 ; =========================================================================
@@ -2734,7 +2986,7 @@ UI_ScrollConsoleUp::
         ; Сдвиг цветовых атрибутов лога
         LD      DE, #5980: LD HL, #59A0: LD BC, 352: LDIR                            
         ; Очистка последней строки атрибутов
-        LD      HL, #5B00: LD DE, #5B01: LD (HL), %01000100: LD BC, 31: LDIR                            
+        LD      HL, #5AE0: LD DE, #5AE1: LD (HL), %01000100: LD BC, 31: LDIR                            
         ; Очистка пикселей 23-й строки
         XOR     A: LD H, #50                  
 .clear_pixels:
