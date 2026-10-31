@@ -400,67 +400,67 @@ x86_real_jcc_short:
 x86_real_jcc_jo:
         ld      a, (x86_reg_flags+1)
         bit     3, a                  ; OF
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jno:
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jb:
         ld      a, (x86_reg_flags)
         bit     0, a                  ; CF
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jae:
         ld      a, (x86_reg_flags)
         bit     0, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_je:
         ld      a, (x86_reg_flags)
         bit     6, a                  ; ZF
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jne:
         ld      a, (x86_reg_flags)
         bit     6, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jbe:
         ld      a, (x86_reg_flags)
         bit     0, a
-        jr      nz, x86_real_jcc_taken
+        jp      nz, x86_real_jcc_taken
         bit     6, a
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_ja:
         ld      a, (x86_reg_flags)
         bit     0, a
-        jr      nz, x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_not_taken
         bit     6, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_js:
         ld      a, (x86_reg_flags)
         bit     7, a                  ; SF
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jns:
         ld      a, (x86_reg_flags)
         bit     7, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jp:
         ld      a, (x86_reg_flags)
         bit     2, a                  ; PF
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 x86_real_jcc_jnp:
         ld      a, (x86_reg_flags)
         bit     2, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 
 ; JL/JGE compare SF with OF.
 x86_real_jcc_jl:
@@ -469,13 +469,13 @@ x86_real_jcc_jl:
         jr      z, .sf_zero
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 .sf_zero:
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 
 x86_real_jcc_jge:
         ld      a, (x86_reg_flags)
@@ -483,49 +483,49 @@ x86_real_jcc_jge:
         jr      z, .sf_zero
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 .sf_zero:
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 
 x86_real_jcc_jle:
         ld      a, (x86_reg_flags)
         bit     6, a                  ; ZF
-        jr      nz, x86_real_jcc_taken
+        jp      nz, x86_real_jcc_taken
         ; Otherwise JL condition (SF != OF).
         ld      a, (x86_reg_flags)
         bit     7, a
         jr      z, .sf_zero
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 .sf_zero:
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 
 x86_real_jcc_jg:
         ld      a, (x86_reg_flags)
         bit     6, a                  ; ZF must be clear
-        jr      nz, x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_not_taken
         ; Otherwise JGE condition (SF == OF).
         ld      a, (x86_reg_flags)
         bit     7, a
         jr      z, .sf_zero
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      nz, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 .sf_zero:
         ld      a, (x86_reg_flags+1)
         bit     3, a
-        jr      z, x86_real_jcc_taken
-        jr      x86_real_jcc_not_taken
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
 
 x86_real_jcc_taken:
         ld      a, (x86_real_imm_byte)
@@ -854,50 +854,50 @@ x86_guest_main_image:
         db #B9,#02,#00
 x86_guest_loop_body:
         db #90
-        db #E2, x86_guest_loop_body - ($ + 1)
+        db #E2,#FD
 
         ; JCXZ takes the forward branch when CX is zero.
-        db #E3, x86_guest_jcxz_target - ($ + 1)
+        db #E3,#01
         db #00                     ; must be skipped
 x86_guest_jcxz_target:
         db #90
 
         ; JMP rel8 skips an unsupported opcode.
-        db #EB, x86_guest_jmp_target - ($ + 1)
+        db #EB,#01
         db #00                     ; must be skipped
 x86_guest_jmp_target:
         db #90
 
         ; JNZ is taken because ZF=0 after DEC DI.
-        db #75, x86_guest_jnz_target - ($ + 1)
+        db #75,#01
         db #00                     ; must be skipped
 x86_guest_jnz_target:
         db #90
 
         ; JZ is not taken: NOP + JMP skip the unsupported-opcode trap.
-        db #74, x86_guest_jz_trap - ($ + 1)
+        db #74,#03
         db #90
-        db #EB, x86_guest_jz_done - ($ + 1)
+        db #EB,#01
 x86_guest_jz_trap:
         db #00
 x86_guest_jz_done:
         db #90
 
         ; JO is taken (OF=1); JB is not taken (CF=0); JL is taken (SF!=OF).
-        db #70, x86_guest_jo_target - ($ + 1)
+        db #70,#01
         db #00
 x86_guest_jo_target:
         db #90
 
-        db #72, x86_guest_jb_trap - ($ + 1)
+        db #72,#03
         db #90
-        db #EB, x86_guest_jb_done - ($ + 1)
+        db #EB,#01
 x86_guest_jb_trap:
         db #00
 x86_guest_jb_done:
         db #90
 
-        db #7C, x86_guest_jl_target - ($ + 1)
+        db #7C,#01
         db #00
 x86_guest_jl_target:
         db #90
