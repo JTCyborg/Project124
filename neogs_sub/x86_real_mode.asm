@@ -82,7 +82,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_4
 
-        ; Verify all eight MOV r16,imm16 destinations.
+        ; Verify retained MOV destinations; CX is validated by LOOP reaching zero.
         ld      hl, (x86_reg_cx)
         ld      de, 0
         or      a
