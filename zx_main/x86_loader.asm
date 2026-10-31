@@ -175,6 +175,13 @@ RUN_TRDOS_X86_TEST::
         call    neogs_load_trdos_file
         jp      c, .test_file_load_failed
 
+        ; Validate the X86T container minimum length before reading the header.
+        ld      hl, (neo_trdos_file_length)
+        ld      de, 6
+        or      a
+        sbc     hl, de
+        jp      c, .test_format_failed
+
         ; Validate the X86T container header before reading any record.
         ld      hl, TRDOS_PANEL_BUFFER
         ld      de, (neo_trdos_file_length)
@@ -345,6 +352,13 @@ RUN_TRDOS_X86_TEST::
         dec     a
         ld      (P124_TESTS_REMAINING), a
         jr      nz, .test_record_loop
+
+        ; Record count must consume the file exactly; reject trailing data.
+        ld      hl, (P124_TEST_RECORD_PTR)
+        ld      de, (P124_TEST_FILE_END)
+        or      a
+        sbc     hl, de
+        jp      nz, .test_format_failed
 
         MACRO_EF_STRING P124_msg_test_summary
         ld      a, (P124_TESTS_PASSED)
