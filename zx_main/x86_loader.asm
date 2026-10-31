@@ -40,6 +40,20 @@ RUN_NEOGS_DIAGNOSTICS::
         jp      nz, .boot_memtest_fail
 
         MACRO_EF_STRING P124_msg_memtest_pass
+
+        ; BIOS foundation POST: clear IVT/BDA, publish and verify BDA profile.
+        MACRO_EF_STRING P124_msg_bios_post_start
+        call    neogs_bios_post_and_get_result
+        jp      c, .boot_bios_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .boot_bios_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #B105
+        or      a
+        sbc     hl, de
+        jp      nz, .boot_bios_fail
+        MACRO_EF_STRING P124_msg_bios_post_pass
         MACRO_EF_STRING P124_msg_boot_diag_pass
         or      a
         ret
@@ -51,6 +65,24 @@ RUN_NEOGS_DIAGNOSTICS::
 
 .boot_memtest_transport_fail:
         MACRO_EF_STRING P124_msg_memtest_transport_fail
+        scf
+        ret
+
+.boot_bios_transport_fail:
+        MACRO_EF_STRING P124_msg_bios_transport_fail
+        scf
+        ret
+
+.boot_bios_fail:
+        MACRO_EF_STRING P124_msg_bios_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
         scf
         ret
 
@@ -143,6 +175,16 @@ neogs_run_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run the BIOS foundation POST and fetch its standard result frame.
+neogs_bios_post_and_get_result:
+        ld      a, CMD_BIOS_POST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        call    neogs_drain_debug
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -209,6 +251,10 @@ P124_msg_boot_diag_pass:     defb "[CORE] PASS: NeoGS firmware and memory subsys
 P124_msg_boot_protocol_fail: defb "[CORE] FAIL: NeoGS command/data protocol error.", 13, 0
 P124_msg_memtest_start:      defb "[MEM] Testing 64 x 16 KiB page mappings at both boundaries...", 13, 0
 P124_msg_memtest_pass:       defb "[MEM] PASS: 64 page mappings and 128 boundary bytes verified.", 13, 0
+P124_msg_bios_post_start:    defb "[BIOS] Stage 1: initializing IVT and BIOS Data Area...", 13, 0
+P124_msg_bios_post_pass:     defb "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
+P124_msg_bios_transport_fail:defb "[BIOS] FAIL: POST command/result transport timeout.", 13, 0
+P124_msg_bios_fail:          defb "[BIOS] FAIL: POST status/detail = ", 0
 P124_msg_memtest_fail:       defb "[MEM] FAIL: status / phase:page = ", 0
 P124_msg_memtest_transport_fail: defb "[MEM] FAIL: NeoGS memory-test command/result timeout.", 13, 0
 P124_msg_diag_all_pass:      defb "[DIAG] PASS: all NeoGS firmware diagnostics returned verified results.", 13, 0
