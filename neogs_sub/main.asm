@@ -83,6 +83,8 @@ main_loop:
         jp      z, command_run_x86
         cp      CMD_GET_STATUS
         jp      z, command_get_status
+        cp      CMD_MEM_TEST
+        jp      z, command_mem_test
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -229,6 +231,16 @@ execute_neogs_x86:
         ret
 
 ; -------------------------------------------------------------------------
+; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
+; Result is returned through the existing CMD_GET_STATUS frame.
+; -------------------------------------------------------------------------
+command_mem_test:
+        call    x86_mem_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
 ;   A5 signature, exit status, AX low, AX high.
 ; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
@@ -315,6 +327,7 @@ rom_return_trampoline_code:
         jp      0
 rom_return_trampoline_end:
 
+        INCLUDE "x86_memory.asm"
         INCLUDE "x86_interpreter.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
