@@ -252,15 +252,59 @@ gs_boot_send_command_long:
         or      a
         ret
 
-; #30 is special: GS105a asserts DBIT with the new module handle before
-; clearing CBIT. The host MUST read GSDAT first, then wait for CBIT=0.
-; OUT: A = module handle; carry set on either handshake timeout.
+; #30 (COM30) has a bidirectional exchange in the stock GS105a ROM:
+;   1) host supplies one argument byte before issuing the command;
+;   2) ROM publishes the allocated module number (DBIT=1);
+;   3) ROM waits for the host argument to be consumed (DBIT=0);
+;   4) ROM's module number remains available as the command result;
+;   5) CBIT is cleared when COM30 returns.
+; The shared DBIT must therefore be observed through the full 1->0->1
+; sequence. Waiting only for DBIT=1 sees the host's own preloaded argument.
+; OUT: A = module handle; carry set on handshake timeout.
 gs_boot_send_command_result:
         ld      (neo_fw_command_byte), a
+
+        ; Preload the one-byte argument required by COM30.
+        ld      a, 0
+        out     (GSDAT), a
+
+        ; Issue command #30.
         ld      a, (neo_fw_command_byte)
         out     (GSCOM), a
+
+        ; Wait until ROM has accepted the command.
         ld      bc, FW_BYTE_TIMEOUT
-.result_wait_data:
+.result_wait_command_start:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_CBIT, a
+        jr      nz, .result_wait_argument_consumed
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .result_wait_command_start
+        scf
+        ret
+
+        ; Wait for ROM to consume the preloaded host argument.
+.result_wait_argument_consumed:
+        ld      bc, FW_BYTE_TIMEOUT
+.result_wait_data_clear:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      z, .result_wait_module_number
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .result_wait_data_clear
+        scf
+        ret
+
+        ; ROM writes the module number after consuming the argument.
+.result_wait_module_number:
+        ld      bc, FW_BYTE_TIMEOUT
+.result_wait_result:
         in      a, (GSSTAT)
         ld      (neo_fw_last_status), a
         bit     B_DBIT, a
@@ -268,15 +312,16 @@ gs_boot_send_command_result:
         dec     bc
         ld      a, b
         or      c
-        jr      nz, .result_wait_data
+        jr      nz, .result_wait_result
         scf
         ret
+
 .result_read_data:
         in      a, (GSDAT)
         ld      (neo_fw_result_byte), a
         push    af
         ld      bc, FW_BYTE_TIMEOUT
-.result_wait_command:
+.result_wait_command_done:
         in      a, (GSSTAT)
         ld      (neo_fw_last_status), a
         bit     B_CBIT, a
@@ -284,7 +329,7 @@ gs_boot_send_command_result:
         dec     bc
         ld      a, b
         or      c
-        jr      nz, .result_wait_command
+        jr      nz, .result_wait_command_done
         pop     af
         scf
         ret
