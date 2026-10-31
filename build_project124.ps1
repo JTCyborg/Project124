@@ -1,0 +1,67 @@
+$ErrorActionPreference = 'Stop'
+$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Push-Location $Root
+try {
+    # Prefer the assembler shipped with this project; fall back to PATH.
+    $LocalAssemblerCandidates = @(
+        (Join-Path $Root 'tools/sjasmplus.exe'),
+        (Join-Path $Root 'tools/sjasmplus')
+    )
+    $AssemblerPath = $null
+    foreach ($Candidate in $LocalAssemblerCandidates) {
+        if (Test-Path $Candidate -PathType Leaf) {
+            $AssemblerPath = (Resolve-Path $Candidate).Path
+            break
+        }
+    }
+    if (-not $AssemblerPath) {
+        $PathAssembler = Get-Command sjasmplus -ErrorAction Stop
+        $AssemblerPath = $PathAssembler.Source
+    }
+    Write-Host "Using assembler: $AssemblerPath" -ForegroundColor DarkGray
+    $OldOutputs = @(
+        'neogs_code.bin',
+        'neogs_bootstrap.bin',
+        'zx_main/neogs_code.bin',
+        'zx_main/neogs_bootstrap.bin',
+        'disk_A.trd'
+    )
+    foreach ($File in $OldOutputs) {
+        if (Test-Path $File) { Remove-Item $File -Force }
+    }
+
+    Write-Host "[1/2] Building NeoGS firmware and bootstrap..." -ForegroundColor Cyan
+    & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_firmware.asm'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS firmware build failed (sjasmplus exit code $LASTEXITCODE)."
+    }
+
+    $Generated = @(
+        'neogs_code.bin',
+        'neogs_bootstrap.bin',
+        'zx_main/neogs_code.bin',
+        'zx_main/neogs_bootstrap.bin'
+    )
+    foreach ($File in $Generated) {
+        if (-not (Test-Path $File)) {
+            throw "Expected generated file is missing: $File"
+        }
+    }
+
+    Write-Host "[2/2] Building Spectrum host program and TR-DOS image..." -ForegroundColor Cyan
+    & $AssemblerPath -I 'zx_main' -I 'shared' -I 'neogs_sub' 'zx_main/main.asm'
+    if ($LASTEXITCODE -ne 0) {
+        throw "Spectrum host build failed (sjasmplus exit code $LASTEXITCODE)."
+    }
+    if (-not (Test-Path 'disk_A.trd')) {
+        throw 'Assembler returned success, but disk_A.trd was not created.'
+    }
+
+    Write-Host "Build completed. Output files:" -ForegroundColor Green
+    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','disk_A.trd' |
+        Select-Object Name,Length,LastWriteTime |
+        Format-Table -AutoSize
+}
+finally {
+    Pop-Location
+}

@@ -1,0 +1,3152 @@
+; =========================================================================
+; PROJECT 124 DUMP DATA (DOUBLED Z80 INTERFACES)
+; =========================================================================
+
+; =========================================================================
+; FILE: shared/neogs_io.inc
+; =========================================================================
+; =========================================================================
+; NeoGS ports.inc v0.3 — Project 124 used subset
+; Hardware port names/addresses from NedoPC ports.inc v0.3.
+; =========================================================================
+
+; ZX Spectrum side
+GSCOM           EQU #BB             ; write command / read status
+GSSTAT          EQU #BB             ; read CBIT (bit 0), DBIT (bit 7)
+GSDAT           EQU #B3             ; read/write data byte
+GSCTR           EQU #33             ; global control
+
+B_CBIT          EQU 0
+M_CBIT          EQU #01
+B_DBIT          EQU 7
+M_DBIT          EQU #80
+
+C_GRST          EQU #80
+C_GNMI          EQU #40
+C_GLED          EQU #20
+
+; NeoGS Z80 local ports
+MPAG            EQU #00
+ZXCMD           EQU #01
+ZXDATRD         EQU #02
+ZXDATWR         EQU #03
+ZXSTAT          EQU #04
+CLRCBIT         EQU #05
+
+GSCFG0          EQU #0F
+B_NOROM         EQU 0
+M_NOROM         EQU #01
+B_RAMRO         EQU 1
+M_RAMRO         EQU #02
+B_8CHANS        EQU 2
+M_8CHANS        EQU #04
+B_EXPAG         EQU 3
+M_EXPAG         EQU #08
+B_CKSEL0        EQU 4
+M_CKSEL0        EQU #10
+B_CKSEL1        EQU 5
+M_CKSEL1        EQU #20
+C_10MHZ         EQU #30
+C_12MHZ         EQU #10
+C_20MHZ         EQU #20
+C_24MHZ         EQU #00
+B_PAN4CH        EQU 6
+M_PAN4CH        EQU #40
+B_INV7B         EQU 7
+M_INV7B         EQU #80
+
+; NeoGS DMA registers
+DMA_MOD         EQU #1B
+DMA_HAD         EQU #1C
+DMA_MAD         EQU #1D
+DMA_LAD         EQU #1E
+DMA_CST         EQU #1F
+C_DMA_NONE      EQU 0
+C_DMA_ZX        EQU 1
+C_DMA_SD        EQU 2
+C_DMA_MP3       EQU 3
+
+; Standard General Sound ROM commands.
+GS_CMD_RESET_FLAGS  EQU #00
+GS_CMD_GET_TOTAL_RAM EQU #20
+GS_CMD_LOAD_MODULE  EQU #30
+GS_CMD_RUN_MODULE   EQU #31
+GS_CMD_OPEN_STREAM  EQU #D1
+GS_CMD_CLOSE_STREAM EQU #D2
+GS_CMD_COLD_RESTART EQU #F4
+GS_CMD_JUMP_ADDRESS EQU #13
+GS_CMD_RECEIVE_BLOCK EQU #14
+
+; Project 124 private commands carried by GSCOM after custom firmware starts.
+CMD_RESET       EQU #01
+CMD_LOAD_X86    EQU #02
+CMD_RUN_X86     EQU #03
+CMD_GET_STATUS  EQU #04
+
+; Project 124 startup handshake bytes.
+NGS_BOOTSTRAP_READY_ACK EQU #A1
+NGS_BOOTSTRAP_LENGTH_ACK EQU #A3
+NGS_FIRMWARE_READY_ACK  EQU #A2
+NGS_BOOTSTRAP_ERROR_ACK EQU #E1
+NGS_RESULT_SIGNATURE   EQU #A5
+
+NGS_STATUS_CBIT EQU M_CBIT
+NGS_STATUS_DBIT EQU M_DBIT
+
+; The x86 task is executed in logical $5002..$7FFF (12 KB window less header).
+NGS_X86_DMA_WINDOW_SIZE EQU #3000
+NGS_X86_MAX_CODE_SIZE   EQU #2FFE
+
+
+; =========================================================================
+; FILE: zx_main/main.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124
+; ROOT MODULAR LINKER — DUAL PROCESSOR BUILD
+; LINEAR AUTORUN SEQUENCE — FIXED SECTOR LENGTH TRD EXPORT
+; =========================================================================
+
+ENABLE_DEBUG_CONSOLE_TEST EQU 0
+ENABLE_HARDWARE_DEBUG     EQU 1
+ENABLE_TRDOS_DEBUG        EQU 1
+
+        ; --- ВСТРОЕННЫЙ LUA-СКРИПТ АВТОМАТИЧЕСКОГО ДАМПА ПРОЕКТА 124 ---
+        LUA
+            local out_file = io.open("dump_project_124.txt", "w")
+            if out_file then
+                out_file:write("; =========================================================================\n")
+                out_file:write("; PROJECT 124 DUMP DATA (DOUBLED Z80 INTERFACES)\n")
+                out_file:write("; =========================================================================\n\n")
+
+                local files = {
+                    "shared/neogs_io.inc",
+                    "zx_main/main.asm",
+                    "zx_main/main_data.asm",
+                    "zx_main/boot_loader.asm",
+                    "zx_main/neogs_driver.asm",
+                    "zx_main/x86_loader.asm",
+                    "zx_main/debug_system.asm",
+                    "zx_main/driver_cmos.asm",
+                    "zx_main/log_debug.asm",
+                    "zx_main/display.asm",
+                    "zx_main/ui_engine.asm",
+                    "zx_main/ui_panels.asm",
+                    "zx_main/file_utils.asm",
+                    "neogs_sub/main.asm",
+                    "neogs_sub/bootstrap.asm",
+                    "neogs_sub/x86_interpreter.asm",
+                    "neogs_sub/build_firmware.asm"
+                }
+
+                for _, fname in ipairs(files) do
+                    out_file:write("; =========================================================================\n")
+                    out_file:write("; FILE: " .. fname .. "\n")
+                    out_file:write("; =========================================================================\n")
+                    local in_file = io.open(fname, "r")
+                    if in_file then
+                        out_file:write(in_file:read("*all"))
+                        in_file:close()
+                    else
+                        out_file:write("; [LINK ERROR: File " .. fname .. " not found]\n")
+                    end
+                    out_file:write("\n\n")
+                end
+                out_file:close()
+            end
+        ENDLUA
+
+        DEVICE ZXSPECTRUM128
+        EMPTYTRD "disk_A.trd"
+
+        ; ГЛОБАЛЬНАЯ КОНСТАНТА БЕЗОПАСНОГО БУФЕРА КАТАЛОГА / ДАННЫХ
+TRDOS_PANEL_BUFFER EQU #C000
+
+        ; Базовый адрес старта основного кода Spectrum — 24576 ($6000)
+        ORG 24576
+
+; Первичный прыжок на старт, прецизионно выровненный на адрес 24585
+        jp      Init_Z80_System
+        BLOCK   6, 0            
+
+; Сюда прыгает бут-загрузчик из строки 30 по команде RANDOMIZE USR VAL "24585"
+Init_Z80_System::
+        di
+
+        ; АТОМАРНЫЙ МАРКЕР СТАРТА: Выстреливаем байт #AA (170) напрямую в порт #EF
+        ld      a, #AA
+        out     (#EF), a
+
+        ld      (OLD_SP), sp    
+        ld      sp, $AFFF       ; Переносим стек в безопасную зону проекта 124
+
+        ld      a, #10
+        ld      bc, #7FFD
+        out     (C), a
+        ld      (#5C3B), a
+
+        xor     a
+        ld      bc, #EFF7
+        out     (C), a          ; Инициализация Pentagon-расширения
+
+        ; Raw startup marker: confirms Init_Z80_System reached its end.
+        ld      a, 'I'
+        out     (#EF), a
+        jp      START_APPLICATION
+
+; Подключение системы отладки и макросов порта #EF
+        INCLUDE "debug_system.asm"
+
+START_APPLICATION:
+        ; Raw markers bypass timestamp/RTC code so an early hang is visible.
+        ld      a, 'C'
+        out     (#EF), a
+
+        ; ЭТАП 1 — ЗАПУСК CMOS ЧАСОВ К512ВИ1
+        call    CHECK_AND_INIT_CMOS
+        ld      a, 'D'
+        out     (#EF), a
+        ld      a, 'E'
+        out     (#EF), a
+        MACRO_EF_STRING msg_stage1
+
+        ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
+        ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
+        ; команда #13 запускает его, после чего он включает RAM-over-ROM,
+        ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
+        ld      hl, neogs_binary_start
+        ld      de, neogs_binary_end - neogs_binary_start
+        call    upload_firmware
+        jr      c, .firmware_upload_failed
+        MACRO_EF_STRING msg_stage2
+        jp      .firmware_upload_done
+
+.firmware_upload_failed:
+        MACRO_EF_STRING msg_stage2_fail
+        MACRO_EF_STRING msg_stage2_sent
+        ld      hl, (neo_fw_bytes_sent)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_initial
+        ld      a, (neo_fw_initial_status)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_status
+        ld      a, (neo_fw_last_status)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_phase
+        ld      a, (neo_fw_timeout_phase)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_rx
+        ld      a, (neo_fw_last_rx_byte)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_bootstrap
+        ld      hl, (neo_fw_bootstrap_address)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        di
+.firmware_upload_halt:
+        halt
+        jr      .firmware_upload_halt
+
+.firmware_upload_done:
+
+        ; ЭТАП 3 — ИНИЦИАЛИЗАЦИЯ И ОТРИСОВКА ИНТЕРФЕЙСА ОКОН И ДВУХ ШРИФТОВ
+        call    INIT_PROGRAM_INTERFACE 
+        MACRO_EF_STRING msg_stage3_ok
+
+        ; ЭТАП 4 — ВЫВОД СТАРТОВОГО ОТЧЕТА В НИЖНЕЕ ОКНО ЛОГОВ COMMANDER
+        ld      hl, msg_log_screen_ready
+        call    LOG_WriteMessageToBuffer  
+
+        ld      hl, msg_log_sp_prefix
+        call    LOG_WriteMessageToBuffer  
+        ld      hl, (OLD_SP)
+        MACRO_EF_HEX16  hl
+        MACRO_EF_CHAR   13
+        MACRO_EF_STRING msg_stage4
+
+        ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
+        ld      hl, task_filename
+        ld      a, 'C'
+        
+        ; ВАЖНО: не переключаемся на старый TR-DOS SP (#Cxxx).
+        ; Буфер чтения начинается с #C000 и перезаписывает эту область.
+        ; Stage 5 сам временно переносит рабочий стек на #BFFF, а этот
+        ; CALL остаётся на безопасном прикладном стеке (#AFFF).
+        di
+        call    EXECUTE_X86_FILE_STAGE
+        ei
+        jr      c, .x86_stage_failed
+
+        ; Финальная точка останова ядра после завершения всех этапов
+.core_halt:
+        MACRO_EF_STRING msg_stage_all_complete
+        di
+        halt
+        jr      .core_halt
+
+; Ошибка выполнения этапа загрузки/запуска x86-задачи.
+.x86_stage_failed:
+        MACRO_EF_STRING msg_stage5_fail
+        di
+.x86_stage_failed_halt:
+        halt
+        jr      .x86_stage_failed_halt
+
+msg_stage5_fail:
+        DEFB "[CORE] ERROR: x86 task pipeline failed; startup halted.", 13, 0
+
+; Ошибка загрузки прошивки NeoGS. Не продолжаем работу с неподтвержденным ядром.
+msg_stage2_fail:
+        DEFB "[CORE] ERROR: NeoGS ROM bootstrap / firmware handshake failed.", 13, 0
+msg_stage2_sent:
+        DEFB "[FW] DATA BYTES SENT = ", 0
+msg_stage2_initial:
+        DEFB "[FW] INITIAL GSSTAT #BB = ", 0
+msg_stage2_status:
+        DEFB "[FW] LAST GSSTAT #BB = ", 0
+msg_stage2_phase:
+        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
+msg_stage2_rx:
+        DEFB "[FW] LAST RX BYTE = ", 0
+msg_stage2_bootstrap:
+        DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
+
+; =========================================================================
+; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
+; =========================================================================
+        INCLUDE "main_data.asm"     
+        INCLUDE "driver_cmos.asm"   
+        INCLUDE "neogs_driver.asm"  
+        INCLUDE "x86_loader.asm"    
+        INCLUDE "log_debug.asm"     
+        
+        INCLUDE "display.asm"       ; Модуль низкоуровневого вывода знакомест
+        INCLUDE "ui_engine.asm"     ; Модуль прошивки шрифтов и скроллера
+        INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
+        INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
+
+; Переключение на Банк 0 ОЗУ хоста для хранения двух NeoGS бинарников.
+; Оба файла создаются командой sjasmplus neogs_sub/build_firmware.asm.
+        PAGE    0
+neogs_bootstrap_start:
+        INCBIN "neogs_bootstrap.bin"
+neogs_bootstrap_end:
+
+neogs_binary_start:
+        INCBIN "neogs_code.bin"
+neogs_binary_end:
+
+ProgramEnd:
+        ; Code/data must end before the application stack at #AFFF and well
+        ; before the TR-DOS buffer at #C000 / BASIC loader at #E000.
+        ASSERT ProgramEnd <= #A000
+
+; Возвращаем базовый контекст компиляции для загрузчика
+        ORG     #E000
+        INCLUDE "boot_loader.asm"
+
+; NeoGS firmware is built as a separate binary by neogs_sub/build_firmware.asm.
+
+; =========================================================================
+; СЕКТОР ФИНАЛЬНОГО ОКОНЧАТЕЛЬНОГО ЭКСПОРТА НА ДИСК
+; =========================================================================
+        PAGE    0                       ; Возвращаем базовый нулевой банк памяти хоста
+
+        ; Синхронный экспорт бинарных блоков в образ TRD
+        SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
+        SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
+        ; Диагностический x86 payload для проверки TR-DOS -> DMA -> interpreter.
+        ; Это тест из 6 байт, а не полноценное x86-ядро/операционная система.
+        SAVETRD "disk_A.trd", "neoprog.C", x86_diag_program, x86_diag_program_end - x86_diag_program
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/main_data.asm
+; =========================================================================
+; =========================================================================
+; FILE: zx_main/main_data.asm
+; PROJECT 124 — global state and messages
+; =========================================================================
+
+Console_X::         DB 0
+Console_Y::         DB 0
+OLD_SP::            DW 0
+APP_SP_BACKUP::     DW 0
+Variable_Backup:    DW 0
+                    DW 0
+                    DW 0
+                    DB 0
+
+; Public result copy retained for other application modules.
+X86_RESULT_AX::     DW 0
+
+; Port #EF diagnostic messages.
+msg_stage1:    DEFB "[CORE] Stage 1: Clock RTC K512VI1 checked and synced successfully.",13,0
+msg_stage2:    DEFB "[CORE] Stage 2: Bootstrapping custom NeoGS Z80 firmware through GS105a ROM loader...",13,0
+msg_stage3_ok: DEFB "[GUI] Stage 3: Custom fonts linked. Two-window application workspace rendered.",13,0
+msg_stage4:    DEFB "[CORE] Stage 4: Execution window stabilized. Bypassing interactive loop.",13,0
+msg_stage_all_complete: DEFB "[HALT] Core task pipeline executed entirely. System suspended.",13,0
+
+; Screen log strings.
+msg_log_screen_ready: DEFB "[SYS_START] PERFECT MANAGER 124 DUAL-CORE NODE ONLINE.",0
+msg_log_sp_prefix:    DEFB "[SYS_INFO] ORIGINAL TR-DOS SYSTEM STACK POINTER WAS SAVED AT: #",0
+msg_log_exec_x86:     DEFB "[EXECUTE] AUTOMATIC LINEAR TRANSFER INITIATED...",0
+
+; Eight-character TR-DOS filename, extension supplied separately as 'C'.
+task_filename:        DEFB "neoprog "
+
+
+; =========================================================================
+; FILE: zx_main/boot_loader.asm
+; =========================================================================
+; =========================================================================
+; FILE: zx_main/boot_loader.asm
+; =========================================================================
+; PROJECT 124 — TR-DOS BASIC BOOTLOADER (ПОЛНЫЙ БИНАРНЫЙ КОД ЦЕЛИКОМ)
+; ОПИСАНИЕ: Исправлен барьер CLEAR для предотвращения порчи системных переменных
+; =========================================================================
+
+CLEAR       EQU     $FD
+LOAD        EQU     $EF
+CODE        EQU     $AF
+RANDOMIZE   EQU     $F9
+USR         EQU     $C0
+REM         EQU     $EA
+VAL         EQU     $B0
+OUT_CMD     EQU     $DF             ; Токен команды OUT ($DF) из карты ПЗУ
+
+BASIC_START:
+basic_loader:
+        ; --- Строка 10: OUT 239,1: CLEAR 24000 ---
+        ; 🔥 ФИКС: Опускаем границу CLEAR до 24000, защищая всю область памяти с адреса 24576
+        DB      0, 10                   
+        DW      LINE10_END-LINE10       
+LINE10:
+        DB      OUT_CMD                 ; OUT
+        DB      "239", $0E, $00, $00, $EF, $00, $00 ; Бинарный маркер числа 239
+        DB      ","
+        DB      "1", $0E, $00, $00, $01, $00, $00   ; Бинарный маркер числа 1
+        DB      ":"
+        DB      CLEAR                   ; CLEAR
+        DB      "24000", $0E, $00, $00, $5D, $C0, $00 ; Бинарный маркер числа 24000 (#5DC0)
+        DB      $0D                     
+LINE10_END:
+
+        ; --- Строка 11: Вывод приветствия "P124 START" в порт отладки #EF ---
+        DB      0, 11
+        DW      LINE11_END-LINE11
+LINE11:
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "50", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "31", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "32", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "34", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "32", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "83", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "84", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "65", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "82", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "84", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "13", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "10", 34
+        DB      $0D
+LINE11_END:
+
+        ; --- Строка 20: RANDOMIZE USR 15619 : REM : LOAD "proj124" CODE 24576 ---
+        DB      0, 20                   
+        DW      LINE20_END-LINE20       
+LINE20:
+        DB      RANDOMIZE               ; RANDOMIZE
+        DB      USR, "15619", $0E, 0, 0 ; USR 15619
+        DW      15619                   
+        DB      0
+        DB      $3A, REM, $3A           
+        DB      "LOAD ", 34, "proj124", 34, " CODE 24576", $0D 
+LINE20_END:
+
+        ; --- Строка 21: Вывод метки "LOADED" в порт отладки #EF после чтения файла ---
+        DB      0, 21
+        DW      LINE21_END-LINE21
+LINE21:
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "76", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "79", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "65", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "68", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "69", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "68", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "13", 34, ":"
+        DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "10", 34
+        DB      $0D
+LINE21_END:
+
+        ; --- Строка 30: OUT 239,2: RANDOMIZE USR VAL "24585" ---
+        DB      0, 30                   
+        DW      LINE30_END-LINE30       
+LINE30:
+        DB      OUT_CMD                 ; OUT
+        DB      "239", $0E, $00, $00, $EF, $00, $00 ; Бинарный маркер числа 239
+        DB      ","
+        DB      "2", $0E, $00, $00, $02, $00, $00   ; Бинарный маркер числа 2
+        DB      ":"
+        DB      RANDOMIZE               ; RANDOMIZE
+        DB      USR                     ; USR ($C0)
+        DB      VAL                     ; VAL ($B0)
+        DB      34                      
+        DEFM    "24585"                 ; Переход на Init_Z80_System
+        DB      34                      
+        DB      $0D                     
+LINE30_END:
+
+        DB      $80                     ; Системный маркер конца BASIC-программы
+
+BASIC_END:
+
+
+; =========================================================================
+; FILE: zx_main/neogs_driver.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — NeoGS host-side driver
+; Stage 2 uses GS105a #14 (RECEIVE BLOCK) and #13 (JUMP) to start a two-stage bootstrap.
+; =========================================================================
+        INCLUDE "../shared/neogs_io.inc"
+
+FW_BYTE_TIMEOUT EQU #FFFF
+IPC_BYTE_TIMEOUT EQU #FFFF
+IPC_CMD_TIMEOUT EQU #FFFF
+
+; -------------------------------------------------------------------------
+; upload_firmware
+; IN : HL = custom firmware binary, DE = byte length.
+; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
+;
+; Cold/warm reset path:
+;   #F4 cold restart
+;   #20 get total RAM, read three bytes to prove stock ROM is ready
+;   #14 receive executable bootstrap directly into RAM at $4000
+;   #13 jump to $4000
+;   #A1 bootstrap ready, send length, receive #A3 length accepted
+;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
+; -------------------------------------------------------------------------
+upload_firmware::
+        ld      (neo_fw_source), hl
+        ld      (neo_fw_length), de
+
+        ; Firmware image must fit in low RAM $0000-$2FFF, below SP=$3FFF.
+        ld      a, d
+        or      e
+        jp      z, .upload_failed
+        ld      a, d
+        cp      #30
+        jr      c, .firmware_length_valid
+        jp      nz, .upload_failed
+        ld      a, e
+        or      a
+        jp      nz, .upload_failed
+.firmware_length_valid:
+        xor     a
+        ld      (neo_fw_bytes_sent), a
+        ld      (neo_fw_bytes_sent+1), a
+        ld      (neo_fw_timeout_phase), a
+        in      a, (GSSTAT)
+        ld      (neo_fw_initial_status), a
+        ld      (neo_fw_last_status), a
+
+        ; Phase 1: documented GS105a cold restart. Also returns a running
+        ; Project 124 firmware to the stock ROM before the new bootstrap.
+        ld      a, 1
+        ld      (neo_fw_timeout_phase), a
+        ld      a, GS_CMD_COLD_RESTART
+        call    gs_boot_send_command_long
+        jp      c, .upload_failed
+
+        ; Phase 2: #20 returns three RAM-size bytes only after stock ROM is up.
+        ; Retry #F4 once: if the previous run was interrupted during DMA, the
+        ; first #F4 may have been consumed as the DMA end marker; the second
+        ; reaches the command dispatcher after it returns to its main loop.
+        ld      a, 2
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_probe_rom
+        jr      nc, .stock_rom_ready
+        ld      a, 1
+        ld      (neo_fw_timeout_phase), a
+        ld      a, GS_CMD_COLD_RESTART
+        call    gs_boot_send_command_long
+        jp      c, .upload_failed
+        ld      a, 2
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_probe_rom
+        jp      c, .upload_failed
+.stock_rom_ready:
+
+        ; Phase 3: use the native GS105a memory loader, not the MOD player.
+        ; #14 RECEIVE BLOCK expects the first (negative length low) byte
+        ; before the command, then negative length high, address low/high,
+        ; and exactly N payload bytes. The payload is written directly to RAM.
+        ld      a, 3
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, 0
+        ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+        or      a
+        sbc     hl, de                  ; HL = -bootstrap length
+        ld      (neo_fw_block_length), hl
+        ld      a, l
+        call    gs_boot_write_command_argument
+        jp      c, .upload_failed
+        ld      a, GS_CMD_RECEIVE_BLOCK
+        call    gs_boot_send_command
+        jp      c, .upload_failed
+
+        ; Remaining #14 header: -length high, destination $4000.
+        ld      a, (neo_fw_block_length+1)
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+        xor     a
+        call    gs_boot_send_data_byte  ; destination low = $00
+        jp      c, .upload_failed
+        ld      a, #40
+        call    gs_boot_send_data_byte  ; destination high = $40
+        jp      c, .upload_failed
+
+        ; Phase 4: transfer the executable bootstrap into RAM $4000.
+        ld      a, 4
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, neogs_bootstrap_start
+        ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+.bootstrap_block_loop:
+        ld      a, d
+        or      e
+        jr      z, .bootstrap_block_done
+        ld      a, (hl)
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+        inc     hl
+        dec     de
+        jr      .bootstrap_block_loop
+.bootstrap_block_done:
+
+        ; Phase 5: #13 JUMP TO ADDRESS. The low byte is the command's
+        ; first argument and must be written before issuing the command.
+        ld      a, 5
+        ld      (neo_fw_timeout_phase), a
+        xor     a                       ; entry address low = $00
+        call    gs_boot_write_command_argument
+        jp      c, .upload_failed
+        ld      a, GS_CMD_JUMP_ADDRESS
+        call    gs_boot_send_command
+        jp      c, .upload_failed
+        ld      a, #40                  ; entry address high = $40
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+
+        ; Phase 6: bootstrap has enabled RAM-over-ROM and is waiting at $0000.
+        ld      a, 6
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_data_byte
+        jp      c, .upload_failed
+        cp      NGS_BOOTSTRAP_READY_ACK
+        jp      nz, .upload_failed
+
+        ; Phase 7: send firmware length low/high and require ACK #A3.
+        ld      a, 7
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_length)
+        ld      a, l
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+        ld      a, h
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+        call    gs_boot_receive_data_byte
+        jp      c, .upload_failed
+        cp      NGS_BOOTSTRAP_LENGTH_ACK
+        jp      nz, .upload_failed
+
+        ; Phase 8: stream the custom firmware to RAM address $0000.
+        ld      a, 8
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_source)
+        ld      de, (neo_fw_length)
+.firmware_stream_loop:
+        ld      a, d
+        or      e
+        jr      z, .firmware_stream_done
+        ld      a, (hl)
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+        inc     hl
+        dec     de
+        jr      .firmware_stream_loop
+
+.firmware_stream_done:
+        ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+        ld      a, 9
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_data_byte
+        jp      c, .upload_failed
+        cp      NGS_FIRMWARE_READY_ACK
+        jp      nz, .upload_failed
+
+        xor     a
+        ret
+
+.upload_failed:
+        scf
+        ret
+
+; -------------------------------------------------------------------------
+; Standard GS105a ROM transport primitives.
+; Commands use CBIT; data bytes use DBIT. All waits are bounded.
+; -------------------------------------------------------------------------
+
+; Probe stock ROM by reading the three-byte RAM size returned by command #20.
+gs_boot_probe_rom:
+        ld      a, GS_CMD_GET_TOTAL_RAM
+        call    gs_boot_send_command_long
+        ret     c
+        call    gs_boot_receive_data_byte
+        ret     c
+        ld      (neo_fw_rom_ram_low), a
+        call    gs_boot_receive_data_byte
+        ret     c
+        ld      (neo_fw_rom_ram_mid), a
+        call    gs_boot_receive_data_byte
+        ret     c
+        ld      (neo_fw_rom_ram_high), a
+        ld      a, (neo_fw_rom_ram_low)
+        ld      b, a
+        ld      a, (neo_fw_rom_ram_mid)
+        or      b
+        ld      b, a
+        ld      a, (neo_fw_rom_ram_high)
+        or      b
+        jr      nz, .rom_probe_ok
+        scf
+        ret
+.rom_probe_ok:
+        or      a
+        ret
+
+; Long command wait for #F4 cold restart and ROM self-test.
+gs_boot_send_command_long:
+        ld      (neo_fw_command_byte), a
+        ld      a, (neo_fw_command_byte)
+        out     (GSCOM), a
+        push    de
+        ld      d, 16
+.long_outer:
+        ld      bc, FW_BYTE_TIMEOUT
+.long_inner:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_CBIT, a
+        jr      z, .long_done
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .long_inner
+        dec     d
+        jr      nz, .long_outer
+        pop     de
+        scf
+        ret
+.long_done:
+        pop     de
+        or      a
+        ret
+
+gs_boot_send_command:
+        ld      (neo_fw_command_byte), a
+        ld      a, (neo_fw_command_byte)
+        out     (GSCOM), a
+        ld      bc, FW_BYTE_TIMEOUT
+.command_wait:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_CBIT, a
+        jr      z, .command_done
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .command_wait
+        scf
+        ret
+.command_done:
+        or      a
+        ret
+
+; Preload the first argument byte of GS105a commands #13/#14. Those
+; handlers read this byte before clearing CBIT; later arguments use DBIT.
+gs_boot_write_command_argument:
+        ld      (neo_fw_tx_byte), a
+        ld      bc, FW_BYTE_TIMEOUT
+.argument_wait_free:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      z, .argument_slot_free
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .argument_wait_free
+        scf
+        ret
+.argument_slot_free:
+        ld      a, (neo_fw_tx_byte)
+        out     (GSDAT), a
+        or      a
+        ret
+
+gs_boot_send_data_byte:
+        ld      (neo_fw_tx_byte), a
+        ld      bc, FW_BYTE_TIMEOUT
+.data_wait_free:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      z, .data_slot_free
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .data_wait_free
+        scf
+        ret
+.data_slot_free:
+        ld      a, (neo_fw_tx_byte)
+        out     (GSDAT), a
+        ld      bc, FW_BYTE_TIMEOUT
+.data_wait_consumed:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      z, .data_consumed
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .data_wait_consumed
+        scf
+        ret
+.data_consumed:
+        push    hl
+        ld      hl, (neo_fw_bytes_sent)
+        inc     hl
+        ld      (neo_fw_bytes_sent), hl
+        pop     hl
+        or      a
+        ret
+
+gs_boot_receive_data_byte:
+        ld      bc, FW_BYTE_TIMEOUT
+.receive_wait:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      nz, .receive_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .receive_wait
+        scf
+        ret
+.receive_ready:
+        in      a, (GSDAT)
+        ld      (neo_fw_last_rx_byte), a
+        or      a
+        ret
+
+; -------------------------------------------------------------------------
+; Project 124 private-protocol waits (custom firmware already running).
+; -------------------------------------------------------------------------
+neogs_wait_command_done::
+        ld      bc, IPC_CMD_TIMEOUT
+.cmd_wait:
+        in      a, (GSSTAT)
+        bit     B_CBIT, a
+        jr      z, .cmd_done
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .cmd_wait
+        scf
+        ret
+.cmd_done:
+        or      a
+        ret
+
+neogs_wait_command_done_long::
+        push    de
+        ld      d, #10
+.cmd_long_outer:
+        ld      bc, IPC_CMD_TIMEOUT
+.cmd_long_inner:
+        in      a, (GSSTAT)
+        bit     B_CBIT, a
+        jr      z, .cmd_long_done
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .cmd_long_inner
+        dec     d
+        jr      nz, .cmd_long_outer
+        pop     de
+        scf
+        ret
+.cmd_long_done:
+        pop     de
+        or      a
+        ret
+
+neogs_wait_data_byte::
+        ld      bc, IPC_BYTE_TIMEOUT
+.data_wait:
+        in      a, (GSSTAT)
+        bit     B_DBIT, a
+        jr      nz, .data_ready
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .data_wait
+        scf
+        ret
+.data_ready:
+        in      a, (GSDAT)
+        or      a
+        ret
+
+; Stage 2 diagnostics consumed by zx_main/main.asm.
+neo_fw_source:          dw 0
+neo_fw_length:          dw 0
+neo_fw_bootstrap_address: dw #4000
+neo_fw_block_length:    dw 0
+neo_fw_rom_ram_low:     db 0
+neo_fw_rom_ram_mid:     db 0
+neo_fw_rom_ram_high:    db 0
+neo_fw_command_byte:    db 0
+neo_fw_tx_byte:         db 0
+neo_fw_last_rx_byte:    db 0
+neo_fw_bytes_sent:      dw 0
+neo_fw_initial_status:  db 0
+neo_fw_last_status:     db 0
+neo_fw_timeout_phase:   db 0
+
+
+; =========================================================================
+; FILE: zx_main/x86_loader.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — TR-DOS task loader + NeoGS DMA / IPC
+; Hardware protocol is based on NeoGS Programmer's Guide v0.1.A and
+; ports.inc v0.3. The application-level command IDs/frame are Project 124.
+;
+; DMA mapping used here:
+;   NeoGS physical DMA destination = $00D000
+;   NeoGS Z80 logical DMA frame address = $5000
+;   two-byte length header at $5000; x86 execution begins at $5002.
+; This follows the guide's default mapping: logical $4000-$7FFF is the
+; second half of physical 32K page 1 ($00C000-$00FFFF).
+;
+; Host DMA writes to Spectrum address $0000-$3FFF. For DMA WRITE there is
+; NO dummy write. The dummy access described by the user is only for DMA READ.
+; =========================================================================
+
+; neogs_io.inc is included once by neogs_driver.asm before this module.
+
+DMA_HOST_WINDOW    EQU #0000
+DMA_WINDOW_LIMIT   EQU #3000
+
+EXECUTE_X86_FILE_STAGE::
+        ld      (P124_X86_REQUEST_FILENAME), hl
+        ld      (P124_X86_REQUEST_TYPE), a
+        ld      (P124_X86_LOADER_SP_BACKUP), sp
+        ld      sp, #BFFF              ; buffer starts at #C000; stack below it
+
+        MACRO_EF_STRING P124_msg_dbg_stack_isolated
+
+        ; -------------------------------------------------------------
+        ; Stage 5.0: deterministic diagnostic before accessing TR-DOS.
+        ; B8 AA BB 40 90 F4 = MOV AX,BBAA / INC AX / NOP / HLT.
+        ; Expected result: status=0, AX=BBAB.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_ipc_diag_start
+        ld      hl, x86_diag_program
+        ld      bc, x86_diag_program_end - x86_diag_program
+        call    neogs_send_dma_block
+        jp      c, .diag_dma_error
+
+        call    neogs_run_and_get_result
+        jp      c, .diag_protocol_error
+
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .diag_execution_error
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #BBAB
+        or      a
+        sbc     hl, de
+        jp      nz, .diag_wrong_result
+
+        MACRO_EF_STRING P124_msg_ipc_diag_pass
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+
+        ; -------------------------------------------------------------
+        ; Stage 5A: search TR-DOS directory entry.
+        ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
+        ; -------------------------------------------------------------
+        ld      hl, (P124_X86_REQUEST_FILENAME)
+        ld      de, #5CDD
+        ld      bc, 8
+        ldir
+        ld      a, (P124_X86_REQUEST_TYPE)
+        ld      (#5CE5), a
+        ld      a, 9
+        ld      (#5D06), a
+        ld      c, 10
+        call    #3D13
+        ld      a, c
+        cp      #FF
+        jp      z, .file_not_found
+
+        ; C=#0A returns only the catalogue entry number. Fetch the full
+        ; 16-byte descriptor explicitly with C=#08 before using #5CE8..#5CEC.
+        ld      a, c
+        push    af
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        pop     af
+        ld      c, 8
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .bad_file_descriptor
+
+        MACRO_EF_STRING P124_msg_file_ok
+
+        ; -------------------------------------------------------------
+        ; Stage 5B: validate descriptor BEFORE reading any sector.
+        ; #5CE8 = byte length, #5CEA = sector count,
+        ; #5CEB = first internal sector (0..15), #5CEC = track.
+        ; The DMA frame window is $5000..$7FFF (12 KiB). Its first two
+        ; bytes are the length header, so executable payload max is $2FFE.
+        ; -------------------------------------------------------------
+        ld      bc, (#5CE8)
+        ld      a, b
+        or      c
+        jp      z, .empty_file_error
+        ld      (P124_X86_FILE_LENGTH), bc
+
+        ; Reject files larger than the executable 12 KB window minus header.
+        ld      a, b
+        cp      #2F
+        jr      c, .file_length_ok
+        jp      nz, .task_too_large
+        ld      a, c
+        cp      #FF
+        jp      nc, .task_too_large
+.file_length_ok:
+        ; Sector count must equal ceil(file_length / 256).
+        ld      hl, (P124_X86_FILE_LENGTH)
+        ld      de, 255
+        add     hl, de
+        ld      e, h
+        ld      a, (#5CEA)
+        or      a
+        jp      z, .empty_file_error
+        cp      e
+        jp      nz, .bad_file_descriptor
+        ld      (P124_X86_READ_REMAINING), a
+
+        ld      a, (#5CEB)
+        cp      16
+        jp      nc, .bad_file_descriptor
+        ld      (P124_X86_READ_SECTOR), a
+        ld      a, (#5CEC)
+        ld      (P124_X86_READ_TRACK), a
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      (P124_X86_READ_BUFFER), hl
+
+.read_sector_loop:
+        ; Read exactly one sector per TR-DOS #05 call.
+        ld      a, (P124_X86_READ_TRACK)
+        ld      d, a
+        ld      a, (P124_X86_READ_SECTOR)
+        ld      e, a
+        ld      hl, (P124_X86_READ_BUFFER)
+        ld      b, 1
+        ld      c, 5
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        call    #3D13
+        ; C=#05 stores its two-byte error result at #5D0F/#5D10.
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .sector_read_error
+
+        ; Advance host buffer by 256 bytes.
+        ld      hl, (P124_X86_READ_BUFFER)
+        ld      de, 256
+        add     hl, de
+        ld      (P124_X86_READ_BUFFER), hl
+
+        ; TR-DOS sectors are numbered 0..15 in this project convention.
+        ld      a, (P124_X86_READ_SECTOR)
+        inc     a
+        cp      16
+        jr      c, .sector_same_track
+        xor     a
+        ld      (P124_X86_READ_SECTOR), a
+        ld      a, (P124_X86_READ_TRACK)
+        inc     a
+        ld      (P124_X86_READ_TRACK), a
+        jr      .sector_advanced
+
+.sector_same_track:
+        ld      (P124_X86_READ_SECTOR), a
+
+.sector_advanced:
+        ld      a, (P124_X86_READ_REMAINING)
+        dec     a
+        ld      (P124_X86_READ_REMAINING), a
+        jp      nz, .read_sector_loop
+
+        MACRO_EF_STRING P124_msg_buf_loaded
+
+        ; -------------------------------------------------------------
+        ; Stage 5C: transfer actual task. The DMA frame contains a two-byte
+        ; length prefix, therefore the total transfer must fit in $3000 bytes.
+        ; -------------------------------------------------------------
+        ld      bc, (P124_X86_FILE_LENGTH)
+        ld      hl, TRDOS_PANEL_BUFFER
+        call    neogs_send_dma_block
+        jp      c, .task_dma_error
+        MACRO_EF_STRING P124_msg_task_dma_ok
+
+        ; -------------------------------------------------------------
+        ; Stage 5D: execute and fetch framed result.
+        ; -------------------------------------------------------------
+        call    neogs_run_and_get_result
+        jp      c, .result_timeout
+
+        MACRO_EF_STRING P124_msg_x86_result_ready
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .interpreter_error
+
+        ld      hl, (P124_X86_RESULT_AX)
+        call    Util_PrintHex16Screen
+        call    LOG_CloseActiveLine
+        or      a
+        jp      .loader_restore_stack
+
+; -------------------------------------------------------------------------
+; Error exits. All return through the same original-stack restoration.
+; -------------------------------------------------------------------------
+.diag_dma_error:
+        MACRO_EF_STRING P124_msg_ipc_diag_dma_fail
+        scf
+        jp      .loader_restore_stack
+
+.diag_protocol_error:
+        MACRO_EF_STRING P124_msg_ipc_diag_frame_fail
+        scf
+        jp      .loader_restore_stack
+
+.diag_execution_error:
+        MACRO_EF_STRING P124_msg_ipc_diag_status_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
+.diag_wrong_result:
+        MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
+.file_not_found:
+        MACRO_EF_STRING P124_msg_err_no_file
+        scf
+        jp      .loader_restore_stack
+
+.empty_file_error:
+        MACRO_EF_STRING P124_msg_err_empty_file
+        scf
+        jp      .loader_restore_stack
+
+.bad_file_descriptor:
+        MACRO_EF_STRING P124_msg_err_bad_descriptor
+        scf
+        jp      .loader_restore_stack
+
+.sector_read_error:
+        MACRO_EF_STRING P124_msg_err_sector_read
+        ld      hl, (#5D0F)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
+.task_too_large:
+        MACRO_EF_STRING P124_msg_err_task_too_large
+        scf
+        jp      .loader_restore_stack
+
+.task_dma_error:
+        MACRO_EF_STRING P124_msg_err_dma_transfer
+        scf
+        jp      .loader_restore_stack
+
+.result_timeout:
+        MACRO_EF_STRING P124_msg_err_result_timeout
+        scf
+        jp      .loader_restore_stack
+
+.interpreter_error:
+        MACRO_EF_STRING P124_msg_err_interpreter_status
+        scf
+        jp      .loader_restore_stack
+
+.loader_restore_stack:
+        ld      hl, (P124_X86_LOADER_SP_BACKUP)
+        ld      sp, hl
+        ret
+
+; =========================================================================
+; NeoGS transport helpers — exact CBIT/DBIT meanings from Guide v0.1.A
+; =========================================================================
+
+; IN: HL=source in host RAM, BC=payload byte count (1..#2FFE).
+; OUT: Carry clear after NeoGS armed DMA, consumed the host end marker,
+;      and disabled DMA. Carry set on timeout.
+;
+; Protocol:
+;   host OUT GSCOM,CMD_LOAD_X86 -> CBIT=1
+;   NeoGS configures DMA, clears CLRCBIT -> CBIT=0 (READY)
+;   host LDIR to #0000..#3FFF (no dummy write)
+;   host OUT GSCOM,#FF -> CBIT=1 (end marker)
+;   NeoGS disables DMA, clears CLRCBIT -> CBIT=0 (DONE)
+neogs_send_dma_block:
+        ld      a, b
+        or      c
+        jp      z, .dma_bad_length
+        ld      a, b
+        cp      #40
+        jr      c, .dma_length_ok
+        jp      nz, .dma_bad_length
+        ld      a, c
+        or      a
+        jp      nz, .dma_bad_length
+.dma_length_ok:
+        ld      (P124_DMA_SOURCE), hl
+        ld      (P124_DMA_LENGTH), bc
+
+        ; Validate payload + 2-byte length prefix <= $3000.
+        push    bc
+        pop     hl
+        ld      de, 2
+        add     hl, de
+        ld      a, h
+        cp      #30
+        jr      c, .dma_total_length_ok
+        jp      nz, .dma_bad_length
+        ld      a, l
+        or      a
+        jp      nz, .dma_bad_length
+.dma_total_length_ok:
+        ld      a, CMD_LOAD_X86
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        ret     c
+
+        ; LDIR is used for BOTH pieces of the frame. This is intentional:
+        ; the DMA engine observes host memory-write cycles. The first LDIR
+        ; writes the two-byte header to host addresses #0000-#0001; the second
+        ; writes the payload to #0002 onward. No direct LD (nn),A writes and
+        ; no temporary stack are needed.
+        di
+        ld      hl, (P124_DMA_LENGTH)
+        ld      (P124_DMA_HEADER), hl
+        ld      hl, P124_DMA_HEADER
+        ld      de, DMA_HOST_WINDOW
+        ld      bc, 2
+        ldir
+
+        ld      hl, (P124_DMA_SOURCE)
+        ld      de, DMA_HOST_WINDOW + 2
+        ld      bc, (P124_DMA_LENGTH)
+        ldir
+
+        ; End marker is a command-byte write; it is NOT a DMA data byte.
+        ld      a, #FF
+        out     (GSCOM), a
+        call    neogs_wait_command_done
+        ret
+
+.dma_bad_length:
+        scf
+        ret
+
+; Send RUN command and fetch the four-byte application result frame:
+; A5 signature, status, AX low, AX high.
+neogs_run_and_get_result:
+        ld      a, CMD_RUN_X86
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+
+        ld      a, CMD_GET_STATUS
+        out     (GSCOM), a
+
+        call    neogs_wait_data_byte
+        ret     c
+        ld      (P124_X86_RESULT_MAGIC), a
+
+        call    neogs_wait_data_byte
+        ret     c
+        ld      (P124_X86_RESULT_STATUS), a
+
+        call    neogs_wait_data_byte
+        ret     c
+        ld      e, a
+
+        call    neogs_wait_data_byte
+        ret     c
+        ld      d, a
+        ld      (P124_X86_RESULT_AX), de
+        ld      (X86_RESULT_AX), de
+
+        call    neogs_wait_command_done
+        ret     c
+
+        ld      a, (P124_X86_RESULT_MAGIC)
+        cp      NGS_RESULT_SIGNATURE
+        jr      z, .result_frame_ok
+        scf
+        ret
+.result_frame_ok:
+        or      a
+        ret
+
+; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
+x86_diag_program:
+        defb    #B8, #AA, #BB, #40, #90, #F4
+x86_diag_program_end:
+
+; Data/state
+P124_X86_LOADER_SP_BACKUP: dw 0
+P124_DMA_SOURCE:           dw 0
+P124_DMA_LENGTH:           dw 0
+P124_DMA_HEADER:           dw 0
+P124_X86_REQUEST_FILENAME: dw 0
+P124_X86_REQUEST_TYPE:     db 0
+P124_X86_FILE_LENGTH:      dw 0
+P124_X86_READ_BUFFER:      dw 0
+P124_X86_READ_REMAINING:   db 0
+P124_X86_READ_TRACK:       db 0
+P124_X86_READ_SECTOR:      db 0
+P124_X86_RESULT_MAGIC:     db 0
+P124_X86_RESULT_STATUS:    db 0
+P124_X86_RESULT_AX:        dw 0
+
+; Strings
+P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
+P124_msg_ipc_diag_start:     defb "[IPC TEST] Starting documented CBIT/DBIT + DMA diagnostic.", 13, 0
+P124_msg_ipc_diag_pass:      defb "[IPC TEST] PASS: x86 HLT completed, AX=#", 0
+P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake timed out.", 13, 0
+P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
+P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter status is not zero: #", 0
+P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
+P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
+P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
+P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
+P124_msg_x86_result_ready:  defb "[STAGE 5] [RESULT] Status / AX = ", 0
+P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0
+P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
+P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0
+P124_msg_err_sector_read:    defb "[STAGE 5] [ERROR] TR-DOS sector read failed; code=#", 0
+P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 12 KB executable window (max payload $2FFE).", 13, 0
+P124_msg_err_dma_transfer:   defb "[STAGE 5] [ERROR] NeoGS DMA handshake failed.", 13, 0
+P124_msg_err_result_timeout: defb "[STAGE 5] [ERROR] NeoGS result frame timed out.", 13, 0
+P124_msg_err_interpreter_status: defb "[STAGE 5] [ERROR] x86 interpreter returned non-zero status.", 13, 0
+
+
+; =========================================================================
+; FILE: zx_main/debug_system.asm
+; =========================================================================
+; =========================================================================
+; ПРОЕКТ 124 — СИСТЕМА ОТЛАДКИ ПОРТА #EF (ИЗ ПРОЕКТА 123)
+; СИСТЕМНЫЙ ПУТЬ: zx_main/debug_system.asm (ТОЛЬКО ХАРДВЕРНЫЙ ПОРТ #EF)
+; =========================================================================
+
+; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ВЫВОДА СИМВОЛА В ПОРТ #EF ---
+MACRO_EF_CHAR   MACRO   char
+                IF ENABLE_HARDWARE_DEBUG == 1
+                    PUSH    AF
+                    PUSH    BC
+                    LD      A, char
+                    LD      BC, #00EF
+                    OUT     (C), A
+                    POP     BC
+                    POP     AF
+                ENDIF
+                ENDM
+
+; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ВЫВОДА СТРОКИ В ПОРТ #EF ---
+MACRO_EF_STRING MACRO   str_addr
+                IF ENABLE_HARDWARE_DEBUG == 1
+                    PUSH    HL
+                    LD      HL, str_addr
+                    CALL    DBG_Port_PrintString
+                    POP     HL
+                ENDIF
+                ENDM
+
+; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ДАМПА 16-БИТНОГО РЕГИСТРА В ПОРТ #EF ---
+MACRO_EF_HEX16  MACRO   reg_hl
+                IF ENABLE_HARDWARE_DEBUG == 1
+                    PUSH    HL
+                    PUSH    reg_hl
+                    POP     HL
+                    CALL    DBG_Port_PrintHex16
+                    POP     HL
+                ENDIF
+                ENDM
+
+; --- ФИЗИЧЕСКИЕ ПОДПРОГРАММЫ ОТЛАДКИ ПОРТА #EF ---
+                IF ENABLE_HARDWARE_DEBUG == 1
+
+; ПОДПРОГРАММЫ ГЕНЕРАЦИИ ТАЙМСТАМПА В ПОРТ ОТЛАДКИ #EF
+DBG_Port_PrintTimestamp::
+        PUSH    AF
+        PUSH    BC
+        PUSH    HL
+        
+        CALL    READ_CURRENT_TIME       ; Считываем актуальное время из чипа К512ВИ1
+        LD      BC, #00EF               ; Порт вывода отладки
+        
+        LD      A, "["
+        OUT     (C), A
+        LD      A, (txt_hour+0)
+        OUT     (C), A
+        LD      A, (txt_hour+1)
+        OUT     (C), A
+        LD      A, ":"
+        OUT     (C), A
+        LD      A, (txt_min+0)
+        OUT     (C), A
+        LD      A, (txt_min+1)
+        OUT     (C), A
+        LD      A, ":"
+        OUT     (C), A
+        LD      A, (txt_sec+0)
+        OUT     (C), A
+        LD      A, (txt_sec+1)
+        OUT     (C), A
+        LD      A, "]"
+        OUT     (C), A
+        LD      A, " "
+        OUT     (C), A
+        
+        POP     HL
+        POP     BC
+        POP     AF
+        RET
+
+; Отправка ASCIIZ строки в порт #EF (с автоматическим таймстампом)
+DBG_Port_PrintString::
+        PUSH    AF
+        PUSH    BC
+        PUSH    HL
+        
+        CALL    DBG_Port_PrintTimestamp ; Принудительно выводим штамп времени
+
+.loop_ef_s:
+        LD      A, (HL)
+        OR      A                       
+        JR      Z, .done_ef_s
+        LD      BC, #00EF
+        OUT     (C), A
+        INC     HL
+        JR      .loop_ef_s
+.done_ef_s:
+        POP     HL
+        POP     BC
+        POP     AF
+        RET
+
+; Вывод 16-битного HEX-значения из HL в порт #EF
+DBG_Port_PrintHex16::
+        PUSH    AF
+        PUSH    BC
+        
+        LD      A, H
+        CALL    .local_hex8
+        LD      A, L
+        CALL    .local_hex8
+        
+        POP     BC
+        POP     AF
+        RET
+
+.local_hex8:
+        PUSH    AF
+        RRA: RRA: RRA: RRA
+        CALL    .local_nibble
+        POP     AF
+.local_nibble:
+        AND     #0F
+        CP      10
+        JR      C, .is_dig
+        ADD     A, 7
+.is_dig:
+        ADD     A, "0"
+        LD      BC, #00EF
+        OUT     (C), A
+        RET
+
+                ENDIF   ; Конец блока условной компиляции порта #EF
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/driver_cmos.asm
+; =========================================================================
+; =========================================================================
+; PERFECT COMMANDER 123 — БЕЗОПАСНЫЙ ИСПРАВЛЕННЫЙ ДРАЙВЕР CMOS ЧАСОВ К512ВИ1
+; СИСТЕМНЫЙ ПУТЬ: zx_main/driver_cmos.asm (ГЛОБАЛЬНЫЙ ЭКСПОРТ СИМВОЛОВ)
+; =========================================================================
+
+; Статические ASCII-буферы для хранения текстового представления времени
+txt_hour::          DEFB "00"           
+txt_min::           DEFB "00"           
+txt_sec::           DEFB "00"
+
+; =========================================================================
+; ИНТЕЛЛЕКТУАЛЬНАЯ БЕЗОПАСНАЯ НАСТРОЙКА CMOS ЧАСОВ
+; =========================================================================
+CHECK_AND_INIT_CMOS::                   
+        PUSH    AF: PUSH BC
+        CALL    open_cmos
+        
+        ; Проверяем сигнатуру наличия часов в ячейке #11
+        LD      A, #11
+        CALL    read_byte_raw
+        CP      #AA
+        JR      Z, .already_active      
+        
+        ; Холодный старт: записываем обязательные системные константы
+        LD      A, #11
+        LD      L, #AA
+        CALL    write_byte_raw         ; Маркер готовности системы
+        
+        LD      A, #0A
+        LD      L, #20
+        CALL    write_byte_raw         ; Регистр А: Включение кварца 32кГц
+        
+        LD      A, #0B
+        LD      L, #02
+        CALL    write_byte_raw         ; Регистр B: 24-часовой BCD формат
+
+.already_active
+        CALL    close_cmos
+        POP     BC: POP     AF
+        RET
+
+; =========================================================================
+; ПРОЦЕДУРА ЧТЕНИЯ ТЕКУЩЕГО ВРЕМЕНИ ИЗ ЧИПА RTC
+; =========================================================================
+READ_CURRENT_TIME::                     
+        PUSH    AF: PUSH BC: PUSH HL
+        DI
+        CALL    open_cmos
+
+.wait_rtc
+        ; Контролируем флаг обновления UIP (битовая маска #80 в регистре #0A)
+        LD      A, #0A
+        CALL    read_byte_raw
+        RLA                             
+        JR      C, .wait_rtc            
+
+        ; Вычитываем BCD данные с атомарным сохранением в текстовые буферы
+        ; 1. Секунды (Ячейка #00)
+        LD      A, #00
+        CALL    read_byte_raw
+        CALL    split_bcd
+        LD      A, H: LD (txt_sec+0), A
+        LD      A, L: LD (txt_sec+1), A
+
+        ; 2. Минуты (Ячейка #02)
+        LD      A, #02
+        CALL    read_byte_raw
+        CALL    split_bcd
+        LD      A, H: LD (txt_min+0), A
+        LD      A, L: LD (txt_min+1), A
+
+        ; 3. Часы (Ячейка #04)
+        LD      A, #04
+        CALL    read_byte_raw
+        CALL    split_bcd
+        LD      A, H: LD (txt_hour+0), A
+        LD      A, L: LD (txt_hour+1), A
+
+        CALL    close_cmos
+        EI
+        POP     HL: POP BC: POP AF
+        RET
+
+; --- Атомарное низкоуровневое чтение байта из К512ВИ1 ---
+read_byte_raw
+        LD      BC, #DFF7
+        OUT     (C), A                  
+        LD      BC, #BFF7
+        IN      A, (C)                  
+        RET
+
+; --- Атомарная низкоуровневая запись байта в К512ВИ1 ---
+write_byte_raw
+        LD      BC, #DFF7
+        OUT     (C), A
+        LD      BC, #BFF7
+        OUT     (C), L
+        RET
+
+open_cmos
+        LD      BC, #EFF7
+        LD      A, #80
+        OUT     (C), A
+        RET
+
+close_cmos
+        LD      BC, #EFF7
+        XOR     A
+        OUT     (C), A
+        RET
+
+; --- Распаковка BCD полубайтов в ASCII символы ---
+split_bcd
+        PUSH    AF
+        AND     %11110000               
+        RRCA: RRCA: RRCA: RRCA
+        ADD     A, 48
+        LD      H, A
+        POP     AF
+        AND     %00001111               
+        ADD     A, 48
+        LD      L, A
+        RET
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/log_debug.asm
+; =========================================================================
+; =========================================================================
+; PERFECT COMMANDER 123 — СЕРВИСНЫЙ МОДУЛЬ МНОГОСТРОЧНОЙ ПЕЧАТИ И HEX-ЛОГОВ
+; СИСТЕМНЫЙ ПУТЬ: zx_main/log_debug.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+; =========================================================================
+
+LOG_WriteMessageToBuffer::
+        PUSH    AF: PUSH BC: PUSH DE: PUSH HL: PUSH IX
+        PUSH    HL: POP IX                      
+
+.loop_text:
+        LD      A, (IX+0): OR A: JR Z, .msg_finished
+        LD      B, A                    
+
+        ; Отправляем символ напрямую в физический знакоместный рендерер экрана
+        CALL    Direct_PrintChar           
+        INC     IX: JR .loop_text
+
+.msg_finished:
+        ; Автоматически закрываем строку лога переводом каретки CR/LF
+        CALL    LOG_CloseActiveLine
+
+        POP     IX: POP HL: POP DE: POP BC: POP AF
+        RET
+
+LOG_CloseActiveLine::
+        PUSH    AF: PUSH BC: PUSH DE: PUSH HL
+        LD      A, #0D: CALL Direct_PrintChar
+        LD      A, #0A: CALL Direct_PrintChar
+        POP     HL: POP DE: POP BC: POP AF
+        RET
+
+; -------------------------------------------------------------------------
+; ВЫВОД 16-БИТНОГО HEX-ЗНАЧЕНИЯ ИЗ HL НА ЭКРАН ХОСТА
+; -------------------------------------------------------------------------
+Util_PrintHex16Screen::
+        PUSH    AF
+        PUSH    BC
+        LD      A, H
+        CALL    Util_Internal_ScreenHex8   ; Печатаем старший байт (H)
+        LD      A, L
+        CALL    Util_Internal_ScreenHex8   ; Печатаем младший байт (L)
+        POP     BC
+        POP     AF
+        RET
+
+; -------------------------------------------------------------------------
+; ВЫВОД 8-БИТНОГО HEX-ЗНАЧЕНИЯ ИЗ L НА ЭКРАН ХОСТА
+; -------------------------------------------------------------------------
+Util_PrintHex8Screen::
+        PUSH    AF
+        PUSH    BC
+        LD      A, L
+        CALL    Util_Internal_ScreenHex8   ; Печатаем байт напрямую
+        POP     BC
+        POP     AF
+        RET
+
+; -------------------------------------------------------------------------
+; ГЛОБАЛЬНАЯ ПОДПРОГРАММА ПОБАЙТОВОГО РЕНДЕРА И ВЫВОДА В HEX НА ЭКРАН
+; -------------------------------------------------------------------------
+Util_Internal_ScreenHex8::
+        PUSH    AF
+        RRA: RRA: RRA: RRA                 ; Сдвигаем старший ниббл вниз
+        CALL    .local_nibble
+        POP     AF
+.local_nibble:
+        AND     #0F                        ; Изолируем 4 бита
+        CP      10
+        JR      C, .is_digit
+        ADD     A, 7                       ; Коррекция для символов A..F
+.is_digit:
+        ADD     A, "0"                     ; Перевод в ASCII-код
+        CALL    Direct_PrintChar           ; Печать символа в знакоместо экрана
+        RET
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/display.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — LOW LEVEL GRAPHIC CHR RENDERER (FROM PROJECT 123)
+; СИСТЕМНЫЙ ПУТЬ: zx_main/display.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+; =========================================================================
+
+; =========================================================================
+; [Дописать в самое начало файла zx_main/display.asm]
+; =========================================================================
+; Связываем имя шрифта из 123-го ядра с бинарным массивом ui_engine проекта 124
+EXTERNAL_FONT_BIN EQU FONT_DATA_88
+
+
+; --- ПРОЦЕДУРА ПРЯМОЙ ПЕЧАТИ НИЖНЕГО ОТЛАДЧИКА С АВТО-СКРОЛЛОМ ---
+Direct_PrintChar::
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+        LD      B, A                    
+
+        ; Тотальный аппаратный перехват в физический порт отладки #EF
+        IF ENABLE_HARDWARE_DEBUG == 1
+        PUSH    BC
+        LD      BC, #00EF
+        OUT     (C), A                  
+        POP     BC
+        ENDIF
+
+        CP      #0D                     ; Проверяем возврат каретки (CR)
+        JR      NZ, .check_lf
+        XOR     A
+        LD      (Console_X), A          
+        JP      .done_print             
+
+.check_lf:
+        CP      #0A                     ; Проверяем перевод строки (LF)
+        JR      NZ, .render_gate
+        XOR     A
+        LD      (Console_X), A          
+        LD      A, (Console_Y)
+        INC     A                       
+        LD      (Console_Y), A
+        CALL    EnsureConsoleSpace      
+        JP      .done_print             
+
+.render_gate:
+        LD      A, (Console_Y)
+        LD      D, A                    
+        LD      A, (Console_X)
+        LD      C, A                    
+        
+        LD      A, B                    
+        CALL    Direct_PrintChar_Args   
+
+        LD      A, (Console_X)
+        INC     A
+        LD      (Console_X), A          
+
+        CP      32                      ; Автоперенос по правому краю
+        JR      C, .done_print          
+        
+        XOR     A
+        LD      (Console_X), A          
+        LD      A, (Console_Y)
+        INC     A                       
+        LD      (Console_Y), A
+        CALL    EnsureConsoleSpace      
+
+.done_print:
+        POP     HL
+        POP     DE
+        POP     BC
+        RET
+
+; --- ТОЧНЫЙ КAНОНИЧЕСКИЙ РЕНДЕРЕР ЗНAКОМЕСТА ИЗ ПРОЕКТА 123 ---
+Direct_PrintChar_Args::
+        PUSH    AF
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+
+        ; 1. РАСЧЕТ ТОЧНОГО АДРЕСА АТРИБУТА ЦВЕТА (#5800)
+        LD      A, D                    ; Console_Y (0..23)
+        AND     #18                     
+        RRCA: RRCA: RRCA
+        ADD     A, #58                  
+        LD      H, A
+        
+        LD      A, D
+        AND     #07
+        RLCA: RLCA: RLCA: RLCA: RLCA    
+        LD      L, A
+        
+        LD      A, C                    ; Console_X (0..31)
+        ADD     A, L
+        LD      L, A                    
+
+        LD      A, D                    
+        CP      12                      
+        JR      NC, .set_black_bg
+        LD      A, %01001111            ; Верх (0..11): PAPER=1(Синий), INK=7(Белый), BRIGHT=1
+        JR      .write_color
+.set_black_bg:
+        LD      A, %01000100            ; Низ (12..23): PAPER=0(Черный), INK=4(Зеленый), BRIGHT=1
+.write_color:
+        LD      (HL), A                 
+
+        ; 2. КAНОНИЧЕСКИЙ РАСЧЕТ АДРЕСА ПИКСЕЛЕЙ В ЭКРАНЕ (#4000)
+        LD      A, D                    
+        AND     #18
+        ADD     A, #40                  
+        LD      H, A                    
+        
+        LD      A, D                    
+        AND     #07
+        RRCA: RRCA: RRCA
+        LD      L, A
+        
+        LD      A, L
+        AND     #E0
+        ADD     A, C                    
+        LD      E, A
+        
+        LD      A, L
+        AND     #07
+        OR      H
+        LD      D, A                    ; DE = базовый адрес пикселей на экране
+
+        ; 3. ПОСТРОЧНЫЙ РЕНДЕР ШРИФТА ИЗ ВЫБРАННОГО МАССИВА ОБОЛОЧКИ
+        LD      A, B                    
+        SUB     32
+        LD      L, A
+        LD      H, 0
+        ADD     HL, HL
+        ADD     HL, HL
+        ADD     HL, HL                  ; HL = смещение буквы (ASCII * 8)
+        
+        PUSH    DE
+        LD      A, (UI_Active_Font)
+        AND     A
+        JR      NZ, .low_font68
+        LD      BC, FONT_DATA_88
+        JR      .low_font_done
+.low_font68:
+        LD      BC, FONT_DATA_68
+.low_font_done:
+        ADD     HL, BC                  
+        POP     DE
+
+        ; Отрисовка 8 вертикальных линий
+        LD      B, 8
+.draw_font_loop:
+        LD      A, (HL)
+        LD      (DE), A
+        INC     HL
+        INC     D                       
+        DJNZ    .draw_font_loop
+
+        POP     HL
+        POP     DE
+        POP     BC
+        POP     AF
+        RET
+
+; Отрисовка разделительной рамки панелей Commander
+DrawCommanderPanels::
+        PUSH    AF: PUSH BC: PUSH DE: PUSH HL
+        LD      A, 11
+        LD      (Console_Y), A
+        XOR     A
+        LD      (Console_X), A
+        LD      B, 32
+.loop_line:
+        LD      A, #44                  ; Код горизонтальной линии "═"
+        CALL    Direct_PrintChar_Args
+        LD      A, (Console_X): INC A: LD (Console_X), A
+        DJNZ    .loop_line
+        POP     HL: POP DE: POP BC: POP AF
+        RET
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/ui_engine.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — USER INTERFACE & GRAPHIC TEXT ENGINE (FROM PROJECT 123)
+; СИСТЕМНЫЙ ПУТЬ: zx_main/ui_engine.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+; =========================================================================
+
+UI_Active_Font:: DB 0                    ; 0 = font88, 1 = font68
+
+; --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ КУРСОРНОЙ НАВИГАЦИИ (ИЗ ПРОЕКТА 123) ---
+CursorY::        DEFB 2                  ; Текущая строка курсора панели (2..10)
+
+; --- ТAБЛИЧНЫЙ СKРOЛЛИНГ НИЖНЕГO OKНA ЛOГOВ ИЗ ПРOЕKТA 123 ---
+UI_ScrollConsoleUp::
+        PUSH    IX: PUSH AF: PUSH BC: PUSH DE: PUSH HL
+        XOR     A                       
+        LD      (.local_micro_ctr), A
+.global_loop:
+        LD      IX, .Line_Addr_Table
+        LD      A, 11                   
+        LD      (.local_row_ctr), A       
+.rows_loop:
+        LD      E, (IX+0): LD D, (IX+1)               
+        LD      L, (IX+2): LD H, (IX+3)               
+        PUSH    IX: PUSH BC                      
+        LD      A, (.local_micro_ctr): ADD A, D: LD D, A                    
+        LD      A, (.local_micro_ctr): ADD A, H: LD H, A                    
+        LD      BC, 32: LDIR                            
+        POP     BC: POP IX                      
+        LD      DE, 4: ADD IX, DE                  
+        LD      A, (.local_row_ctr): DEC A: LD (.local_row_ctr), A
+        JR      NZ, .rows_loop   
+
+        LD      A, (.local_micro_ctr): INC A: LD (.local_micro_ctr), A
+        CP      8                        
+        JR      C, .global_loop   
+
+        ; Сдвиг цветовых атрибутов лога
+        LD      DE, #5980: LD HL, #59A0: LD BC, 352: LDIR                            
+        ; Очистка последней строки атрибутов
+        LD      HL, #5B00: LD DE, #5B01: LD (HL), %01000100: LD BC, 31: LDIR                            
+        ; Очистка пикселей 23-й строки
+        XOR     A: LD H, #50                  
+.clear_pixels:
+        PUSH    AF: PUSH HL                      
+        LD      L, #E0: LD C, 32: XOR A
+.clear_bytes:
+        LD      (HL), A: INC HL: DEC C: JR NZ, .clear_bytes  
+        POP     HL: INC H: POP AF: INC A: CP 8: JR C, .clear_pixels
+
+        POP     HL: POP DE: POP BC: POP AF: POP IX
+        LD      A, 23: LD (Console_Y), A
+        XOR     A: LD (Console_X), A
+        RET
+
+.Line_Addr_Table:
+        DW #4880, #48A0, #48A0, #48C0, #48C0, #48E0, #48E0, #5000                 
+        DW #5000, #5020, #5020, #5040, #5040, #5060, #5060, #5080                 
+        DW #5080, #50A0, #50A0, #50C0, #50C0, #50E0                 
+
+.local_micro_ctr: DB 0
+.local_row_ctr:   DB 0
+
+ClearScreenROM::
+        PUSH    BC: PUSH DE: PUSH HL
+        LD      HL, #4000: LD DE, #4001: LD (HL), 0: LD BC, 6143: LDIR                            
+        LD      HL, #5800: LD DE, #5801: LD (HL), %01000100: LD BC, 767: LDIR
+        POP     HL: POP DE: POP BC
+        RET
+
+ForceInterfaceColors::
+        PUSH    AF: PUSH BC: PUSH DE: PUSH HL
+        LD      HL, #5800
+        LD      DE, #5801
+        LD      (HL), %01001111         ; Верх: Синий
+        LD      BC, 383                 
+        LDIR
+        
+        LD      HL, #5980
+        LD      DE, #5981
+        LD      (HL), %01000100         ; Низ: Черный
+        LD      BC, 383                 
+        LDIR
+        POP     HL: POP DE: POP BC: POP AF
+        RET      
+
+; --- АППАРАТНЫЙ ОПРОС КЛАВИШ НАВИГАЦИИ (ИЗ ПРОЕКТА 123) ---
+GetHardwareKey::                        
+        LD      BC, #DFFE: IN A, (C): BIT 1, A: JR Z, .key_o_pressed        
+        LD      BC, #BFFE: IN A, (C): BIT 1, A: JR Z, .key_l_pressed        
+        XOR     A: RET
+.key_o_pressed: LD A, 1: RET
+.key_l_pressed: LD A, 2: RET
+
+; =========================================================================
+; ИМПОРТ БИНАРНЫХ ФАЙЛОВ ШРИФТОВ ИЗ ВАШЕГО КАТАЛОГА
+; =========================================================================
+        ALIGN 256
+FONT_DATA_88:
+        INCBIN "font88.bin"             ; Крупный шрифт 8x8
+
+        ALIGN 256
+FONT_DATA_68:
+        INCBIN "font68.bin"             ; Компактный шрифт 6x8
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/ui_panels.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — FILE PANELS & HIGH LEVEL GRAPHICS (FROM PROJECT 123)
+; СИСТЕМНЫЙ ПУТЬ: zx_main/ui_panels.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+; =========================================================================
+
+; --- ТАБЛИЦА АДРЕСОВ АТРИБУТОВ СТРОК КУРСOРА ПАНЕЛИ (Y = 2..10) ---
+Cursor_Row_Table:
+        DW #5841 , #5861 , #5881 , #58A1 , #58C1 , #58E1 , #5901 , #5921 , #5941
+
+; --- ВЫЧИСЛЕНИЕ АДРЕСА СТРОКИ АТРИБУТОВ ДЛЯ КУРСОРНОЙ НАВИГАЦИИ ---
+Get_Cursor_RAM_Address:
+        LD      A, (CursorY)            
+        SUB     2                       
+        ADD     A, A                    
+        LD      E, A 
+        LD      D, 0 
+        LD      HL, Cursor_Row_Table    
+        ADD     HL, DE                  
+        LD      A, (HL) 
+        LD      E, A 
+        INC     HL 
+        LD      A, (HL) 
+        LD      D, A 
+        EX      DE, HL                  
+        RET 
+
+; --- ОТРЕСОВКА ИНВЕРСИОННОЙ ПОЛОСЫ ВЫДЕЛЕНИЯ ФАЙЛА ---
+DrawActiveCursor::
+        PUSH    BC                      
+        PUSH    HL                      
+        CALL    Get_Cursor_RAM_Address  
+        LD      B, 30                   
+.loop:
+        LD      (HL), %00111000         ; Инверсия: Белый фон, черный text
+        INC     HL                     
+        DJNZ    .loop                  
+        POP     HL                     
+        POP     BC                      
+        RET                             
+
+; --- СТИРАНИЕ ИНВЕРСИОННОЙ ПОЛОСЫ С ВОЗВРАТОМ СИНЕГО ЦВЕТА ---
+EraseActiveCursor::
+        PUSH    BC                      
+        PUSH    HL                      
+        CALL    Get_Cursor_RAM_Address  
+        LD      B, 30                   
+.loop:
+        LD      (HL), %01001111         ; Синий фон %4F
+        INC     HL                     
+        DJNZ    .loop                  
+        POP     HL                     
+        POP     BC                      
+        RET                             
+
+; --- ГЛОБАЛЬНАЯ ТОЧКА ИНИЦИАЛИЗАЦИИ ИНТЕРФЕЙСА ОКОН PERFECT COMMANDER ---
+INIT_PROGRAM_INTERFACE::
+        PUSH    AF: PUSH BC: PUSH DE: PUSH HL
+
+        CALL    ClearScreenROM          ; Полная очистка экрана и атрибутов
+        
+        LD      A, 12                   
+        LD      (#5C6A), A              ; DF_SZ = 12 строк для панели файлов
+        LD      A, %00111000            
+        LD      (#5C8D), A             
+        LD      A, %01000100            
+        LD      (#5C8C), A             
+
+        XOR     A                       
+        OUT     (254), A                ; Черный бордюр
+
+        LD      A, %00111000            
+        LD      (#5C48), A             
+        LD      (#5C8F), A             
+        LD      (#5C49), A             
+
+        CALL    ForceInterfaceColors    ; Заливка окон цветом
+        CALL    DrawCommanderPanels     ; Отрисовка разделительной линии панелей
+
+        ; Начальные координаты для вывода логов в нижнем черном окне
+        LD      A, 12                   
+        LD      (Console_Y), A
+        XOR     A
+        LD      (Console_X), A         
+
+        ; ОТРЕНДЕРИТЬ ДИНАМИЧЕСКИЙ КАТАЛОГ ДИСКА А
+        CALL    Refresh_Panel_Directory 
+
+        ; Фиксируем полосу курсора на первую строку файлов (строка 2)
+        LD      A, 2                  
+        LD      (CursorY), A          
+        CALL    DrawActiveCursor       
+
+        POP     HL: POP DE: POP BC: POP AF
+        RET
+
+; --- АППАРАТНЫЙ КОНТРОЛЬ СВОБОДНОГО МЕСТА ДЛЯ ВЕРТИКАЛЬНОГО СКРОЛЛИНГА ---
+EnsureConsoleSpace::
+        PUSH    AF
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+
+        LD      A, (Console_Y)
+        CP      24                      ; Нижний лог занимает строки 12..23
+        JR      C, .space_ok            
+
+        CALL    UI_ScrollConsoleUp      ; Вызываем табличный аппаратный сдвиг экрана
+        
+        LD      A, 23                   
+        LD      (Console_Y), A
+        XOR     A
+        LD      (Console_X), A          
+
+.space_ok:
+        POP     HL
+        POP     DE
+        POP     BC
+        POP     AF
+        RET
+
+
+; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/file_utils.asm
+; =========================================================================
+; =========================================================================
+; FILE: zx_main/file_utils.asm
+; PROJECT 124 — TR-DOS directory utilities
+; Sector API verified for TR-DOS 5.04T: C=#05, D=track, E=internal sector
+; 0..15, B=count, HL=destination; error status at #5D0F.
+; =========================================================================
+
+; IN: CursorY = visible row (2..10)
+; OUT: HL = 16-byte descriptor in TRDOS_PANEL_BUFFER, carry clear.
+;      HL=0 and carry set for an invalid/empty row.
+GetSelectedFileDescriptor::
+        ld      a, (CursorY)
+        cp      2
+        jr      c, .bad_row
+        cp      11
+        jr      nc, .bad_row
+        sub     2
+        ld      l, a
+        ld      h, 0
+        add     hl, hl
+        add     hl, hl
+        add     hl, hl
+        add     hl, hl
+        ld      de, TRDOS_PANEL_BUFFER
+        add     hl, de
+
+        ; Reject an empty/deleted/invalid catalogue slot.
+        ld      a, (hl)
+        cp      32
+        jr      c, .bad_row
+        cp      127
+        jr      nc, .bad_row
+        or      a
+        ret
+.bad_row:
+        ld      hl, 0
+        scf
+        ret
+
+LogSelectedFile::
+        push    hl
+        ld      hl, .str_exec_prefix
+        call    LOG_WriteMessageToBuffer
+        pop     hl
+        ret
+.str_exec_prefix:
+        defb "[LAUNCH] Invoking system CODE loader for selected workspace node...", #0D, #0A, 0
+
+; Read and render the complete 128-entry TR-DOS catalogue (8 * 256 bytes).
+PrintDiskDirectory::
+        push    af
+        push    bc
+        push    de
+        push    hl
+
+        ; Select drive A and clear the two-byte TR-DOS error result.
+        xor     a
+        ld      (#5D19), a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+
+        ; C=#05 raw resident convention: D=track 0, E=sector 0..15.
+        ld      de, #0000
+        ld      b, 8
+        ld      c, 5
+        ld      hl, TRDOS_PANEL_BUFFER
+        call    #3D13
+
+        ; C=#05 reports read errors in the TR-DOS error byte #5D0F.
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .directory_read_error
+
+        ld      b, 128
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      a, 2
+        ld      (File_Y), a
+
+.loop_slots:
+        push    bc
+        push    hl
+
+        ld      a, (hl)
+        or      a
+        jp      z, .empty_slot
+        cp      1
+        jp      z, .invalid_slot
+        cp      32
+        jp      c, .invalid_slot
+        cp      127
+        jp      nc, .invalid_slot
+
+        ld      a, 2
+        ld      (File_X), a
+        ld      c, 25
+.clear_pixels_loop:
+        push    bc
+        push    hl
+        ld      a, (File_X)
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        ld      b, " "
+        call    Direct_PrintChar_Args
+        pop     hl
+        pop     bc
+        ld      a, (File_X)
+        inc     a
+        ld      (File_X), a
+        dec     c
+        jr      nz, .clear_pixels_loop
+
+        ld      a, 2
+        ld      (File_X), a
+        ld      c, 8
+.print_name:
+        ld      a, (hl)
+        push    bc
+        push    hl
+        ld      b, a
+        ld      a, (File_X)
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        call    Direct_PrintChar_Args
+        ld      a, (File_X)
+        inc     a
+        ld      (File_X), a
+        pop     hl
+        pop     bc
+        inc     hl
+        dec     c
+        jr      nz, .print_name
+
+        ; Extension separator at X=10.
+        ld      a, 10
+        ld      (File_X), a
+        push    hl
+        ld      c, 10
+        ld      a, (File_Y)
+        ld      d, a
+        ld      b, "."
+        call    Direct_PrintChar_Args
+        pop     hl
+
+        ; File type at X=11.
+        ld      a, 11
+        ld      (File_X), a
+        ld      a, (hl)
+        push    hl
+        ld      b, a
+        ld      a, 11
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        call    Direct_PrintChar_Args
+        pop     hl
+
+        ; Descriptor byte 13 = allocated sector count. Display ceil(sectors/4)
+        ; without 8-bit overflow: (sectors + 3) is calculated in 16 bits.
+        push    hl
+        ld      de, 13
+        add     hl, de
+        ld      a, (hl)
+        ld      e, a
+        ld      d, 0
+        ld      hl, 3
+        add     hl, de
+        srl     h
+        rr      l
+        srl     h
+        rr      l
+        ld      a, l
+        pop     hl
+
+        ld      c, 16
+        call    Util_PrintDecimalByte
+
+        ld      a, 20
+        ld      (File_X), a
+        ld      a, (File_Y)
+        ld      d, a
+        ld      c, 20
+        ld      b, "K"
+        call    Direct_PrintChar_Args
+
+        ld      a, 21
+        ld      (File_X), a
+        ld      a, (File_Y)
+        ld      d, a
+        ld      c, 21
+        ld      b, "b"
+        call    Direct_PrintChar_Args
+
+        ld      a, (File_Y)
+        inc     a
+        ld      (File_Y), a
+        cp      11
+        jp      nc, .directory_done
+
+        ; Advance to next 16-byte descriptor. Restore saved slot counter.
+        pop     hl
+        ld      de, 16
+        add     hl, de
+        pop     bc
+        dec     b
+        jp      nz, .loop_slots
+        jp      .directory_success
+
+.invalid_slot:
+        ; Drop the per-slot saves, advance HL, and decrement the ORIGINAL
+        ; 128-entry counter. Do not load 16 into BC (that destroys B), and
+        ; do not push the per-slot saves again before re-entering the loop.
+        pop     hl
+        pop     bc
+        ld      de, 16
+        add     hl, de
+        dec     b
+        jp      nz, .loop_slots
+        jp      .directory_success
+
+.empty_slot:
+        ; Per-slot BC/HL saves are still present.
+        pop     hl
+        pop     bc
+        jp      .directory_success
+
+.directory_done:
+        ; Per-slot BC/HL saves are still present.
+        pop     hl
+        pop     bc
+.directory_success:
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        or      a
+        ret
+
+.directory_read_error:
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        scf
+        ret
+
+; IN: A=value 0..255, C=screen X. Prints exactly three decimal digits.
+Util_PrintDecimalByte:
+        push    af
+        push    bc
+        push    de
+        push    hl
+        ld      e, a
+        ld      a, c
+        ld      (File_X), a
+        ld      a, e
+        ld      b, 0
+.hundreds:
+        cp      100
+        jr      c, .p_hundreds
+        sub     100
+        inc     b
+        jr      .hundreds
+.p_hundreds:
+        ld      e, a
+        ld      a, b
+        add     a, #30
+        push    de
+        ld      b, a
+        ld      a, (File_X)
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        call    Direct_PrintChar_Args
+        ld      a, (File_X)
+        inc     a
+        ld      (File_X), a
+        pop     de
+
+        ld      a, e
+        ld      b, 0
+.tens:
+        cp      10
+        jr      c, .p_tens
+        sub     10
+        inc     b
+        jr      .tens
+.p_tens:
+        ld      e, a
+        ld      a, b
+        add     a, #30
+        push    de
+        ld      b, a
+        ld      a, (File_X)
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        call    Direct_PrintChar_Args
+        ld      a, (File_X)
+        inc     a
+        ld      (File_X), a
+        pop     de
+
+        ld      a, e
+        add     a, #30
+        ld      b, a
+        ld      a, (File_X)
+        ld      c, a
+        ld      a, (File_Y)
+        ld      d, a
+        call    Direct_PrintChar_Args
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+Refresh_Panel_Directory::
+        push    af
+        push    bc
+        push    de
+        push    hl
+
+        ; Fill 320 attribute bytes with #4F. The original byte sequence was
+        ; LD HL,#5841, leaving DE undefined. This is the correct fill idiom.
+        ld      hl, #5840
+        ld      (hl), %01001111
+        ld      de, #5841
+        ld      bc, 319
+        ldir
+
+        call    PrintDiskDirectory
+        jr      c, .refresh_failed
+        call    DrawActiveCursor
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        or      a
+        ret
+.refresh_failed:
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        scf
+        ret
+
+File_X: DB 0
+File_Y: DB 0
+
+
+; =========================================================================
+; FILE: neogs_sub/main.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — NeoGS Z80 firmware / command dispatcher
+; Based on NeoGS Programmer's Guide v0.1.A and ports.inc v0.3.
+;
+; MEMORY MAP / BOOT:
+; The stock GS105a ROM loads a tiny module at $5B00. That module enables
+; RAM-over-ROM and receives this firmware at logical RAM address $0000.
+; The firmware occupies $0000-$2FFF; its stack is at $3FFF.
+; NeoGS logical $4000-$7FFF is the second half of physical RAM page 1,
+; therefore logical $5000 maps to physical linear address $00D000.
+; The x86 DMA frame is placed at $5000: [length lo][length hi][x86 bytes].
+; The interpreter starts at $5002 and is bounded by the exact file length.
+; =========================================================================
+
+        INCLUDE "../shared/neogs_io.inc"
+
+        ORG     $0000
+
+ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
+X86_DMA_HEADER_ADDR        EQU $5000
+X86_RAM_RUN_ADDR           EQU $5002
+DMA_WAIT_LIMIT   EQU #FFFF
+DMA_WAIT_OUTER   EQU 8
+IPC_WAIT_LIMIT   EQU #FFFF
+
+; Firmware entry vector
+        jp      start_neoprogram
+        BLOCK   53, 0
+        ei
+        ret
+        BLOCK   198, 0
+
+start_neoprogram:
+        di
+        im      1
+        ld      sp, $3FFF
+
+        ; Set Z80 to the documented maximum guaranteed clock: 20 MHz.
+        ; Do not select 24 MHz: the guide explicitly says it is not guaranteed.
+        in      a, (GSCFG0)
+        and     #CF
+        or      C_20MHZ
+        out     (GSCFG0), a
+
+        xor     a
+        ld      (neo_dma_error), a
+        ld      (saved_z80_ax), a
+        ld      (saved_z80_ax+1), a
+        ld      (saved_x86_ax), a
+        ld      (saved_x86_ax+1), a
+        ld      (x86_exit_status), a
+        ld      (neo_command), a
+        ld      (neo_tx_byte), a
+
+        ; Copy the ROM-return trampoline into unoverlaid RAM at $4000.
+        ld      hl, rom_return_trampoline_code
+        ld      de, ROM_RETURN_TRAMPOLINE_ADDR
+        ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
+        ldir
+
+        ; Notify the Spectrum only after the new firmware is executing.
+        ld      a, NGS_FIRMWARE_READY_ACK
+        call    neo_send_data_byte
+
+main_loop:
+        ; A command exists only while CBIT (ZXSTAT bit 0) is set.
+        in      a, (ZXSTAT)
+        bit     B_CBIT, a
+        jr      z, main_loop
+
+        ; Read the command byte from ZXCMD. Reading it does NOT clear CBIT.
+        in      a, (ZXCMD)
+        ld      (neo_command), a
+
+        ; Standard GS #F4 cold restart also returns this custom firmware to ROM.
+        cp      GS_CMD_COLD_RESTART
+        jp      z, command_return_to_gsrom
+        cp      CMD_RESET
+        jp      z, command_reset
+        cp      CMD_LOAD_X86
+        jp      z, command_load_x86
+        cp      CMD_RUN_X86
+        jp      z, command_run_x86
+        cp      CMD_GET_STATUS
+        jp      z, command_get_status
+
+        ; Unknown command: release CBIT so the host cannot deadlock.
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; A #F4 command is also the standard GS105a cold-restart command.
+; If our firmware is running, reveal the stock ROM again and jump to its
+; reset vector. Leave CBIT asserted: the ROM's cold-start path clears it when
+; the standard firmware is ready, so the host's long wait is a real handshake.
+command_return_to_gsrom:
+        jp      ROM_RETURN_TRAMPOLINE_ADDR
+
+command_reset:
+        xor     a
+        ld      (neo_dma_error), a
+        ld      (x86_exit_status), a
+        ld      (saved_z80_ax), a
+        ld      (saved_z80_ax+1), a
+        ld      (saved_x86_ax), a
+        ld      (saved_x86_ax+1), a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; -------------------------------------------------------------------------
+; CMD_LOAD_X86
+; 1) Select ZX DMA module and set physical target $00D000.
+; 2) Enable DMA by setting DMA_CST bit 7.
+; 3) Clear CBIT: this is the READY indication to the host.
+; 4) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
+; 5) Disable DMA, then clear CBIT to acknowledge completion.
+;
+; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
+; -------------------------------------------------------------------------
+command_load_x86:
+        ld      a, C_DMA_ZX
+        out     (DMA_MOD), a
+
+        xor     a
+        out     (DMA_HAD), a            ; physical address bits 21:16 = 0
+        ld      a, #D0
+        out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
+        xor     a
+        out     (DMA_LAD), a            ; physical address bits 7:0 = 0
+
+        ld      a, #80
+        out     (DMA_CST), a            ; DMA enable = bit 7
+
+        xor     a
+        out     (CLRCBIT), a            ; host may now start LDIR
+
+        ld      d, DMA_WAIT_OUTER
+.dma_wait_outer:
+        ld      bc, DMA_WAIT_LIMIT
+.dma_wait_host_end:
+        in      a, (ZXSTAT)
+        bit     B_CBIT, a
+        jr      nz, .dma_host_end
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .dma_wait_host_end
+        dec     d
+        jr      nz, .dma_wait_outer
+
+        ; Timeout: close DMA and release the host command line.
+        xor     a
+        out     (DMA_CST), a
+        out     (CLRCBIT), a
+        ld      a, 1
+        ld      (neo_dma_error), a
+        ld      a, 3
+        ld      (x86_exit_status), a
+        jp      main_loop
+
+.dma_host_end:
+        xor     a
+        out     (DMA_CST), a            ; disable DMA before leaving handler
+        out     (CLRCBIT), a            ; acknowledge host's #FF marker
+        xor     a
+        ld      (neo_dma_error), a
+        jp      main_loop
+
+; -------------------------------------------------------------------------
+; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
+; -------------------------------------------------------------------------
+command_run_x86:
+        call    execute_neogs_x86
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+execute_neogs_x86:
+        ld      a, (neo_dma_error)
+        or      a
+        jr      z, .dma_ok
+        ld      hl, $FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 3
+        ld      (x86_exit_status), a
+        ret
+
+.dma_ok:
+        ; DMA frame begins with a little-endian x86 byte length at $5000.
+        ld      hl, (X86_DMA_HEADER_ADDR)
+        ld      a, h
+        or      l
+        jp      z, .invalid_x86_length
+
+        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
+        ld      a, h
+        cp      #2F
+        jr      c, .x86_length_valid
+        jp      nz, .invalid_x86_length
+        ld      a, l
+        cp      #FF
+        jp      nc, .invalid_x86_length
+
+.x86_length_valid:
+        ld      de, X86_RAM_RUN_ADDR
+        add     hl, de
+        ld      (x86_program_end), hl
+
+        ld      hl, 0
+        ld      (saved_z80_ax), hl
+        ld      hl, #FFFF
+        ld      (x86_steps_remaining), hl
+        xor     a
+        ld      (x86_exit_status), a
+
+        ld      bc, X86_RAM_RUN_ADDR
+        call    x86_execute_loop
+
+        ld      hl, (saved_z80_ax)
+        ld      (saved_x86_ax), hl
+        ret
+
+.invalid_x86_length:
+        ld      hl, #FFFF
+        ld      (saved_z80_ax), hl
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        ret
+
+; -------------------------------------------------------------------------
+; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
+;   A5 signature, exit status, AX low, AX high.
+; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
+; -------------------------------------------------------------------------
+command_get_status:
+        ld      a, NGS_RESULT_SIGNATURE
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      a, (x86_exit_status)
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      hl, (saved_x86_ax)
+        ld      a, l
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      a, h
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+.status_tx_failed:
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; -------------------------------------------------------------------------
+; neo_send_data_byte
+; IN: A = byte to send to Spectrum.
+; Wait for DBIT=0, write ZXDATWR (#03), then wait for host read to clear DBIT.
+; OUT: carry clear on success, carry set on timeout. Preserves HL and DE.
+; -------------------------------------------------------------------------
+neo_send_data_byte:
+        ld      (neo_tx_byte), a
+        ld      bc, IPC_WAIT_LIMIT
+.tx_wait_slot:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, .tx_slot_free
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .tx_wait_slot
+        scf
+        ret
+
+.tx_slot_free:
+        ld      a, (neo_tx_byte)
+        out     (ZXDATWR), a
+
+        ld      bc, IPC_WAIT_LIMIT
+.tx_wait_host_read:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, .tx_host_read
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .tx_wait_host_read
+        scf
+        ret
+
+.tx_host_read:
+        or      a
+        ret
+
+neo_command:       db 0
+neo_tx_byte:       db 0
+neo_dma_error:     db 0
+saved_z80_ax:      dw 0
+saved_x86_ax:      dw 0
+
+; This code is copied to $4000 during startup. Its OUT changes the ROM map,
+; but the following JP is still fetched from RAM because PC remains in $4000.
+rom_return_trampoline_code:
+        in      a, (GSCFG0)
+        and     #FE
+        out     (GSCFG0), a
+        jp      0
+rom_return_trampoline_end:
+
+        INCLUDE "x86_interpreter.asm"
+
+        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+        ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
+
+neogs_firmware_end:
+
+
+; =========================================================================
+; FILE: neogs_sub/bootstrap.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — first-stage NeoGS executable bootstrap
+;
+; GS105a command #14 (RECEIVE BLOCK) loads this raw Z80 image into fixed RAM
+; at $4000. GS105a command #13 (JUMP TO ADDRESS) enters it at $4000.
+;
+; The bootstrap maps RAM over the low ROM window, receives a 16-bit firmware
+; length and exactly that many bytes through the documented ZX data channel,
+; stores the custom firmware at RAM address $0000, then jumps to $0000.
+;
+; It executes from the fixed RAM window $4000-$7FFF and keeps its stack below
+; $4000. The fixed $4000-$7FFF RAM window remains visible after B_NOROM is set.
+; =========================================================================
+
+neogs_bootstrap_start:
+        di
+        ld      sp, #3FFF
+
+        ; Hide the stock ROM and expose RAM at logical $0000-$3FFF.
+        in      a, (GSCFG0)
+        and     #FD                    ; clear RAMRO: low RAM must be writable
+        or      M_NOROM                ; map RAM over the stock ROM at $0000
+        out     (GSCFG0), a
+
+        ; Tell Spectrum that the tiny loader is running and waiting for length.
+        ld      a, NGS_BOOTSTRAP_READY_ACK
+        call    bootstrap_send_data_byte
+
+        ; Host sends length low byte, then high byte.
+        call    bootstrap_receive_data_byte
+        ld      e, a
+        call    bootstrap_receive_data_byte
+        ld      d, a
+
+        ; Reject zero length and any image larger than the reserved low RAM area.
+        ld      a, d
+        or      e
+        jr      z, bootstrap_error
+        ld      a, d
+        cp      #30
+        jr      c, bootstrap_length_ok
+        jr      nz, bootstrap_error
+        ld      a, e
+        or      a
+        jr      nz, bootstrap_error
+
+bootstrap_length_ok:
+        ; Explicitly acknowledge that the length is accepted before the host
+        ; starts streaming the firmware payload.
+        ld      a, NGS_BOOTSTRAP_LENGTH_ACK
+        call    bootstrap_send_data_byte
+        ld      hl, 0
+
+bootstrap_copy_loop:
+        ld      a, d
+        or      e
+        jr      z, bootstrap_start_firmware
+        call    bootstrap_receive_data_byte
+        ld      (hl), a
+        inc     hl
+        dec     de
+        jr      bootstrap_copy_loop
+
+bootstrap_start_firmware:
+        jp      0
+
+bootstrap_error:
+        ld      a, NGS_BOOTSTRAP_ERROR_ACK
+        call    bootstrap_send_data_byte
+.bootstrap_halt:
+        di
+        halt
+        jr      .bootstrap_halt
+
+; Wait for one byte from Spectrum. Reading ZXDATRD clears DBIT.
+bootstrap_receive_data_byte:
+.rx_wait:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      z, .rx_wait
+        in      a, (ZXDATRD)
+        ret
+
+; Send one byte to Spectrum. Host reads GSDAT and clears DBIT.
+bootstrap_send_data_byte:
+        ld      (bootstrap_tx_byte), a
+.tx_free:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      nz, .tx_free
+        ld      a, (bootstrap_tx_byte)
+        out     (ZXDATWR), a
+.tx_wait_read:
+        in      a, (ZXSTAT)
+        bit     B_DBIT, a
+        jr      nz, .tx_wait_read
+        ret
+
+bootstrap_tx_byte:
+        db      0
+
+neogs_bootstrap_end:
+
+
+; =========================================================================
+; FILE: neogs_sub/x86_interpreter.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — minimal x86 interpreter core for NeoGS Z80
+;
+; Supported opcodes:
+;   90       NOP
+;   40       INC AX (8086 legacy one-byte register encoding)
+;   B8 iw    MOV AX, imm16
+;   F4       HLT (successful task termination)
+;
+; Unsupported opcode: status 2. Instruction budget exhausted: status 1.
+; DMA error: status 3. Out-of-range/truncated instruction: status 4.
+; x86_program_end is the exclusive logical address after the payload.
+;
+; Entry: BC = x86 IP in NeoGS Z80 logical address space; AX stored in
+;        saved_z80_ax. Exit: saved_z80_ax and x86_exit_status are updated.
+; =========================================================================
+
+x86_execute_loop:
+x86_next_instruction:
+        ; Every opcode fetch must remain strictly below the exclusive end.
+        ld      hl, (x86_program_end)
+        or      a
+        sbc     hl, bc
+        jp      c, x86_ip_out_of_range
+        ld      a, h
+        or      l
+        jp      z, x86_ip_out_of_range
+
+        ld      hl, (x86_steps_remaining)
+        ld      a, h
+        or      l
+        jr      nz, .budget_ok
+        ld      a, 1
+        ld      (x86_exit_status), a
+        ld      hl, (saved_z80_ax)
+        ret
+
+.budget_ok:
+        dec     hl
+        ld      (x86_steps_remaining), hl
+
+        ; Fetch opcode and advance IP.
+        ld      a, (bc)
+        inc     bc
+
+        ; Resolve handler from 256-entry WORD table.
+        ld      l, a
+        ld      h, 0
+        add     hl, hl
+        ld      de, x86_jump_table
+        add     hl, de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+
+        ; Restore AX in HL and jump to the selected handler. PUSH/RET is
+        ; the Z80's safe indirect-jump idiom; BC remains the virtual x86 IP.
+        ld      hl, (saved_z80_ax)
+        push    de
+        ret
+
+; 90 — NOP
+x86_nop:
+        ld      (saved_z80_ax), hl
+        jp      x86_next_instruction
+
+; 40 — INC AX
+x86_inc_ax:
+        inc     hl
+        ld      (saved_z80_ax), hl
+        jp      x86_next_instruction
+
+; B8 iw — MOV AX, imm16 (little-endian immediate)
+x86_mov_ax_imm16:
+        ; B8 requires two immediate bytes. Reject a truncated instruction.
+        ld      hl, (x86_program_end)
+        or      a
+        sbc     hl, bc
+        ld      de, 2
+        or      a
+        sbc     hl, de
+        jp      c, x86_ip_out_of_range
+
+        ld      l, c
+        ld      h, b
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      b, h
+        ld      c, l
+        ld      (saved_z80_ax), de
+        jp      x86_next_instruction
+
+; F4 — HLT: successful end of task
+x86_hlt:
+        ld      (saved_z80_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        ret
+
+; Unsupported instruction: stop rather than executing arbitrary memory.
+x86_unsupported:
+        ld      (saved_z80_ax), hl
+        ld      a, 2
+        ld      (x86_exit_status), a
+        ret
+
+x86_ip_out_of_range:
+        ld      a, 4
+        ld      (x86_exit_status), a
+        ld      hl, (saved_z80_ax)
+        ret
+
+        ALIGN   256
+x86_jump_table:
+        DW      x86_unsupported             ; 00
+        DW      x86_unsupported             ; 01
+        REPT    #40 - #02
+        DW      x86_unsupported
+        ENDR
+        DW      x86_inc_ax                  ; 40
+        REPT    #90 - #41
+        DW      x86_unsupported
+        ENDR
+        DW      x86_nop                     ; 90
+        REPT    #B8 - #91
+        DW      x86_unsupported
+        ENDR
+        DW      x86_mov_ax_imm16            ; B8
+        REPT    #F4 - #B9
+        DW      x86_unsupported
+        ENDR
+        DW      x86_hlt                     ; F4
+        REPT    256 - #F5
+        DW      x86_unsupported
+        ENDR
+
+x86_steps_remaining: dw 0
+x86_program_end:     dw 0
+x86_exit_status:     db 0
+
+
+; =========================================================================
+; FILE: neogs_sub/build_firmware.asm
+; =========================================================================
+; =========================================================================
+; Build both NeoGS binaries from the Project 124 root:
+;   sjasmplus neogs_sub/build_firmware.asm
+;
+; neogs_code.bin       custom firmware, loaded at logical RAM address $0000
+; neogs_bootstrap.bin  executable Z80 bootstrap, loaded by #14 at $4000
+; =========================================================================
+        DEVICE ZXSPECTRUM128
+        INCLUDE "main.asm"
+
+; Low RAM is used by the firmware and its stack. Keep the image below $3000;
+; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
+        ASSERT neogs_firmware_end <= $3000
+        SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+        SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+
+; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+        ORG     $4000
+        INCLUDE "bootstrap.asm"
+        ASSERT neogs_bootstrap_start = $4000
+        ASSERT neogs_bootstrap_end <= $7FFF
+        SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+        SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+
+

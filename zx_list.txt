@@ -1,0 +1,3637 @@
+# file opened: main.asm
+  1   0000              ; =========================================================================
+  2   0000              ; PROJECT 124
+  3   0000              ; ROOT MODULAR LINKER — DUAL PROCESSOR BUILD
+  4   0000              ; LINEAR AUTORUN SEQUENCE — FIXED SECTOR LENGTH TRD EXPORT
+  5   0000              ; =========================================================================
+  6   0000
+  7   0000              ENABLE_DEBUG_CONSOLE_TEST EQU 0
+  8   0000              ENABLE_HARDWARE_DEBUG     EQU 1
+  9   0000              ENABLE_TRDOS_DEBUG        EQU 1
+ 10   0000
+ 11   0000                      ; --- ВСТРОЕННЫЙ LUA-СКРИПТ АВТОМАТИЧЕСКОГО ДАМПА ПРОЕКТА 124 ---
+ 12   0000                      LUA
+ 13   0000 ~                        local out_file = io.open("dump_project_124.txt", "w")
+ 14   0000 ~                        if out_file then
+ 15   0000 ~                            out_file:write("; =========================================================================\n")
+ 16   0000 ~                            out_file:write("; PROJECT 124 DUMP DATA (DOUBLED Z80 INTERFACES)\n")
+ 17   0000 ~                            out_file:write("; =========================================================================\n\n")
+ 18   0000 ~
+ 19   0000 ~                            local files = {
+ 20   0000 ~                                "shared/neogs_io.inc",
+ 21   0000 ~                                "zx_main/main.asm",
+ 22   0000 ~                                "zx_main/main_data.asm",
+ 23   0000 ~                                "zx_main/boot_loader.asm",
+ 24   0000 ~                                "zx_main/neogs_driver.asm",
+ 25   0000 ~                                "zx_main/x86_loader.asm",
+ 26   0000 ~                                "zx_main/debug_system.asm",
+ 27   0000 ~                                "zx_main/driver_cmos.asm",
+ 28   0000 ~                                "zx_main/log_debug.asm",
+ 29   0000 ~                                "zx_main/display.asm",
+ 30   0000 ~                                "zx_main/ui_engine.asm",
+ 31   0000 ~                                "zx_main/ui_panels.asm",
+ 32   0000 ~                                "zx_main/file_utils.asm",
+ 33   0000 ~                                "neogs_sub/main.asm",
+ 34   0000 ~                                "neogs_sub/bootstrap.asm",
+ 35   0000 ~                                "neogs_sub/x86_interpreter.asm",
+ 36   0000 ~                                "neogs_sub/build_firmware.asm"
+ 37   0000 ~                            }
+ 38   0000 ~
+ 39   0000 ~                            for _, fname in ipairs(files) do
+ 40   0000 ~                                out_file:write("; =========================================================================\n")
+ 41   0000 ~                                out_file:write("; FILE: " .. fname .. "\n")
+ 42   0000 ~                                out_file:write("; =========================================================================\n")
+ 43   0000 ~                                local in_file = io.open(fname, "r")
+ 44   0000 ~                                if in_file then
+ 45   0000 ~                                    out_file:write(in_file:read("*all"))
+ 46   0000 ~                                    in_file:close()
+ 47   0000 ~                                else
+ 48   0000 ~                                    out_file:write("; [LINK ERROR: File " .. fname .. " not found]\n")
+ 49   0000 ~                                end
+ 50   0000 ~                                out_file:write("\n\n")
+ 51   0000 ~                            end
+ 52   0000 ~                            out_file:close()
+ 53   0000 ~                        end
+ 54   0000                      ENDLUA
+ 55   0000
+ 56   0000                      DEVICE ZXSPECTRUM128
+ 57   0000                      EMPTYTRD "disk_A.trd"
+ 58   0000
+ 59   0000                      ; ГЛОБАЛЬНАЯ КОНСТАНТА БЕЗОПАСНОГО БУФЕРА КАТАЛОГА / ДАННЫХ
+ 60   0000              TRDOS_PANEL_BUFFER EQU #C000
+ 61   0000
+ 62   0000                      ; Базовый адрес старта основного кода Spectrum — 24576 ($6000)
+ 63   0000                      ORG 24576
+ 64   6000
+ 65   6000              ; Первичный прыжок на старт, прецизионно выровненный на адрес 24585
+ 66   6000 C3 09 60             jp      Init_Z80_System
+ 67   6003 00 00 00...          BLOCK   6, 0
+ 68   6009
+ 69   6009              ; Сюда прыгает бут-загрузчик из строки 30 по команде RANDOMIZE USR VAL "24585"
+ 70   6009              Init_Z80_System:
+ 70   6009
+ 71   6009 F3                   di
+ 72   600A
+ 73   600A                      ; АТОМАРНЫЙ МАРКЕР СТАРТА: Выстреливаем байт #AA (170) напрямую в порт #EF
+ 74   600A 3E AA                ld      a, #AA
+ 75   600C D3 EF                out     (#EF), a
+ 76   600E
+ 77   600E ED 73 35 63          ld      (OLD_SP), sp
+ 78   6012 31 FF AF             ld      sp, $AFFF       ; Переносим стек в безопасную зону проекта 124
+ 79   6015
+ 80   6015 3E 10                ld      a, #10
+ 81   6017 01 FD 7F             ld      bc, #7FFD
+ 82   601A ED 79                out     (C), a
+ 83   601C 32 3B 5C             ld      (#5C3B), a
+ 84   601F
+ 85   601F AF                   xor     a
+ 86   6020 01 F7 EF             ld      bc, #EFF7
+ 87   6023 ED 79                out     (C), a          ; Инициализация Pentagon-расширения
+ 88   6025
+ 89   6025                      ; Raw startup marker: confirms Init_Z80_System reached its end.
+ 90   6025 3E 49                ld      a, 'I'
+ 91   6027 D3 EF                out     (#EF), a
+ 92   6029 C3 A7 60             jp      START_APPLICATION
+ 93   602C
+ 94   602C              ; Подключение системы отладки и макросов порта #EF
+ 95   602C                      INCLUDE "debug_system.asm"
+# file opened: debug_system.asm
+  1+  602C              ; =========================================================================
+  2+  602C              ; ПРОЕКТ 124 — СИСТЕМА ОТЛАДКИ ПОРТА #EF (ИЗ ПРОЕКТА 123)
+  3+  602C              ; СИСТЕМНЫЙ ПУТЬ: zx_main/debug_system.asm (ТОЛЬКО ХАРДВЕРНЫЙ ПОРТ #EF)
+  4+  602C              ; =========================================================================
+  5+  602C
+  6+  602C              ; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ВЫВОДА СИМВОЛА В ПОРТ #EF ---
+  7+  602C              MACRO_EF_CHAR   MACRO   char
+  8+  602C ~                            IF ENABLE_HARDWARE_DEBUG == 1
+  9+  602C ~                                PUSH    AF
+ 10+  602C ~                                PUSH    BC
+ 11+  602C ~                                LD      A, char
+ 12+  602C ~                                LD      BC, #00EF
+ 13+  602C ~                                OUT     (C), A
+ 14+  602C ~                                POP     BC
+ 15+  602C ~                                POP     AF
+ 16+  602C ~                            ENDIF
+ 17+  602C                              ENDM
+ 18+  602C
+ 19+  602C              ; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ВЫВОДА СТРОКИ В ПОРТ #EF ---
+ 20+  602C              MACRO_EF_STRING MACRO   str_addr
+ 21+  602C ~                            IF ENABLE_HARDWARE_DEBUG == 1
+ 22+  602C ~                                PUSH    HL
+ 23+  602C ~                                LD      HL, str_addr
+ 24+  602C ~                                CALL    DBG_Port_PrintString
+ 25+  602C ~                                POP     HL
+ 26+  602C ~                            ENDIF
+ 27+  602C                              ENDM
+ 28+  602C
+ 29+  602C              ; --- ГЛОБАЛЬНЫЙ МАКРОС ДЛЯ ДАМПА 16-БИТНОГО РЕГИСТРА В ПОРТ #EF ---
+ 30+  602C              MACRO_EF_HEX16  MACRO   reg_hl
+ 31+  602C ~                            IF ENABLE_HARDWARE_DEBUG == 1
+ 32+  602C ~                                PUSH    HL
+ 33+  602C ~                                PUSH    reg_hl
+ 34+  602C ~                                POP     HL
+ 35+  602C ~                                CALL    DBG_Port_PrintHex16
+ 36+  602C ~                                POP     HL
+ 37+  602C ~                            ENDIF
+ 38+  602C                              ENDM
+ 39+  602C
+ 40+  602C              ; --- ФИЗИЧЕСКИЕ ПОДПРОГРАММЫ ОТЛАДКИ ПОРТА #EF ---
+ 41+  602C                              IF ENABLE_HARDWARE_DEBUG == 1
+ 42+  602C
+ 43+  602C              ; ПОДПРОГРАММЫ ГЕНЕРАЦИИ ТАЙМСТАМПА В ПОРТ ОТЛАДКИ #EF
+ 44+  602C              DBG_Port_PrintTimestamp:
+ 44+  602C
+ 45+  602C F5                   PUSH    AF
+ 46+  602D C5                   PUSH    BC
+ 47+  602E E5                   PUSH    HL
+ 48+  602F
+ 49+  602F CD 95 65             CALL    READ_CURRENT_TIME       ; Считываем актуальное время из чипа К512ВИ1
+ 50+  6032 01 EF 00             LD      BC, #00EF               ; Порт вывода отладки
+ 51+  6035
+ 52+  6035 3E 5B                LD      A, "["
+ 53+  6037 ED 79                OUT     (C), A
+ 54+  6039 3A 66 65             LD      A, (txt_hour+0)
+ 55+  603C ED 79                OUT     (C), A
+ 56+  603E 3A 67 65             LD      A, (txt_hour+1)
+ 57+  6041 ED 79                OUT     (C), A
+ 58+  6043 3E 3A                LD      A, ":"
+ 59+  6045 ED 79                OUT     (C), A
+ 60+  6047 3A 68 65             LD      A, (txt_min+0)
+ 61+  604A ED 79                OUT     (C), A
+ 62+  604C 3A 69 65             LD      A, (txt_min+1)
+ 63+  604F ED 79                OUT     (C), A
+ 64+  6051 3E 3A                LD      A, ":"
+ 65+  6053 ED 79                OUT     (C), A
+ 66+  6055 3A 6A 65             LD      A, (txt_sec+0)
+ 67+  6058 ED 79                OUT     (C), A
+ 68+  605A 3A 6B 65             LD      A, (txt_sec+1)
+ 69+  605D ED 79                OUT     (C), A
+ 70+  605F 3E 5D                LD      A, "]"
+ 71+  6061 ED 79                OUT     (C), A
+ 72+  6063 3E 20                LD      A, " "
+ 73+  6065 ED 79                OUT     (C), A
+ 74+  6067
+ 75+  6067 E1                   POP     HL
+ 76+  6068 C1                   POP     BC
+ 77+  6069 F1                   POP     AF
+ 78+  606A C9                   RET
+ 79+  606B
+ 80+  606B              ; Отправка ASCIIZ строки в порт #EF (с автоматическим таймстампом)
+ 81+  606B              DBG_Port_PrintString:
+ 81+  606B
+ 82+  606B F5                   PUSH    AF
+ 83+  606C C5                   PUSH    BC
+ 84+  606D E5                   PUSH    HL
+ 85+  606E
+ 86+  606E CD 2C 60             CALL    DBG_Port_PrintTimestamp ; Принудительно выводим штамп времени
+ 87+  6071
+ 88+  6071              .loop_ef_s:
+ 89+  6071 7E                   LD      A, (HL)
+ 90+  6072 B7                   OR      A
+ 91+  6073 28 08                JR      Z, .done_ef_s
+ 92+  6075 01 EF 00             LD      BC, #00EF
+ 93+  6078 ED 79                OUT     (C), A
+ 94+  607A 23                   INC     HL
+ 95+  607B 18 F4                JR      .loop_ef_s
+ 96+  607D              .done_ef_s:
+ 97+  607D E1                   POP     HL
+ 98+  607E C1                   POP     BC
+ 99+  607F F1                   POP     AF
+100+  6080 C9                   RET
+101+  6081
+102+  6081              ; Вывод 16-битного HEX-значения из HL в порт #EF
+103+  6081              DBG_Port_PrintHex16:
+103+  6081
+104+  6081 F5                   PUSH    AF
+105+  6082 C5                   PUSH    BC
+106+  6083
+107+  6083 7C                   LD      A, H
+108+  6084 CD 8E 60             CALL    .local_hex8
+109+  6087 7D                   LD      A, L
+110+  6088 CD 8E 60             CALL    .local_hex8
+111+  608B
+112+  608B C1                   POP     BC
+113+  608C F1                   POP     AF
+114+  608D C9                   RET
+115+  608E
+116+  608E              .local_hex8:
+117+  608E F5                   PUSH    AF
+118+  608F 1F                   RRA
+118+  6090 1F             RRA
+118+  6091 1F             RRA
+118+  6092 1F             RRA
+119+  6093 CD 97 60             CALL    .local_nibble
+120+  6096 F1                   POP     AF
+121+  6097              .local_nibble:
+122+  6097 E6 0F                AND     #0F
+123+  6099 FE 0A                CP      10
+124+  609B 38 02                JR      C, .is_dig
+125+  609D C6 07                ADD     A, 7
+126+  609F              .is_dig:
+127+  609F C6 30                ADD     A, "0"
+128+  60A1 01 EF 00             LD      BC, #00EF
+129+  60A4 ED 79                OUT     (C), A
+130+  60A6 C9                   RET
+131+  60A7
+132+  60A7                              ENDIF   ; Конец блока условной компиляции порта #EF
+133+  60A7
+134+  60A7
+135+  60A7              ; =========================================================================
+136+  60A7
+# file closed: debug_system.asm
+ 96   60A7
+ 97   60A7              START_APPLICATION:
+ 98   60A7                      ; Raw markers bypass timestamp/RTC code so an early hang is visible.
+ 99   60A7 3E 43                ld      a, 'C'
+100   60A9 D3 EF                out     (#EF), a
+101   60AB
+102   60AB                      ; ЭТАП 1 — ЗАПУСК CMOS ЧАСОВ К512ВИ1
+103   60AB CD 6C 65             call    CHECK_AND_INIT_CMOS
+104   60AE 3E 44                ld      a, 'D'
+105   60B0 D3 EF                out     (#EF), a
+106   60B2 3E 45                ld      a, 'E'
+107   60B4 D3 EF                out     (#EF), a
+108   60B6                      MACRO_EF_STRING msg_stage1
+108   60B6             >                IF ENABLE_HARDWARE_DEBUG == 1
+108   60B6 E5          >                    PUSH    HL
+108   60B7 21 42 63    >                    LD      HL, msg_stage1
+108   60BA CD 6B 60    >                    CALL    DBG_Port_PrintString
+108   60BD E1          >                    POP     HL
+108   60BE             >                ENDIF
+109   60BE
+110   60BE                      ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
+111   60BE                      ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
+112   60BE                      ; команда #13 запускает его, после чего он включает RAM-over-ROM,
+113   60BE                      ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
+114   60BE 21 34 7B             ld      hl, neogs_binary_start
+115   60C1 11 05 06             ld      de, neogs_binary_end - neogs_binary_start
+116   60C4 CD 12 66             call    upload_firmware
+117   60C7 38 0B                jr      c, .firmware_upload_failed
+118   60C9                      MACRO_EF_STRING msg_stage2
+118   60C9             >                IF ENABLE_HARDWARE_DEBUG == 1
+118   60C9 E5          >                    PUSH    HL
+118   60CA 21 86 63    >                    LD      HL, msg_stage2
+118   60CD CD 6B 60    >                    CALL    DBG_Port_PrintString
+118   60D0 E1          >                    POP     HL
+118   60D1             >                ENDIF
+119   60D1 C3 9A 61             jp      .firmware_upload_done
+120   60D4
+121   60D4              .firmware_upload_failed:
+122   60D4                      MACRO_EF_STRING msg_stage2_fail
+122   60D4             >                IF ENABLE_HARDWARE_DEBUG == 1
+122   60D4 E5          >                    PUSH    HL
+122   60D5 21 2B 62    >                    LD      HL, msg_stage2_fail
+122   60D8 CD 6B 60    >                    CALL    DBG_Port_PrintString
+122   60DB E1          >                    POP     HL
+122   60DC             >                ENDIF
+123   60DC                      MACRO_EF_STRING msg_stage2_sent
+123   60DC             >                IF ENABLE_HARDWARE_DEBUG == 1
+123   60DC E5          >                    PUSH    HL
+123   60DD 21 6B 62    >                    LD      HL, msg_stage2_sent
+123   60E0 CD 6B 60    >                    CALL    DBG_Port_PrintString
+123   60E3 E1          >                    POP     HL
+123   60E4             >                ENDIF
+124   60E4 2A 68 68             ld      hl, (neo_fw_bytes_sent)
+125   60E7                      MACRO_EF_HEX16 HL
+125   60E7             >                IF ENABLE_HARDWARE_DEBUG == 1
+125   60E7 E5          >                    PUSH    HL
+125   60E8 E5          >                    PUSH    HL
+125   60E9 E1          >                    POP     HL
+125   60EA CD 81 60    >                    CALL    DBG_Port_PrintHex16
+125   60ED E1          >                    POP     HL
+125   60EE             >                ENDIF
+126   60EE                      MACRO_EF_CHAR 13
+126   60EE             >                IF ENABLE_HARDWARE_DEBUG == 1
+126   60EE F5          >                    PUSH    AF
+126   60EF C5          >                    PUSH    BC
+126   60F0 3E 0D       >                    LD      A, 13
+126   60F2 01 EF 00    >                    LD      BC, #00EF
+126   60F5 ED 79       >                    OUT     (C), A
+126   60F7 C1          >                    POP     BC
+126   60F8 F1          >                    POP     AF
+126   60F9             >                ENDIF
+127   60F9                      MACRO_EF_STRING msg_stage2_initial
+127   60F9             >                IF ENABLE_HARDWARE_DEBUG == 1
+127   60F9 E5          >                    PUSH    HL
+127   60FA 21 83 62    >                    LD      HL, msg_stage2_initial
+127   60FD CD 6B 60    >                    CALL    DBG_Port_PrintString
+127   6100 E1          >                    POP     HL
+127   6101             >                ENDIF
+128   6101 3A 6A 68             ld      a, (neo_fw_initial_status)
+129   6104 6F                   ld      l, a
+130   6105 26 00                ld      h, 0
+131   6107                      MACRO_EF_HEX16 HL
+131   6107             >                IF ENABLE_HARDWARE_DEBUG == 1
+131   6107 E5          >                    PUSH    HL
+131   6108 E5          >                    PUSH    HL
+131   6109 E1          >                    POP     HL
+131   610A CD 81 60    >                    CALL    DBG_Port_PrintHex16
+131   610D E1          >                    POP     HL
+131   610E             >                ENDIF
+132   610E                      MACRO_EF_CHAR 13
+132   610E             >                IF ENABLE_HARDWARE_DEBUG == 1
+132   610E F5          >                    PUSH    AF
+132   610F C5          >                    PUSH    BC
+132   6110 3E 0D       >                    LD      A, 13
+132   6112 01 EF 00    >                    LD      BC, #00EF
+132   6115 ED 79       >                    OUT     (C), A
+132   6117 C1          >                    POP     BC
+132   6118 F1          >                    POP     AF
+132   6119             >                ENDIF
+133   6119                      MACRO_EF_STRING msg_stage2_status
+133   6119             >                IF ENABLE_HARDWARE_DEBUG == 1
+133   6119 E5          >                    PUSH    HL
+133   611A 21 9E 62    >                    LD      HL, msg_stage2_status
+133   611D CD 6B 60    >                    CALL    DBG_Port_PrintString
+133   6120 E1          >                    POP     HL
+133   6121             >                ENDIF
+134   6121 3A 6B 68             ld      a, (neo_fw_last_status)
+135   6124 6F                   ld      l, a
+136   6125 26 00                ld      h, 0
+137   6127                      MACRO_EF_HEX16 HL
+137   6127             >                IF ENABLE_HARDWARE_DEBUG == 1
+137   6127 E5          >                    PUSH    HL
+137   6128 E5          >                    PUSH    HL
+137   6129 E1          >                    POP     HL
+137   612A CD 81 60    >                    CALL    DBG_Port_PrintHex16
+137   612D E1          >                    POP     HL
+137   612E             >                ENDIF
+138   612E                      MACRO_EF_CHAR 13
+138   612E             >                IF ENABLE_HARDWARE_DEBUG == 1
+138   612E F5          >                    PUSH    AF
+138   612F C5          >                    PUSH    BC
+138   6130 3E 0D       >                    LD      A, 13
+138   6132 01 EF 00    >                    LD      BC, #00EF
+138   6135 ED 79       >                    OUT     (C), A
+138   6137 C1          >                    POP     BC
+138   6138 F1          >                    POP     AF
+138   6139             >                ENDIF
+139   6139                      MACRO_EF_STRING msg_stage2_phase
+139   6139             >                IF ENABLE_HARDWARE_DEBUG == 1
+139   6139 E5          >                    PUSH    HL
+139   613A 21 B6 62    >                    LD      HL, msg_stage2_phase
+139   613D CD 6B 60    >                    CALL    DBG_Port_PrintString
+139   6140 E1          >                    POP     HL
+139   6141             >                ENDIF
+140   6141 3A 6C 68             ld      a, (neo_fw_timeout_phase)
+141   6144 6F                   ld      l, a
+142   6145 26 00                ld      h, 0
+143   6147                      MACRO_EF_HEX16 HL
+143   6147             >                IF ENABLE_HARDWARE_DEBUG == 1
+143   6147 E5          >                    PUSH    HL
+143   6148 E5          >                    PUSH    HL
+143   6149 E1          >                    POP     HL
+143   614A CD 81 60    >                    CALL    DBG_Port_PrintHex16
+143   614D E1          >                    POP     HL
+143   614E             >                ENDIF
+144   614E                      MACRO_EF_CHAR 13
+144   614E             >                IF ENABLE_HARDWARE_DEBUG == 1
+144   614E F5          >                    PUSH    AF
+144   614F C5          >                    PUSH    BC
+144   6150 3E 0D       >                    LD      A, 13
+144   6152 01 EF 00    >                    LD      BC, #00EF
+144   6155 ED 79       >                    OUT     (C), A
+144   6157 C1          >                    POP     BC
+144   6158 F1          >                    POP     AF
+144   6159             >                ENDIF
+145   6159                      MACRO_EF_STRING msg_stage2_rx
+145   6159             >                IF ENABLE_HARDWARE_DEBUG == 1
+145   6159 E5          >                    PUSH    HL
+145   615A 21 04 63    >                    LD      HL, msg_stage2_rx
+145   615D CD 6B 60    >                    CALL    DBG_Port_PrintString
+145   6160 E1          >                    POP     HL
+145   6161             >                ENDIF
+146   6161 3A 67 68             ld      a, (neo_fw_last_rx_byte)
+147   6164 6F                   ld      l, a
+148   6165 26 00                ld      h, 0
+149   6167                      MACRO_EF_HEX16 HL
+149   6167             >                IF ENABLE_HARDWARE_DEBUG == 1
+149   6167 E5          >                    PUSH    HL
+149   6168 E5          >                    PUSH    HL
+149   6169 E1          >                    POP     HL
+149   616A CD 81 60    >                    CALL    DBG_Port_PrintHex16
+149   616D E1          >                    POP     HL
+149   616E             >                ENDIF
+150   616E                      MACRO_EF_CHAR 13
+150   616E             >                IF ENABLE_HARDWARE_DEBUG == 1
+150   616E F5          >                    PUSH    AF
+150   616F C5          >                    PUSH    BC
+150   6170 3E 0D       >                    LD      A, 13
+150   6172 01 EF 00    >                    LD      BC, #00EF
+150   6175 ED 79       >                    OUT     (C), A
+150   6177 C1          >                    POP     BC
+150   6178 F1          >                    POP     AF
+150   6179             >                ENDIF
+151   6179                      MACRO_EF_STRING msg_stage2_bootstrap
+151   6179             >                IF ENABLE_HARDWARE_DEBUG == 1
+151   6179 E5          >                    PUSH    HL
+151   617A 21 19 63    >                    LD      HL, msg_stage2_bootstrap
+151   617D CD 6B 60    >                    CALL    DBG_Port_PrintString
+151   6180 E1          >                    POP     HL
+151   6181             >                ENDIF
+152   6181 2A 5E 68             ld      hl, (neo_fw_bootstrap_address)
+153   6184                      MACRO_EF_HEX16 HL
+153   6184             >                IF ENABLE_HARDWARE_DEBUG == 1
+153   6184 E5          >                    PUSH    HL
+153   6185 E5          >                    PUSH    HL
+153   6186 E1          >                    POP     HL
+153   6187 CD 81 60    >                    CALL    DBG_Port_PrintHex16
+153   618A E1          >                    POP     HL
+153   618B             >                ENDIF
+154   618B                      MACRO_EF_CHAR 13
+154   618B             >                IF ENABLE_HARDWARE_DEBUG == 1
+154   618B F5          >                    PUSH    AF
+154   618C C5          >                    PUSH    BC
+154   618D 3E 0D       >                    LD      A, 13
+154   618F 01 EF 00    >                    LD      BC, #00EF
+154   6192 ED 79       >                    OUT     (C), A
+154   6194 C1          >                    POP     BC
+154   6195 F1          >                    POP     AF
+154   6196             >                ENDIF
+155   6196 F3                   di
+156   6197              .firmware_upload_halt:
+157   6197 76                   halt
+158   6198 18 FD                jr      .firmware_upload_halt
+159   619A
+160   619A              .firmware_upload_done:
+161   619A
+162   619A                      ; ЭТАП 3 — ИНИЦИАЛИЗАЦИЯ И ОТРИСОВКА ИНТЕРФЕЙСА ОКОН И ДВУХ ШРИФТОВ
+163   619A CD 44 78             call    INIT_PROGRAM_INTERFACE
+164   619D                      MACRO_EF_STRING msg_stage3_ok
+164   619D             >                IF ENABLE_HARDWARE_DEBUG == 1
+164   619D E5          >                    PUSH    HL
+164   619E 21 DC 63    >                    LD      HL, msg_stage3_ok
+164   61A1 CD 6B 60    >                    CALL    DBG_Port_PrintString
+164   61A4 E1          >                    POP     HL
+164   61A5             >                ENDIF
+165   61A5
+166   61A5                      ; ЭТАП 4 — ВЫВОД СТАРТОВОГО ОТЧЕТА В НИЖНЕЕ ОКНО ЛОГОВ COMMANDER
+167   61A5 21 B6 64             ld      hl, msg_log_screen_ready
+168   61A8 CD 84 6F             call    LOG_WriteMessageToBuffer
+169   61AB
+170   61AB 21 ED 64             ld      hl, msg_log_sp_prefix
+171   61AE CD 84 6F             call    LOG_WriteMessageToBuffer
+172   61B1 2A 35 63             ld      hl, (OLD_SP)
+173   61B4                      MACRO_EF_HEX16  hl
+173   61B4             >                IF ENABLE_HARDWARE_DEBUG == 1
+173   61B4 E5          >                    PUSH    HL
+173   61B5 E5          >                    PUSH    hl
+173   61B6 E1          >                    POP     HL
+173   61B7 CD 81 60    >                    CALL    DBG_Port_PrintHex16
+173   61BA E1          >                    POP     HL
+173   61BB             >                ENDIF
+174   61BB                      MACRO_EF_CHAR   13
+174   61BB             >                IF ENABLE_HARDWARE_DEBUG == 1
+174   61BB F5          >                    PUSH    AF
+174   61BC C5          >                    PUSH    BC
+174   61BD 3E 0D       >                    LD      A, 13
+174   61BF 01 EF 00    >                    LD      BC, #00EF
+174   61C2 ED 79       >                    OUT     (C), A
+174   61C4 C1          >                    POP     BC
+174   61C5 F1          >                    POP     AF
+174   61C6             >                ENDIF
+175   61C6                      MACRO_EF_STRING msg_stage4
+175   61C6             >                IF ENABLE_HARDWARE_DEBUG == 1
+175   61C6 E5          >                    PUSH    HL
+175   61C7 21 2C 64    >                    LD      HL, msg_stage4
+175   61CA CD 6B 60    >                    CALL    DBG_Port_PrintString
+175   61CD E1          >                    POP     HL
+175   61CE             >                ENDIF
+176   61CE
+177   61CE                      ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
+178   61CE 21 5E 65             ld      hl, task_filename
+179   61D1 3E 43                ld      a, 'C'
+180   61D3
+181   61D3                      ; ВАЖНО: не переключаемся на старый TR-DOS SP (#Cxxx).
+182   61D3                      ; Буфер чтения начинается с #C000 и перезаписывает эту область.
+183   61D3                      ; Stage 5 сам временно переносит рабочий стек на #BFFF, а этот
+184   61D3                      ; CALL остаётся на безопасном прикладном стеке (#AFFF).
+185   61D3 F3                   di
+186   61D4 CD 6D 68             call    EXECUTE_X86_FILE_STAGE
+187   61D7 FB                   ei
+188   61D8 38 0C                jr      c, .x86_stage_failed
+189   61DA
+190   61DA                      ; Финальная точка останова ядра после завершения всех этапов
+191   61DA              .core_halt:
+192   61DA                      MACRO_EF_STRING msg_stage_all_complete
+192   61DA             >                IF ENABLE_HARDWARE_DEBUG == 1
+192   61DA E5          >                    PUSH    HL
+192   61DB 21 76 64    >                    LD      HL, msg_stage_all_complete
+192   61DE CD 6B 60    >                    CALL    DBG_Port_PrintString
+192   61E1 E1          >                    POP     HL
+192   61E2             >                ENDIF
+193   61E2 F3                   di
+194   61E3 76                   halt
+195   61E4 18 F4                jr      .core_halt
+196   61E6
+197   61E6              ; Ошибка выполнения этапа загрузки/запуска x86-задачи.
+198   61E6              .x86_stage_failed:
+199   61E6                      MACRO_EF_STRING msg_stage5_fail
+199   61E6             >                IF ENABLE_HARDWARE_DEBUG == 1
+199   61E6 E5          >                    PUSH    HL
+199   61E7 21 F2 61    >                    LD      HL, msg_stage5_fail
+199   61EA CD 6B 60    >                    CALL    DBG_Port_PrintString
+199   61ED E1          >                    POP     HL
+199   61EE             >                ENDIF
+200   61EE F3                   di
+201   61EF              .x86_stage_failed_halt:
+202   61EF 76                   halt
+203   61F0 18 FD                jr      .x86_stage_failed_halt
+204   61F2
+205   61F2              msg_stage5_fail:
+206   61F2 5B 43 4F 52          DEFB "[CORE] ERROR: x86 task pipeline failed; startup halted.", 13, 0
+206   61F6 45 5D 20 45
+206   61FA 52 52 4F 52
+206   61FE 3A 20 78 38
+206   6202 36 20 74 61
+206   6206 73 6B 20 70
+206   620A 69 70 65 6C
+206   620E 69 6E 65 20
+206   6212 66 61 69 6C
+206   6216 65 64 3B 20
+206   621A 73 74 61 72
+206   621E 74 75 70 20
+206   6222 68 61 6C 74
+206   6226 65 64 2E 0D
+206   622A 00
+207   622B
+208   622B              ; Ошибка загрузки прошивки NeoGS. Не продолжаем работу с неподтвержденным ядром.
+209   622B              msg_stage2_fail:
+210   622B 5B 43 4F 52          DEFB "[CORE] ERROR: NeoGS ROM bootstrap / firmware handshake failed.", 13, 0
+210   622F 45 5D 20 45
+210   6233 52 52 4F 52
+210   6237 3A 20 4E 65
+210   623B 6F 47 53 20
+210   623F 52 4F 4D 20
+210   6243 62 6F 6F 74
+210   6247 73 74 72 61
+210   624B 70 20 2F 20
+210   624F 66 69 72 6D
+210   6253 77 61 72 65
+210   6257 20 68 61 6E
+210   625B 64 73 68 61
+210   625F 6B 65 20 66
+210   6263 61 69 6C 65
+210   6267 64 2E 0D 00
+211   626B              msg_stage2_sent:
+212   626B 5B 46 57 5D          DEFB "[FW] DATA BYTES SENT = ", 0
+212   626F 20 44 41 54
+212   6273 41 20 42 59
+212   6277 54 45 53 20
+212   627B 53 45 4E 54
+212   627F 20 3D 20 00
+213   6283              msg_stage2_initial:
+214   6283 5B 46 57 5D          DEFB "[FW] INITIAL GSSTAT #BB = ", 0
+214   6287 20 49 4E 49
+214   628B 54 49 41 4C
+214   628F 20 47 53 53
+214   6293 54 41 54 20
+214   6297 23 42 42 20
+214   629B 3D 20 00
+215   629E              msg_stage2_status:
+216   629E 5B 46 57 5D          DEFB "[FW] LAST GSSTAT #BB = ", 0
+216   62A2 20 4C 41 53
+216   62A6 54 20 47 53
+216   62AA 53 54 41 54
+216   62AE 20 23 42 42
+216   62B2 20 3D 20 00
+217   62B6              msg_stage2_phase:
+218   62B6 5B 46 57 5D          DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
+218   62BA 20 42 4F 4F
+218   62BE 54 20 50 48
+218   62C2 41 53 45 20
+218   62C6 28 31 3D 23
+218   62CA 46 34 2C 32
+218   62CE 3D 23 32 30
+218   62D2 2C 33 3D 23
+218   62D6 31 34 2C 34
+218   62DA 3D 44 41 54
+218   62DE 41 2C 35 3D
+218   62E2 23 31 33 2C
+218   62E6 36 3D 42 4F
+218   62EA 4F 54 2C 37
+218   62EE 3D 4C 45 4E
+218   62F2 2C 38 3D 46
+218   62F6 57 2C 39 3D
+218   62FA 52 45 41 44
+218   62FE 59 29 20 3D
+218   6302 20 00
+219   6304              msg_stage2_rx:
+220   6304 5B 46 57 5D          DEFB "[FW] LAST RX BYTE = ", 0
+220   6308 20 4C 41 53
+220   630C 54 20 52 58
+220   6310 20 42 59 54
+220   6314 45 20 3D 20
+220   6318 00
+221   6319              msg_stage2_bootstrap:
+222   6319 5B 46 57 5D          DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
+222   631D 20 42 4F 4F
+222   6321 54 53 54 52
+222   6325 41 50 20 41
+222   6329 44 44 52 45
+222   632D 53 53 20 3D
+222   6331 20 00
+223   6333
+224   6333              ; =========================================================================
+225   6333              ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
+226   6333              ; =========================================================================
+227   6333                      INCLUDE "main_data.asm"
+# file opened: main_data.asm
+  1+  6333              ; =========================================================================
+  2+  6333              ; FILE: zx_main/main_data.asm
+  3+  6333              ; PROJECT 124 — global state and messages
+  4+  6333              ; =========================================================================
+  5+  6333
+  6+  6333              Console_X:
+  6+  6333 00                     DB 0
+  7+  6334              Console_Y:
+  7+  6334 00                     DB 0
+  8+  6335              OLD_SP:
+  8+  6335 00 00                     DW 0
+  9+  6337              APP_SP_BACKUP:
+  9+  6337 00 00              DW 0
+ 10+  6339 00 00        Variable_Backup:    DW 0
+ 11+  633B 00 00                            DW 0
+ 12+  633D 00 00                            DW 0
+ 13+  633F 00                               DB 0
+ 14+  6340
+ 15+  6340              ; Public result copy retained for other application modules.
+ 16+  6340              X86_RESULT_AX:
+ 16+  6340 00 00              DW 0
+ 17+  6342
+ 18+  6342              ; Port #EF diagnostic messages.
+ 19+  6342 5B 43 4F 52  msg_stage1:    DEFB "[CORE] Stage 1: Clock RTC K512VI1 checked and synced successfully.",13,0
+ 19+  6346 45 5D 20 53
+ 19+  634A 74 61 67 65
+ 19+  634E 20 31 3A 20
+ 19+  6352 43 6C 6F 63
+ 19+  6356 6B 20 52 54
+ 19+  635A 43 20 4B 35
+ 19+  635E 31 32 56 49
+ 19+  6362 31 20 63 68
+ 19+  6366 65 63 6B 65
+ 19+  636A 64 20 61 6E
+ 19+  636E 64 20 73 79
+ 19+  6372 6E 63 65 64
+ 19+  6376 20 73 75 63
+ 19+  637A 63 65 73 73
+ 19+  637E 66 75 6C 6C
+ 19+  6382 79 2E 0D 00
+ 20+  6386 5B 43 4F 52  msg_stage2:    DEFB "[CORE] Stage 2: Bootstrapping custom NeoGS Z80 firmware through GS105a ROM loader...",13,0
+ 20+  638A 45 5D 20 53
+ 20+  638E 74 61 67 65
+ 20+  6392 20 32 3A 20
+ 20+  6396 42 6F 6F 74
+ 20+  639A 73 74 72 61
+ 20+  639E 70 70 69 6E
+ 20+  63A2 67 20 63 75
+ 20+  63A6 73 74 6F 6D
+ 20+  63AA 20 4E 65 6F
+ 20+  63AE 47 53 20 5A
+ 20+  63B2 38 30 20 66
+ 20+  63B6 69 72 6D 77
+ 20+  63BA 61 72 65 20
+ 20+  63BE 74 68 72 6F
+ 20+  63C2 75 67 68 20
+ 20+  63C6 47 53 31 30
+ 20+  63CA 35 61 20 52
+ 20+  63CE 4F 4D 20 6C
+ 20+  63D2 6F 61 64 65
+ 20+  63D6 72 2E 2E 2E
+ 20+  63DA 0D 00
+ 21+  63DC 5B 47 55 49  msg_stage3_ok: DEFB "[GUI] Stage 3: Custom fonts linked. Two-window application workspace rendered.",13,0
+ 21+  63E0 5D 20 53 74
+ 21+  63E4 61 67 65 20
+ 21+  63E8 33 3A 20 43
+ 21+  63EC 75 73 74 6F
+ 21+  63F0 6D 20 66 6F
+ 21+  63F4 6E 74 73 20
+ 21+  63F8 6C 69 6E 6B
+ 21+  63FC 65 64 2E 20
+ 21+  6400 54 77 6F 2D
+ 21+  6404 77 69 6E 64
+ 21+  6408 6F 77 20 61
+ 21+  640C 70 70 6C 69
+ 21+  6410 63 61 74 69
+ 21+  6414 6F 6E 20 77
+ 21+  6418 6F 72 6B 73
+ 21+  641C 70 61 63 65
+ 21+  6420 20 72 65 6E
+ 21+  6424 64 65 72 65
+ 21+  6428 64 2E 0D 00
+ 22+  642C 5B 43 4F 52  msg_stage4:    DEFB "[CORE] Stage 4: Execution window stabilized. Bypassing interactive loop.",13,0
+ 22+  6430 45 5D 20 53
+ 22+  6434 74 61 67 65
+ 22+  6438 20 34 3A 20
+ 22+  643C 45 78 65 63
+ 22+  6440 75 74 69 6F
+ 22+  6444 6E 20 77 69
+ 22+  6448 6E 64 6F 77
+ 22+  644C 20 73 74 61
+ 22+  6450 62 69 6C 69
+ 22+  6454 7A 65 64 2E
+ 22+  6458 20 42 79 70
+ 22+  645C 61 73 73 69
+ 22+  6460 6E 67 20 69
+ 22+  6464 6E 74 65 72
+ 22+  6468 61 63 74 69
+ 22+  646C 76 65 20 6C
+ 22+  6470 6F 6F 70 2E
+ 22+  6474 0D 00
+ 23+  6476 5B 48 41 4C  msg_stage_all_complete: DEFB "[HALT] Core task pipeline executed entirely. System suspended.",13,0
+ 23+  647A 54 5D 20 43
+ 23+  647E 6F 72 65 20
+ 23+  6482 74 61 73 6B
+ 23+  6486 20 70 69 70
+ 23+  648A 65 6C 69 6E
+ 23+  648E 65 20 65 78
+ 23+  6492 65 63 75 74
+ 23+  6496 65 64 20 65
+ 23+  649A 6E 74 69 72
+ 23+  649E 65 6C 79 2E
+ 23+  64A2 20 53 79 73
+ 23+  64A6 74 65 6D 20
+ 23+  64AA 73 75 73 70
+ 23+  64AE 65 6E 64 65
+ 23+  64B2 64 2E 0D 00
+ 24+  64B6
+ 25+  64B6              ; Screen log strings.
+ 26+  64B6 5B 53 59 53  msg_log_screen_ready: DEFB "[SYS_START] PERFECT MANAGER 124 DUAL-CORE NODE ONLINE.",0
+ 26+  64BA 5F 53 54 41
+ 26+  64BE 52 54 5D 20
+ 26+  64C2 50 45 52 46
+ 26+  64C6 45 43 54 20
+ 26+  64CA 4D 41 4E 41
+ 26+  64CE 47 45 52 20
+ 26+  64D2 31 32 34 20
+ 26+  64D6 44 55 41 4C
+ 26+  64DA 2D 43 4F 52
+ 26+  64DE 45 20 4E 4F
+ 26+  64E2 44 45 20 4F
+ 26+  64E6 4E 4C 49 4E
+ 26+  64EA 45 2E 00
+ 27+  64ED 5B 53 59 53  msg_log_sp_prefix:    DEFB "[SYS_INFO] ORIGINAL TR-DOS SYSTEM STACK POINTER WAS SAVED AT: #",0
+ 27+  64F1 5F 49 4E 46
+ 27+  64F5 4F 5D 20 4F
+ 27+  64F9 52 49 47 49
+ 27+  64FD 4E 41 4C 20
+ 27+  6501 54 52 2D 44
+ 27+  6505 4F 53 20 53
+ 27+  6509 59 53 54 45
+ 27+  650D 4D 20 53 54
+ 27+  6511 41 43 4B 20
+ 27+  6515 50 4F 49 4E
+ 27+  6519 54 45 52 20
+ 27+  651D 57 41 53 20
+ 27+  6521 53 41 56 45
+ 27+  6525 44 20 41 54
+ 27+  6529 3A 20 23 00
+ 28+  652D 5B 45 58 45  msg_log_exec_x86:     DEFB "[EXECUTE] AUTOMATIC LINEAR TRANSFER INITIATED...",0
+ 28+  6531 43 55 54 45
+ 28+  6535 5D 20 41 55
+ 28+  6539 54 4F 4D 41
+ 28+  653D 54 49 43 20
+ 28+  6541 4C 49 4E 45
+ 28+  6545 41 52 20 54
+ 28+  6549 52 41 4E 53
+ 28+  654D 46 45 52 20
+ 28+  6551 49 4E 49 54
+ 28+  6555 49 41 54 45
+ 28+  6559 44 2E 2E 2E
+ 28+  655D 00
+ 29+  655E
+ 30+  655E              ; Eight-character TR-DOS filename, extension supplied separately as 'C'.
+ 31+  655E 6E 65 6F 70  task_filename:        DEFB "neoprog "
+ 31+  6562 72 6F 67 20
+ 32+  6566
+# file closed: main_data.asm
+228   6566                      INCLUDE "driver_cmos.asm"
+# file opened: driver_cmos.asm
+  1+  6566              ; =========================================================================
+  2+  6566              ; PERFECT COMMANDER 123 — БЕЗОПАСНЫЙ ИСПРАВЛЕННЫЙ ДРАЙВЕР CMOS ЧАСОВ К512ВИ1
+  3+  6566              ; СИСТЕМНЫЙ ПУТЬ: zx_main/driver_cmos.asm (ГЛОБАЛЬНЫЙ ЭКСПОРТ СИМВОЛОВ)
+  4+  6566              ; =========================================================================
+  5+  6566
+  6+  6566              ; Статические ASCII-буферы для хранения текстового представления времени
+  7+  6566              txt_hour:
+  7+  6566 30 30                   DEFB "00"
+  8+  6568              txt_min:
+  8+  6568 30 30                    DEFB "00"
+  9+  656A              txt_sec:
+  9+  656A 30 30                    DEFB "00"
+ 10+  656C
+ 11+  656C              ; =========================================================================
+ 12+  656C              ; ИНТЕЛЛЕКТУАЛЬНАЯ БЕЗОПАСНАЯ НАСТРОЙКА CMOS ЧАСОВ
+ 13+  656C              ; =========================================================================
+ 14+  656C              CHECK_AND_INIT_CMOS:
+ 14+  656C
+ 15+  656C F5                   PUSH    AF
+ 15+  656D C5             PUSH BC
+ 16+  656E CD F2 65             CALL    open_cmos
+ 17+  6571
+ 18+  6571                      ; Проверяем сигнатуру наличия часов в ячейке #11
+ 19+  6571 3E 11                LD      A, #11
+ 20+  6573 CD DC 65             CALL    read_byte_raw
+ 21+  6576 FE AA                CP      #AA
+ 22+  6578 28 15                JR      Z, .already_active
+ 23+  657A
+ 24+  657A                      ; Холодный старт: записываем обязательные системные константы
+ 25+  657A 3E 11                LD      A, #11
+ 26+  657C 2E AA                LD      L, #AA
+ 27+  657E CD E7 65             CALL    write_byte_raw         ; Маркер готовности системы
+ 28+  6581
+ 29+  6581 3E 0A                LD      A, #0A
+ 30+  6583 2E 20                LD      L, #20
+ 31+  6585 CD E7 65             CALL    write_byte_raw         ; Регистр А: Включение кварца 32кГц
+ 32+  6588
+ 33+  6588 3E 0B                LD      A, #0B
+ 34+  658A 2E 02                LD      L, #02
+ 35+  658C CD E7 65             CALL    write_byte_raw         ; Регистр B: 24-часовой BCD формат
+ 36+  658F
+ 37+  658F              .already_active
+ 38+  658F CD FA 65             CALL    close_cmos
+ 39+  6592 C1                   POP     BC
+ 39+  6593 F1             POP     AF
+ 40+  6594 C9                   RET
+ 41+  6595
+ 42+  6595              ; =========================================================================
+ 43+  6595              ; ПРОЦЕДУРА ЧТЕНИЯ ТЕКУЩЕГО ВРЕМЕНИ ИЗ ЧИПА RTC
+ 44+  6595              ; =========================================================================
+ 45+  6595              READ_CURRENT_TIME:
+ 45+  6595
+ 46+  6595 F5                   PUSH    AF
+ 46+  6596 C5             PUSH BC
+ 46+  6597 E5             PUSH HL
+ 47+  6598 F3                   DI
+ 48+  6599 CD F2 65             CALL    open_cmos
+ 49+  659C
+ 50+  659C              .wait_rtc
+ 51+  659C                      ; Контролируем флаг обновления UIP (битовая маска #80 в регистре #0A)
+ 52+  659C 3E 0A                LD      A, #0A
+ 53+  659E CD DC 65             CALL    read_byte_raw
+ 54+  65A1 17                   RLA
+ 55+  65A2 38 F8                JR      C, .wait_rtc
+ 56+  65A4
+ 57+  65A4                      ; Вычитываем BCD данные с атомарным сохранением в текстовые буферы
+ 58+  65A4                      ; 1. Секунды (Ячейка #00)
+ 59+  65A4 3E 00                LD      A, #00
+ 60+  65A6 CD DC 65             CALL    read_byte_raw
+ 61+  65A9 CD 01 66             CALL    split_bcd
+ 62+  65AC 7C                   LD      A, H
+ 62+  65AD 32 6A 65       LD (txt_sec+0), A
+ 63+  65B0 7D                   LD      A, L
+ 63+  65B1 32 6B 65       LD (txt_sec+1), A
+ 64+  65B4
+ 65+  65B4                      ; 2. Минуты (Ячейка #02)
+ 66+  65B4 3E 02                LD      A, #02
+ 67+  65B6 CD DC 65             CALL    read_byte_raw
+ 68+  65B9 CD 01 66             CALL    split_bcd
+ 69+  65BC 7C                   LD      A, H
+ 69+  65BD 32 68 65       LD (txt_min+0), A
+ 70+  65C0 7D                   LD      A, L
+ 70+  65C1 32 69 65       LD (txt_min+1), A
+ 71+  65C4
+ 72+  65C4                      ; 3. Часы (Ячейка #04)
+ 73+  65C4 3E 04                LD      A, #04
+ 74+  65C6 CD DC 65             CALL    read_byte_raw
+ 75+  65C9 CD 01 66             CALL    split_bcd
+ 76+  65CC 7C                   LD      A, H
+ 76+  65CD 32 66 65       LD (txt_hour+0), A
+ 77+  65D0 7D                   LD      A, L
+ 77+  65D1 32 67 65       LD (txt_hour+1), A
+ 78+  65D4
+ 79+  65D4 CD FA 65             CALL    close_cmos
+ 80+  65D7 FB                   EI
+ 81+  65D8 E1                   POP     HL
+ 81+  65D9 C1             POP BC
+ 81+  65DA F1             POP AF
+ 82+  65DB C9                   RET
+ 83+  65DC
+ 84+  65DC              ; --- Атомарное низкоуровневое чтение байта из К512ВИ1 ---
+ 85+  65DC              read_byte_raw
+ 86+  65DC 01 F7 DF             LD      BC, #DFF7
+ 87+  65DF ED 79                OUT     (C), A
+ 88+  65E1 01 F7 BF             LD      BC, #BFF7
+ 89+  65E4 ED 78                IN      A, (C)
+ 90+  65E6 C9                   RET
+ 91+  65E7
+ 92+  65E7              ; --- Атомарная низкоуровневая запись байта в К512ВИ1 ---
+ 93+  65E7              write_byte_raw
+ 94+  65E7 01 F7 DF             LD      BC, #DFF7
+ 95+  65EA ED 79                OUT     (C), A
+ 96+  65EC 01 F7 BF             LD      BC, #BFF7
+ 97+  65EF ED 69                OUT     (C), L
+ 98+  65F1 C9                   RET
+ 99+  65F2
+100+  65F2              open_cmos
+101+  65F2 01 F7 EF             LD      BC, #EFF7
+102+  65F5 3E 80                LD      A, #80
+103+  65F7 ED 79                OUT     (C), A
+104+  65F9 C9                   RET
+105+  65FA
+106+  65FA              close_cmos
+107+  65FA 01 F7 EF             LD      BC, #EFF7
+108+  65FD AF                   XOR     A
+109+  65FE ED 79                OUT     (C), A
+110+  6600 C9                   RET
+111+  6601
+112+  6601              ; --- Распаковка BCD полубайтов в ASCII символы ---
+113+  6601              split_bcd
+114+  6601 F5                   PUSH    AF
+115+  6602 E6 F0                AND     %11110000
+116+  6604 0F                   RRCA
+116+  6605 0F             RRCA
+116+  6606 0F             RRCA
+116+  6607 0F             RRCA
+117+  6608 C6 30                ADD     A, 48
+118+  660A 67                   LD      H, A
+119+  660B F1                   POP     AF
+120+  660C E6 0F                AND     %00001111
+121+  660E C6 30                ADD     A, 48
+122+  6610 6F                   LD      L, A
+123+  6611 C9                   RET
+124+  6612
+125+  6612
+126+  6612              ; =========================================================================
+127+  6612
+# file closed: driver_cmos.asm
+229   6612                      INCLUDE "neogs_driver.asm"
+# file opened: neogs_driver.asm
+  1+  6612              ; =========================================================================
+  2+  6612              ; PROJECT 124 — NeoGS host-side driver
+  3+  6612              ; Stage 2 uses GS105a #14 (RECEIVE BLOCK) and #13 (JUMP) to start a two-stage bootstrap.
+  4+  6612              ; =========================================================================
+  5+  6612                      INCLUDE "../shared/neogs_io.inc"
+# file opened: neogs_io.inc
+  1++ 6612              ; =========================================================================
+  2++ 6612              ; NeoGS ports.inc v0.3 — Project 124 used subset
+  3++ 6612              ; Hardware port names/addresses from NedoPC ports.inc v0.3.
+  4++ 6612              ; =========================================================================
+  5++ 6612
+  6++ 6612              ; ZX Spectrum side
+  7++ 6612              GSCOM           EQU #BB             ; write command / read status
+  8++ 6612              GSSTAT          EQU #BB             ; read CBIT (bit 0), DBIT (bit 7)
+  9++ 6612              GSDAT           EQU #B3             ; read/write data byte
+ 10++ 6612              GSCTR           EQU #33             ; global control
+ 11++ 6612
+ 12++ 6612              B_CBIT          EQU 0
+ 13++ 6612              M_CBIT          EQU #01
+ 14++ 6612              B_DBIT          EQU 7
+ 15++ 6612              M_DBIT          EQU #80
+ 16++ 6612
+ 17++ 6612              C_GRST          EQU #80
+ 18++ 6612              C_GNMI          EQU #40
+ 19++ 6612              C_GLED          EQU #20
+ 20++ 6612
+ 21++ 6612              ; NeoGS Z80 local ports
+ 22++ 6612              MPAG            EQU #00
+ 23++ 6612              ZXCMD           EQU #01
+ 24++ 6612              ZXDATRD         EQU #02
+ 25++ 6612              ZXDATWR         EQU #03
+ 26++ 6612              ZXSTAT          EQU #04
+ 27++ 6612              CLRCBIT         EQU #05
+ 28++ 6612
+ 29++ 6612              GSCFG0          EQU #0F
+ 30++ 6612              B_NOROM         EQU 0
+ 31++ 6612              M_NOROM         EQU #01
+ 32++ 6612              B_RAMRO         EQU 1
+ 33++ 6612              M_RAMRO         EQU #02
+ 34++ 6612              B_8CHANS        EQU 2
+ 35++ 6612              M_8CHANS        EQU #04
+ 36++ 6612              B_EXPAG         EQU 3
+ 37++ 6612              M_EXPAG         EQU #08
+ 38++ 6612              B_CKSEL0        EQU 4
+ 39++ 6612              M_CKSEL0        EQU #10
+ 40++ 6612              B_CKSEL1        EQU 5
+ 41++ 6612              M_CKSEL1        EQU #20
+ 42++ 6612              C_10MHZ         EQU #30
+ 43++ 6612              C_12MHZ         EQU #10
+ 44++ 6612              C_20MHZ         EQU #20
+ 45++ 6612              C_24MHZ         EQU #00
+ 46++ 6612              B_PAN4CH        EQU 6
+ 47++ 6612              M_PAN4CH        EQU #40
+ 48++ 6612              B_INV7B         EQU 7
+ 49++ 6612              M_INV7B         EQU #80
+ 50++ 6612
+ 51++ 6612              ; NeoGS DMA registers
+ 52++ 6612              DMA_MOD         EQU #1B
+ 53++ 6612              DMA_HAD         EQU #1C
+ 54++ 6612              DMA_MAD         EQU #1D
+ 55++ 6612              DMA_LAD         EQU #1E
+ 56++ 6612              DMA_CST         EQU #1F
+ 57++ 6612              C_DMA_NONE      EQU 0
+ 58++ 6612              C_DMA_ZX        EQU 1
+ 59++ 6612              C_DMA_SD        EQU 2
+ 60++ 6612              C_DMA_MP3       EQU 3
+ 61++ 6612
+ 62++ 6612              ; Standard General Sound ROM commands.
+ 63++ 6612              GS_CMD_RESET_FLAGS  EQU #00
+ 64++ 6612              GS_CMD_GET_TOTAL_RAM EQU #20
+ 65++ 6612              GS_CMD_LOAD_MODULE  EQU #30
+ 66++ 6612              GS_CMD_RUN_MODULE   EQU #31
+ 67++ 6612              GS_CMD_OPEN_STREAM  EQU #D1
+ 68++ 6612              GS_CMD_CLOSE_STREAM EQU #D2
+ 69++ 6612              GS_CMD_COLD_RESTART EQU #F4
+ 70++ 6612              GS_CMD_JUMP_ADDRESS EQU #13
+ 71++ 6612              GS_CMD_RECEIVE_BLOCK EQU #14
+ 72++ 6612
+ 73++ 6612              ; Project 124 private commands carried by GSCOM after custom firmware starts.
+ 74++ 6612              CMD_RESET       EQU #01
+ 75++ 6612              CMD_LOAD_X86    EQU #02
+ 76++ 6612              CMD_RUN_X86     EQU #03
+ 77++ 6612              CMD_GET_STATUS  EQU #04
+ 78++ 6612
+ 79++ 6612              ; Project 124 startup handshake bytes.
+ 80++ 6612              NGS_BOOTSTRAP_READY_ACK EQU #A1
+ 81++ 6612              NGS_BOOTSTRAP_LENGTH_ACK EQU #A3
+ 82++ 6612              NGS_FIRMWARE_READY_ACK  EQU #A2
+ 83++ 6612              NGS_BOOTSTRAP_ERROR_ACK EQU #E1
+ 84++ 6612              NGS_RESULT_SIGNATURE   EQU #A5
+ 85++ 6612
+ 86++ 6612              NGS_STATUS_CBIT EQU M_CBIT
+ 87++ 6612              NGS_STATUS_DBIT EQU M_DBIT
+ 88++ 6612
+ 89++ 6612              ; The x86 task is executed in logical $5002..$7FFF (12 KB window less header).
+ 90++ 6612              NGS_X86_DMA_WINDOW_SIZE EQU #3000
+ 91++ 6612              NGS_X86_MAX_CODE_SIZE   EQU #2FFE
+ 92++ 6612
+# file closed: neogs_io.inc
+  6+  6612
+  7+  6612              FW_BYTE_TIMEOUT EQU #FFFF
+  8+  6612              IPC_BYTE_TIMEOUT EQU #FFFF
+  9+  6612              IPC_CMD_TIMEOUT EQU #FFFF
+ 10+  6612
+ 11+  6612              ; -------------------------------------------------------------------------
+ 12+  6612              ; upload_firmware
+ 13+  6612              ; IN : HL = custom firmware binary, DE = byte length.
+ 14+  6612              ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
+ 15+  6612              ;
+ 16+  6612              ; Cold/warm reset path:
+ 17+  6612              ;   #F4 cold restart
+ 18+  6612              ;   #20 get total RAM, read three bytes to prove stock ROM is ready
+ 19+  6612              ;   #14 receive executable bootstrap directly into RAM at $4000
+ 20+  6612              ;   #13 jump to $4000
+ 21+  6612              ;   #A1 bootstrap ready, send length, receive #A3 length accepted
+ 22+  6612              ;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
+ 23+  6612              ; -------------------------------------------------------------------------
+ 24+  6612              upload_firmware:
+ 24+  6612
+ 25+  6612 22 5A 68             ld      (neo_fw_source), hl
+ 26+  6615 ED 53 5C 68          ld      (neo_fw_length), de
+ 27+  6619
+ 28+  6619                      ; Firmware image must fit in low RAM $0000-$2FFF, below SP=$3FFF.
+ 29+  6619 7A                   ld      a, d
+ 30+  661A B3                   or      e
+ 31+  661B CA 38 67             jp      z, .upload_failed
+ 32+  661E 7A                   ld      a, d
+ 33+  661F FE 30                cp      #30
+ 34+  6621 38 08                jr      c, .firmware_length_valid
+ 35+  6623 C2 38 67             jp      nz, .upload_failed
+ 36+  6626 7B                   ld      a, e
+ 37+  6627 B7                   or      a
+ 38+  6628 C2 38 67             jp      nz, .upload_failed
+ 39+  662B              .firmware_length_valid:
+ 40+  662B AF                   xor     a
+ 41+  662C 32 68 68             ld      (neo_fw_bytes_sent), a
+ 42+  662F 32 69 68             ld      (neo_fw_bytes_sent+1), a
+ 43+  6632 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 44+  6635 DB BB                in      a, (GSSTAT)
+ 45+  6637 32 6A 68             ld      (neo_fw_initial_status), a
+ 46+  663A 32 6B 68             ld      (neo_fw_last_status), a
+ 47+  663D
+ 48+  663D                      ; Phase 1: documented GS105a cold restart. Also returns a running
+ 49+  663D                      ; Project 124 firmware to the stock ROM before the new bootstrap.
+ 50+  663D 3E 01                ld      a, 1
+ 51+  663F 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 52+  6642 3E F4                ld      a, GS_CMD_COLD_RESTART
+ 53+  6644 CD 68 67             call    gs_boot_send_command_long
+ 54+  6647 DA 38 67             jp      c, .upload_failed
+ 55+  664A
+ 56+  664A                      ; Phase 2: #20 returns three RAM-size bytes only after stock ROM is up.
+ 57+  664A                      ; Retry #F4 once: if the previous run was interrupted during DMA, the
+ 58+  664A                      ; first #F4 may have been consumed as the DMA end marker; the second
+ 59+  664A                      ; reaches the command dispatcher after it returns to its main loop.
+ 60+  664A 3E 02                ld      a, 2
+ 61+  664C 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 62+  664F CD 3A 67             call    gs_boot_probe_rom
+ 63+  6652 30 18                jr      nc, .stock_rom_ready
+ 64+  6654 3E 01                ld      a, 1
+ 65+  6656 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 66+  6659 3E F4                ld      a, GS_CMD_COLD_RESTART
+ 67+  665B CD 68 67             call    gs_boot_send_command_long
+ 68+  665E DA 38 67             jp      c, .upload_failed
+ 69+  6661 3E 02                ld      a, 2
+ 70+  6663 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 71+  6666 CD 3A 67             call    gs_boot_probe_rom
+ 72+  6669 DA 38 67             jp      c, .upload_failed
+ 73+  666C              .stock_rom_ready:
+ 74+  666C
+ 75+  666C                      ; Phase 3: use the native GS105a memory loader, not the MOD player.
+ 76+  666C                      ; #14 RECEIVE BLOCK expects the first (negative length low) byte
+ 77+  666C                      ; before the command, then negative length high, address low/high,
+ 78+  666C                      ; and exactly N payload bytes. The payload is written directly to RAM.
+ 79+  666C 3E 03                ld      a, 3
+ 80+  666E 32 6C 68             ld      (neo_fw_timeout_phase), a
+ 81+  6671 21 00 00             ld      hl, 0
+ 82+  6674 11 67 00             ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+ 83+  6677 B7                   or      a
+ 84+  6678 ED 52                sbc     hl, de                  ; HL = -bootstrap length
+ 85+  667A 22 60 68             ld      (neo_fw_block_length), hl
+ 86+  667D 7D                   ld      a, l
+ 87+  667E CD AA 67             call    gs_boot_write_command_argument
+ 88+  6681 DA 38 67             jp      c, .upload_failed
+ 89+  6684 3E 14                ld      a, GS_CMD_RECEIVE_BLOCK
+ 90+  6686 CD 8D 67             call    gs_boot_send_command
+ 91+  6689 DA 38 67             jp      c, .upload_failed
+ 92+  668C
+ 93+  668C                      ; Remaining #14 header: -length high, destination $4000.
+ 94+  668C 3A 61 68             ld      a, (neo_fw_block_length+1)
+ 95+  668F CD C7 67             call    gs_boot_send_data_byte
+ 96+  6692 DA 38 67             jp      c, .upload_failed
+ 97+  6695 AF                   xor     a
+ 98+  6696 CD C7 67             call    gs_boot_send_data_byte  ; destination low = $00
+ 99+  6699 DA 38 67             jp      c, .upload_failed
+100+  669C 3E 40                ld      a, #40
+101+  669E CD C7 67             call    gs_boot_send_data_byte  ; destination high = $40
+102+  66A1 DA 38 67             jp      c, .upload_failed
+103+  66A4
+104+  66A4                      ; Phase 4: transfer the executable bootstrap into RAM $4000.
+105+  66A4 3E 04                ld      a, 4
+106+  66A6 32 6C 68             ld      (neo_fw_timeout_phase), a
+107+  66A9 21 CD 7A             ld      hl, neogs_bootstrap_start
+108+  66AC 11 67 00             ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+109+  66AF              .bootstrap_block_loop:
+110+  66AF 7A                   ld      a, d
+111+  66B0 B3                   or      e
+112+  66B1 28 0B                jr      z, .bootstrap_block_done
+113+  66B3 7E                   ld      a, (hl)
+114+  66B4 CD C7 67             call    gs_boot_send_data_byte
+115+  66B7 DA 38 67             jp      c, .upload_failed
+116+  66BA 23                   inc     hl
+117+  66BB 1B                   dec     de
+118+  66BC 18 F1                jr      .bootstrap_block_loop
+119+  66BE              .bootstrap_block_done:
+120+  66BE
+121+  66BE                      ; Phase 5: #13 JUMP TO ADDRESS. The low byte is the command's
+122+  66BE                      ; first argument and must be written before issuing the command.
+123+  66BE 3E 05                ld      a, 5
+124+  66C0 32 6C 68             ld      (neo_fw_timeout_phase), a
+125+  66C3 AF                   xor     a                       ; entry address low = $00
+126+  66C4 CD AA 67             call    gs_boot_write_command_argument
+127+  66C7 DA 38 67             jp      c, .upload_failed
+128+  66CA 3E 13                ld      a, GS_CMD_JUMP_ADDRESS
+129+  66CC CD 8D 67             call    gs_boot_send_command
+130+  66CF DA 38 67             jp      c, .upload_failed
+131+  66D2 3E 40                ld      a, #40                  ; entry address high = $40
+132+  66D4 CD C7 67             call    gs_boot_send_data_byte
+133+  66D7 DA 38 67             jp      c, .upload_failed
+134+  66DA
+135+  66DA                      ; Phase 6: bootstrap has enabled RAM-over-ROM and is waiting at $0000.
+136+  66DA 3E 06                ld      a, 6
+137+  66DC 32 6C 68             ld      (neo_fw_timeout_phase), a
+138+  66DF CD 00 68             call    gs_boot_receive_data_byte
+139+  66E2 DA 38 67             jp      c, .upload_failed
+140+  66E5 FE A1                cp      NGS_BOOTSTRAP_READY_ACK
+141+  66E7 C2 38 67             jp      nz, .upload_failed
+142+  66EA
+143+  66EA                      ; Phase 7: send firmware length low/high and require ACK #A3.
+144+  66EA 3E 07                ld      a, 7
+145+  66EC 32 6C 68             ld      (neo_fw_timeout_phase), a
+146+  66EF 2A 5C 68             ld      hl, (neo_fw_length)
+147+  66F2 7D                   ld      a, l
+148+  66F3 CD C7 67             call    gs_boot_send_data_byte
+149+  66F6 DA 38 67             jp      c, .upload_failed
+150+  66F9 7C                   ld      a, h
+151+  66FA CD C7 67             call    gs_boot_send_data_byte
+152+  66FD DA 38 67             jp      c, .upload_failed
+153+  6700 CD 00 68             call    gs_boot_receive_data_byte
+154+  6703 DA 38 67             jp      c, .upload_failed
+155+  6706 FE A3                cp      NGS_BOOTSTRAP_LENGTH_ACK
+156+  6708 C2 38 67             jp      nz, .upload_failed
+157+  670B
+158+  670B                      ; Phase 8: stream the custom firmware to RAM address $0000.
+159+  670B 3E 08                ld      a, 8
+160+  670D 32 6C 68             ld      (neo_fw_timeout_phase), a
+161+  6710 2A 5A 68             ld      hl, (neo_fw_source)
+162+  6713 ED 5B 5C 68          ld      de, (neo_fw_length)
+163+  6717              .firmware_stream_loop:
+164+  6717 7A                   ld      a, d
+165+  6718 B3                   or      e
+166+  6719 28 0B                jr      z, .firmware_stream_done
+167+  671B 7E                   ld      a, (hl)
+168+  671C CD C7 67             call    gs_boot_send_data_byte
+169+  671F DA 38 67             jp      c, .upload_failed
+170+  6722 23                   inc     hl
+171+  6723 1B                   dec     de
+172+  6724 18 F1                jr      .firmware_stream_loop
+173+  6726
+174+  6726              .firmware_stream_done:
+175+  6726                      ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+176+  6726 3E 09                ld      a, 9
+177+  6728 32 6C 68             ld      (neo_fw_timeout_phase), a
+178+  672B CD 00 68             call    gs_boot_receive_data_byte
+179+  672E DA 38 67             jp      c, .upload_failed
+180+  6731 FE A2                cp      NGS_FIRMWARE_READY_ACK
+181+  6733 C2 38 67             jp      nz, .upload_failed
+182+  6736
+183+  6736 AF                   xor     a
+184+  6737 C9                   ret
+185+  6738
+186+  6738              .upload_failed:
+187+  6738 37                   scf
+188+  6739 C9                   ret
+189+  673A
+190+  673A              ; -------------------------------------------------------------------------
+191+  673A              ; Standard GS105a ROM transport primitives.
+192+  673A              ; Commands use CBIT; data bytes use DBIT. All waits are bounded.
+193+  673A              ; -------------------------------------------------------------------------
+194+  673A
+195+  673A              ; Probe stock ROM by reading the three-byte RAM size returned by command #20.
+196+  673A              gs_boot_probe_rom:
+197+  673A 3E 20                ld      a, GS_CMD_GET_TOTAL_RAM
+198+  673C CD 68 67             call    gs_boot_send_command_long
+199+  673F D8                   ret     c
+200+  6740 CD 00 68             call    gs_boot_receive_data_byte
+201+  6743 D8                   ret     c
+202+  6744 32 62 68             ld      (neo_fw_rom_ram_low), a
+203+  6747 CD 00 68             call    gs_boot_receive_data_byte
+204+  674A D8                   ret     c
+205+  674B 32 63 68             ld      (neo_fw_rom_ram_mid), a
+206+  674E CD 00 68             call    gs_boot_receive_data_byte
+207+  6751 D8                   ret     c
+208+  6752 32 64 68             ld      (neo_fw_rom_ram_high), a
+209+  6755 3A 62 68             ld      a, (neo_fw_rom_ram_low)
+210+  6758 47                   ld      b, a
+211+  6759 3A 63 68             ld      a, (neo_fw_rom_ram_mid)
+212+  675C B0                   or      b
+213+  675D 47                   ld      b, a
+214+  675E 3A 64 68             ld      a, (neo_fw_rom_ram_high)
+215+  6761 B0                   or      b
+216+  6762 20 02                jr      nz, .rom_probe_ok
+217+  6764 37                   scf
+218+  6765 C9                   ret
+219+  6766              .rom_probe_ok:
+220+  6766 B7                   or      a
+221+  6767 C9                   ret
+222+  6768
+223+  6768              ; Long command wait for #F4 cold restart and ROM self-test.
+224+  6768              gs_boot_send_command_long:
+225+  6768 32 65 68             ld      (neo_fw_command_byte), a
+226+  676B 3A 65 68             ld      a, (neo_fw_command_byte)
+227+  676E D3 BB                out     (GSCOM), a
+228+  6770 D5                   push    de
+229+  6771 16 10                ld      d, 16
+230+  6773              .long_outer:
+231+  6773 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+232+  6776              .long_inner:
+233+  6776 DB BB                in      a, (GSSTAT)
+234+  6778 32 6B 68             ld      (neo_fw_last_status), a
+235+  677B CB 47                bit     B_CBIT, a
+236+  677D 28 0B                jr      z, .long_done
+237+  677F 0B                   dec     bc
+238+  6780 78                   ld      a, b
+239+  6781 B1                   or      c
+240+  6782 20 F2                jr      nz, .long_inner
+241+  6784 15                   dec     d
+242+  6785 20 EC                jr      nz, .long_outer
+243+  6787 D1                   pop     de
+244+  6788 37                   scf
+245+  6789 C9                   ret
+246+  678A              .long_done:
+247+  678A D1                   pop     de
+248+  678B B7                   or      a
+249+  678C C9                   ret
+250+  678D
+251+  678D              gs_boot_send_command:
+252+  678D 32 65 68             ld      (neo_fw_command_byte), a
+253+  6790 3A 65 68             ld      a, (neo_fw_command_byte)
+254+  6793 D3 BB                out     (GSCOM), a
+255+  6795 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+256+  6798              .command_wait:
+257+  6798 DB BB                in      a, (GSSTAT)
+258+  679A 32 6B 68             ld      (neo_fw_last_status), a
+259+  679D CB 47                bit     B_CBIT, a
+260+  679F 28 07                jr      z, .command_done
+261+  67A1 0B                   dec     bc
+262+  67A2 78                   ld      a, b
+263+  67A3 B1                   or      c
+264+  67A4 20 F2                jr      nz, .command_wait
+265+  67A6 37                   scf
+266+  67A7 C9                   ret
+267+  67A8              .command_done:
+268+  67A8 B7                   or      a
+269+  67A9 C9                   ret
+270+  67AA
+271+  67AA              ; Preload the first argument byte of GS105a commands #13/#14. Those
+272+  67AA              ; handlers read this byte before clearing CBIT; later arguments use DBIT.
+273+  67AA              gs_boot_write_command_argument:
+274+  67AA 32 66 68             ld      (neo_fw_tx_byte), a
+275+  67AD 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+276+  67B0              .argument_wait_free:
+277+  67B0 DB BB                in      a, (GSSTAT)
+278+  67B2 32 6B 68             ld      (neo_fw_last_status), a
+279+  67B5 CB 7F                bit     B_DBIT, a
+280+  67B7 28 07                jr      z, .argument_slot_free
+281+  67B9 0B                   dec     bc
+282+  67BA 78                   ld      a, b
+283+  67BB B1                   or      c
+284+  67BC 20 F2                jr      nz, .argument_wait_free
+285+  67BE 37                   scf
+286+  67BF C9                   ret
+287+  67C0              .argument_slot_free:
+288+  67C0 3A 66 68             ld      a, (neo_fw_tx_byte)
+289+  67C3 D3 B3                out     (GSDAT), a
+290+  67C5 B7                   or      a
+291+  67C6 C9                   ret
+292+  67C7
+293+  67C7              gs_boot_send_data_byte:
+294+  67C7 32 66 68             ld      (neo_fw_tx_byte), a
+295+  67CA 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+296+  67CD              .data_wait_free:
+297+  67CD DB BB                in      a, (GSSTAT)
+298+  67CF 32 6B 68             ld      (neo_fw_last_status), a
+299+  67D2 CB 7F                bit     B_DBIT, a
+300+  67D4 28 07                jr      z, .data_slot_free
+301+  67D6 0B                   dec     bc
+302+  67D7 78                   ld      a, b
+303+  67D8 B1                   or      c
+304+  67D9 20 F2                jr      nz, .data_wait_free
+305+  67DB 37                   scf
+306+  67DC C9                   ret
+307+  67DD              .data_slot_free:
+308+  67DD 3A 66 68             ld      a, (neo_fw_tx_byte)
+309+  67E0 D3 B3                out     (GSDAT), a
+310+  67E2 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+311+  67E5              .data_wait_consumed:
+312+  67E5 DB BB                in      a, (GSSTAT)
+313+  67E7 32 6B 68             ld      (neo_fw_last_status), a
+314+  67EA CB 7F                bit     B_DBIT, a
+315+  67EC 28 07                jr      z, .data_consumed
+316+  67EE 0B                   dec     bc
+317+  67EF 78                   ld      a, b
+318+  67F0 B1                   or      c
+319+  67F1 20 F2                jr      nz, .data_wait_consumed
+320+  67F3 37                   scf
+321+  67F4 C9                   ret
+322+  67F5              .data_consumed:
+323+  67F5 E5                   push    hl
+324+  67F6 2A 68 68             ld      hl, (neo_fw_bytes_sent)
+325+  67F9 23                   inc     hl
+326+  67FA 22 68 68             ld      (neo_fw_bytes_sent), hl
+327+  67FD E1                   pop     hl
+328+  67FE B7                   or      a
+329+  67FF C9                   ret
+330+  6800
+331+  6800              gs_boot_receive_data_byte:
+332+  6800 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+333+  6803              .receive_wait:
+334+  6803 DB BB                in      a, (GSSTAT)
+335+  6805 32 6B 68             ld      (neo_fw_last_status), a
+336+  6808 CB 7F                bit     B_DBIT, a
+337+  680A 20 07                jr      nz, .receive_ready
+338+  680C 0B                   dec     bc
+339+  680D 78                   ld      a, b
+340+  680E B1                   or      c
+341+  680F 20 F2                jr      nz, .receive_wait
+342+  6811 37                   scf
+343+  6812 C9                   ret
+344+  6813              .receive_ready:
+345+  6813 DB B3                in      a, (GSDAT)
+346+  6815 32 67 68             ld      (neo_fw_last_rx_byte), a
+347+  6818 B7                   or      a
+348+  6819 C9                   ret
+349+  681A
+350+  681A              ; -------------------------------------------------------------------------
+351+  681A              ; Project 124 private-protocol waits (custom firmware already running).
+352+  681A              ; -------------------------------------------------------------------------
+353+  681A              neogs_wait_command_done:
+353+  681A
+354+  681A 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
+355+  681D              .cmd_wait:
+356+  681D DB BB                in      a, (GSSTAT)
+357+  681F CB 47                bit     B_CBIT, a
+358+  6821 28 07                jr      z, .cmd_done
+359+  6823 0B                   dec     bc
+360+  6824 78                   ld      a, b
+361+  6825 B1                   or      c
+362+  6826 20 F5                jr      nz, .cmd_wait
+363+  6828 37                   scf
+364+  6829 C9                   ret
+365+  682A              .cmd_done:
+366+  682A B7                   or      a
+367+  682B C9                   ret
+368+  682C
+369+  682C              neogs_wait_command_done_long:
+369+  682C
+370+  682C D5                   push    de
+371+  682D 16 10                ld      d, #10
+372+  682F              .cmd_long_outer:
+373+  682F 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
+374+  6832              .cmd_long_inner:
+375+  6832 DB BB                in      a, (GSSTAT)
+376+  6834 CB 47                bit     B_CBIT, a
+377+  6836 28 0B                jr      z, .cmd_long_done
+378+  6838 0B                   dec     bc
+379+  6839 78                   ld      a, b
+380+  683A B1                   or      c
+381+  683B 20 F5                jr      nz, .cmd_long_inner
+382+  683D 15                   dec     d
+383+  683E 20 EF                jr      nz, .cmd_long_outer
+384+  6840 D1                   pop     de
+385+  6841 37                   scf
+386+  6842 C9                   ret
+387+  6843              .cmd_long_done:
+388+  6843 D1                   pop     de
+389+  6844 B7                   or      a
+390+  6845 C9                   ret
+391+  6846
+392+  6846              neogs_wait_data_byte:
+392+  6846
+393+  6846 01 FF FF             ld      bc, IPC_BYTE_TIMEOUT
+394+  6849              .data_wait:
+395+  6849 DB BB                in      a, (GSSTAT)
+396+  684B CB 7F                bit     B_DBIT, a
+397+  684D 20 07                jr      nz, .data_ready
+398+  684F 0B                   dec     bc
+399+  6850 78                   ld      a, b
+400+  6851 B1                   or      c
+401+  6852 20 F5                jr      nz, .data_wait
+402+  6854 37                   scf
+403+  6855 C9                   ret
+404+  6856              .data_ready:
+405+  6856 DB B3                in      a, (GSDAT)
+406+  6858 B7                   or      a
+407+  6859 C9                   ret
+408+  685A
+409+  685A              ; Stage 2 diagnostics consumed by zx_main/main.asm.
+410+  685A 00 00        neo_fw_source:          dw 0
+411+  685C 00 00        neo_fw_length:          dw 0
+412+  685E 00 40        neo_fw_bootstrap_address: dw #4000
+413+  6860 00 00        neo_fw_block_length:    dw 0
+414+  6862 00           neo_fw_rom_ram_low:     db 0
+415+  6863 00           neo_fw_rom_ram_mid:     db 0
+416+  6864 00           neo_fw_rom_ram_high:    db 0
+417+  6865 00           neo_fw_command_byte:    db 0
+418+  6866 00           neo_fw_tx_byte:         db 0
+419+  6867 00           neo_fw_last_rx_byte:    db 0
+420+  6868 00 00        neo_fw_bytes_sent:      dw 0
+421+  686A 00           neo_fw_initial_status:  db 0
+422+  686B 00           neo_fw_last_status:     db 0
+423+  686C 00           neo_fw_timeout_phase:   db 0
+424+  686D
+# file closed: neogs_driver.asm
+230   686D                      INCLUDE "x86_loader.asm"
+# file opened: x86_loader.asm
+  1+  686D              ; =========================================================================
+  2+  686D              ; PROJECT 124 — TR-DOS task loader + NeoGS DMA / IPC
+  3+  686D              ; Hardware protocol is based on NeoGS Programmer's Guide v0.1.A and
+  4+  686D              ; ports.inc v0.3. The application-level command IDs/frame are Project 124.
+  5+  686D              ;
+  6+  686D              ; DMA mapping used here:
+  7+  686D              ;   NeoGS physical DMA destination = $00D000
+  8+  686D              ;   NeoGS Z80 logical DMA frame address = $5000
+  9+  686D              ;   two-byte length header at $5000; x86 execution begins at $5002.
+ 10+  686D              ; This follows the guide's default mapping: logical $4000-$7FFF is the
+ 11+  686D              ; second half of physical 32K page 1 ($00C000-$00FFFF).
+ 12+  686D              ;
+ 13+  686D              ; Host DMA writes to Spectrum address $0000-$3FFF. For DMA WRITE there is
+ 14+  686D              ; NO dummy write. The dummy access described by the user is only for DMA READ.
+ 15+  686D              ; =========================================================================
+ 16+  686D
+ 17+  686D              ; neogs_io.inc is included once by neogs_driver.asm before this module.
+ 18+  686D
+ 19+  686D              DMA_HOST_WINDOW    EQU #0000
+ 20+  686D              DMA_WINDOW_LIMIT   EQU #3000
+ 21+  686D
+ 22+  686D              EXECUTE_X86_FILE_STAGE:
+ 22+  686D
+ 23+  686D 22 8F 6B             ld      (P124_X86_REQUEST_FILENAME), hl
+ 24+  6870 32 91 6B             ld      (P124_X86_REQUEST_TYPE), a
+ 25+  6873 ED 73 87 6B          ld      (P124_X86_LOADER_SP_BACKUP), sp
+ 26+  6877 31 FF BF             ld      sp, #BFFF              ; buffer starts at #C000; stack below it
+ 27+  687A
+ 28+  687A                      MACRO_EF_STRING P124_msg_dbg_stack_isolated
+ 28+  687A             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 28+  687A E5          >                    PUSH    HL
+ 28+  687B 21 9D 6B    >                    LD      HL, P124_msg_dbg_stack_isolated
+ 28+  687E CD 6B 60    >                    CALL    DBG_Port_PrintString
+ 28+  6881 E1          >                    POP     HL
+ 28+  6882             >                ENDIF
+ 29+  6882
+ 30+  6882                      ; -------------------------------------------------------------
+ 31+  6882                      ; Stage 5.0: deterministic diagnostic before accessing TR-DOS.
+ 32+  6882                      ; B8 AA BB 40 90 F4 = MOV AX,BBAA / INC AX / NOP / HLT.
+ 33+  6882                      ; Expected result: status=0, AX=BBAB.
+ 34+  6882                      ; -------------------------------------------------------------
+ 35+  6882                      MACRO_EF_STRING P124_msg_ipc_diag_start
+ 35+  6882             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 35+  6882 E5          >                    PUSH    HL
+ 35+  6883 21 D3 6B    >                    LD      HL, P124_msg_ipc_diag_start
+ 35+  6886 CD 6B 60    >                    CALL    DBG_Port_PrintString
+ 35+  6889 E1          >                    POP     HL
+ 35+  688A             >                ENDIF
+ 36+  688A 21 81 6B             ld      hl, x86_diag_program
+ 37+  688D 01 06 00             ld      bc, x86_diag_program_end - x86_diag_program
+ 38+  6890 CD EA 6A             call    neogs_send_dma_block
+ 39+  6893 DA 13 6A             jp      c, .diag_dma_error
+ 40+  6896
+ 41+  6896 CD 46 6B             call    neogs_run_and_get_result
+ 42+  6899 DA 1F 6A             jp      c, .diag_protocol_error
+ 43+  689C
+ 44+  689C 3A 9A 6B             ld      a, (P124_X86_RESULT_STATUS)
+ 45+  689F B7                   or      a
+ 46+  68A0 C2 2B 6A             jp      nz, .diag_execution_error
+ 47+  68A3 2A 9B 6B             ld      hl, (P124_X86_RESULT_AX)
+ 48+  68A6 11 AB BB             ld      de, #BBAB
+ 49+  68A9 B7                   or      a
+ 50+  68AA ED 52                sbc     hl, de
+ 51+  68AC C2 4F 6A             jp      nz, .diag_wrong_result
+ 52+  68AF
+ 53+  68AF                      MACRO_EF_STRING P124_msg_ipc_diag_pass
+ 53+  68AF             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 53+  68AF E5          >                    PUSH    HL
+ 53+  68B0 21 0F 6C    >                    LD      HL, P124_msg_ipc_diag_pass
+ 53+  68B3 CD 6B 60    >                    CALL    DBG_Port_PrintString
+ 53+  68B6 E1          >                    POP     HL
+ 53+  68B7             >                ENDIF
+ 54+  68B7 2A 9B 6B             ld      hl, (P124_X86_RESULT_AX)
+ 55+  68BA                      MACRO_EF_HEX16 hl
+ 55+  68BA             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 55+  68BA E5          >                    PUSH    HL
+ 55+  68BB E5          >                    PUSH    hl
+ 55+  68BC E1          >                    POP     HL
+ 55+  68BD CD 81 60    >                    CALL    DBG_Port_PrintHex16
+ 55+  68C0 E1          >                    POP     HL
+ 55+  68C1             >                ENDIF
+ 56+  68C1                      MACRO_EF_CHAR 13
+ 56+  68C1             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 56+  68C1 F5          >                    PUSH    AF
+ 56+  68C2 C5          >                    PUSH    BC
+ 56+  68C3 3E 0D       >                    LD      A, 13
+ 56+  68C5 01 EF 00    >                    LD      BC, #00EF
+ 56+  68C8 ED 79       >                    OUT     (C), A
+ 56+  68CA C1          >                    POP     BC
+ 56+  68CB F1          >                    POP     AF
+ 56+  68CC             >                ENDIF
+ 57+  68CC
+ 58+  68CC                      ; -------------------------------------------------------------
+ 59+  68CC                      ; Stage 5A: search TR-DOS directory entry.
+ 60+  68CC                      ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
+ 61+  68CC                      ; -------------------------------------------------------------
+ 62+  68CC 2A 8F 6B             ld      hl, (P124_X86_REQUEST_FILENAME)
+ 63+  68CF 11 DD 5C             ld      de, #5CDD
+ 64+  68D2 01 08 00             ld      bc, 8
+ 65+  68D5 ED B0                ldir
+ 66+  68D7 3A 91 6B             ld      a, (P124_X86_REQUEST_TYPE)
+ 67+  68DA 32 E5 5C             ld      (#5CE5), a
+ 68+  68DD 3E 09                ld      a, 9
+ 69+  68DF 32 06 5D             ld      (#5D06), a
+ 70+  68E2 0E 0A                ld      c, 10
+ 71+  68E4 CD 13 3D             call    #3D13
+ 72+  68E7 79                   ld      a, c
+ 73+  68E8 FE FF                cp      #FF
+ 74+  68EA CA 70 6A             jp      z, .file_not_found
+ 75+  68ED
+ 76+  68ED                      ; C=#0A returns only the catalogue entry number. Fetch the full
+ 77+  68ED                      ; 16-byte descriptor explicitly with C=#08 before using #5CE8..#5CEC.
+ 78+  68ED 79                   ld      a, c
+ 79+  68EE F5                   push    af
+ 80+  68EF AF                   xor     a
+ 81+  68F0 32 0F 5D             ld      (#5D0F), a
+ 82+  68F3 32 10 5D             ld      (#5D10), a
+ 83+  68F6 F1                   pop     af
+ 84+  68F7 0E 08                ld      c, 8
+ 85+  68F9 CD 13 3D             call    #3D13
+ 86+  68FC 3A 0F 5D             ld      a, (#5D0F)
+ 87+  68FF 47                   ld      b, a
+ 88+  6900 3A 10 5D             ld      a, (#5D10)
+ 89+  6903 B0                   or      b
+ 90+  6904 C2 88 6A             jp      nz, .bad_file_descriptor
+ 91+  6907
+ 92+  6907                      MACRO_EF_STRING P124_msg_file_ok
+ 92+  6907             >                IF ENABLE_HARDWARE_DEBUG == 1
+ 92+  6907 E5          >                    PUSH    HL
+ 92+  6908 21 0D 6D    >                    LD      HL, P124_msg_file_ok
+ 92+  690B CD 6B 60    >                    CALL    DBG_Port_PrintString
+ 92+  690E E1          >                    POP     HL
+ 92+  690F             >                ENDIF
+ 93+  690F
+ 94+  690F                      ; -------------------------------------------------------------
+ 95+  690F                      ; Stage 5B: validate descriptor BEFORE reading any sector.
+ 96+  690F                      ; #5CE8 = byte length, #5CEA = sector count,
+ 97+  690F                      ; #5CEB = first internal sector (0..15), #5CEC = track.
+ 98+  690F                      ; The DMA frame window is $5000..$7FFF (12 KiB). Its first two
+ 99+  690F                      ; bytes are the length header, so executable payload max is $2FFE.
+100+  690F                      ; -------------------------------------------------------------
+101+  690F ED 4B E8 5C          ld      bc, (#5CE8)
+102+  6913 78                   ld      a, b
+103+  6914 B1                   or      c
+104+  6915 CA 7C 6A             jp      z, .empty_file_error
+105+  6918 ED 43 92 6B          ld      (P124_X86_FILE_LENGTH), bc
+106+  691C
+107+  691C                      ; Reject files larger than the executable 12 KB window minus header.
+108+  691C 78                   ld      a, b
+109+  691D FE 2F                cp      #2F
+110+  691F 38 09                jr      c, .file_length_ok
+111+  6921 C2 B5 6A             jp      nz, .task_too_large
+112+  6924 79                   ld      a, c
+113+  6925 FE FF                cp      #FF
+114+  6927 D2 B5 6A             jp      nc, .task_too_large
+115+  692A              .file_length_ok:
+116+  692A                      ; Sector count must equal ceil(file_length / 256).
+117+  692A 2A 92 6B             ld      hl, (P124_X86_FILE_LENGTH)
+118+  692D 11 FF 00             ld      de, 255
+119+  6930 19                   add     hl, de
+120+  6931 5C                   ld      e, h
+121+  6932 3A EA 5C             ld      a, (#5CEA)
+122+  6935 B7                   or      a
+123+  6936 CA 7C 6A             jp      z, .empty_file_error
+124+  6939 BB                   cp      e
+125+  693A C2 88 6A             jp      nz, .bad_file_descriptor
+126+  693D 32 96 6B             ld      (P124_X86_READ_REMAINING), a
+127+  6940
+128+  6940 3A EB 5C             ld      a, (#5CEB)
+129+  6943 FE 10                cp      16
+130+  6945 D2 88 6A             jp      nc, .bad_file_descriptor
+131+  6948 32 98 6B             ld      (P124_X86_READ_SECTOR), a
+132+  694B 3A EC 5C             ld      a, (#5CEC)
+133+  694E 32 97 6B             ld      (P124_X86_READ_TRACK), a
+134+  6951 21 00 C0             ld      hl, TRDOS_PANEL_BUFFER
+135+  6954 22 94 6B             ld      (P124_X86_READ_BUFFER), hl
+136+  6957
+137+  6957              .read_sector_loop:
+138+  6957                      ; Read exactly one sector per TR-DOS #05 call.
+139+  6957 3A 97 6B             ld      a, (P124_X86_READ_TRACK)
+140+  695A 57                   ld      d, a
+141+  695B 3A 98 6B             ld      a, (P124_X86_READ_SECTOR)
+142+  695E 5F                   ld      e, a
+143+  695F 2A 94 6B             ld      hl, (P124_X86_READ_BUFFER)
+144+  6962 06 01                ld      b, 1
+145+  6964 0E 05                ld      c, 5
+146+  6966 AF                   xor     a
+147+  6967 32 0F 5D             ld      (#5D0F), a
+148+  696A 32 10 5D             ld      (#5D10), a
+149+  696D CD 13 3D             call    #3D13
+150+  6970                      ; C=#05 stores its two-byte error result at #5D0F/#5D10.
+151+  6970 3A 0F 5D             ld      a, (#5D0F)
+152+  6973 47                   ld      b, a
+153+  6974 3A 10 5D             ld      a, (#5D10)
+154+  6977 B0                   or      b
+155+  6978 C2 94 6A             jp      nz, .sector_read_error
+156+  697B
+157+  697B                      ; Advance host buffer by 256 bytes.
+158+  697B 2A 94 6B             ld      hl, (P124_X86_READ_BUFFER)
+159+  697E 11 00 01             ld      de, 256
+160+  6981 19                   add     hl, de
+161+  6982 22 94 6B             ld      (P124_X86_READ_BUFFER), hl
+162+  6985
+163+  6985                      ; TR-DOS sectors are numbered 0..15 in this project convention.
+164+  6985 3A 98 6B             ld      a, (P124_X86_READ_SECTOR)
+165+  6988 3C                   inc     a
+166+  6989 FE 10                cp      16
+167+  698B 38 0D                jr      c, .sector_same_track
+168+  698D AF                   xor     a
+169+  698E 32 98 6B             ld      (P124_X86_READ_SECTOR), a
+170+  6991 3A 97 6B             ld      a, (P124_X86_READ_TRACK)
+171+  6994 3C                   inc     a
+172+  6995 32 97 6B             ld      (P124_X86_READ_TRACK), a
+173+  6998 18 03                jr      .sector_advanced
+174+  699A
+175+  699A              .sector_same_track:
+176+  699A 32 98 6B             ld      (P124_X86_READ_SECTOR), a
+177+  699D
+178+  699D              .sector_advanced:
+179+  699D 3A 96 6B             ld      a, (P124_X86_READ_REMAINING)
+180+  69A0 3D                   dec     a
+181+  69A1 32 96 6B             ld      (P124_X86_READ_REMAINING), a
+182+  69A4 C2 57 69             jp      nz, .read_sector_loop
+183+  69A7
+184+  69A7                      MACRO_EF_STRING P124_msg_buf_loaded
+184+  69A7             >                IF ENABLE_HARDWARE_DEBUG == 1
+184+  69A7 E5          >                    PUSH    HL
+184+  69A8 21 31 6D    >                    LD      HL, P124_msg_buf_loaded
+184+  69AB CD 6B 60    >                    CALL    DBG_Port_PrintString
+184+  69AE E1          >                    POP     HL
+184+  69AF             >                ENDIF
+185+  69AF
+186+  69AF                      ; -------------------------------------------------------------
+187+  69AF                      ; Stage 5C: transfer actual task. The DMA frame contains a two-byte
+188+  69AF                      ; length prefix, therefore the total transfer must fit in $3000 bytes.
+189+  69AF                      ; -------------------------------------------------------------
+190+  69AF ED 4B 92 6B          ld      bc, (P124_X86_FILE_LENGTH)
+191+  69B3 21 00 C0             ld      hl, TRDOS_PANEL_BUFFER
+192+  69B6 CD EA 6A             call    neogs_send_dma_block
+193+  69B9 DA C1 6A             jp      c, .task_dma_error
+194+  69BC                      MACRO_EF_STRING P124_msg_task_dma_ok
+194+  69BC             >                IF ENABLE_HARDWARE_DEBUG == 1
+194+  69BC E5          >                    PUSH    HL
+194+  69BD 21 6E 6D    >                    LD      HL, P124_msg_task_dma_ok
+194+  69C0 CD 6B 60    >                    CALL    DBG_Port_PrintString
+194+  69C3 E1          >                    POP     HL
+194+  69C4             >                ENDIF
+195+  69C4
+196+  69C4                      ; -------------------------------------------------------------
+197+  69C4                      ; Stage 5D: execute and fetch framed result.
+198+  69C4                      ; -------------------------------------------------------------
+199+  69C4 CD 46 6B             call    neogs_run_and_get_result
+200+  69C7 DA CD 6A             jp      c, .result_timeout
+201+  69CA
+202+  69CA                      MACRO_EF_STRING P124_msg_x86_result_ready
+202+  69CA             >                IF ENABLE_HARDWARE_DEBUG == 1
+202+  69CA E5          >                    PUSH    HL
+202+  69CB 21 A2 6D    >                    LD      HL, P124_msg_x86_result_ready
+202+  69CE CD 6B 60    >                    CALL    DBG_Port_PrintString
+202+  69D1 E1          >                    POP     HL
+202+  69D2             >                ENDIF
+203+  69D2 3A 9A 6B             ld      a, (P124_X86_RESULT_STATUS)
+204+  69D5 6F                   ld      l, a
+205+  69D6 26 00                ld      h, 0
+206+  69D8                      MACRO_EF_HEX16 hl
+206+  69D8             >                IF ENABLE_HARDWARE_DEBUG == 1
+206+  69D8 E5          >                    PUSH    HL
+206+  69D9 E5          >                    PUSH    hl
+206+  69DA E1          >                    POP     HL
+206+  69DB CD 81 60    >                    CALL    DBG_Port_PrintHex16
+206+  69DE E1          >                    POP     HL
+206+  69DF             >                ENDIF
+207+  69DF                      MACRO_EF_CHAR 32
+207+  69DF             >                IF ENABLE_HARDWARE_DEBUG == 1
+207+  69DF F5          >                    PUSH    AF
+207+  69E0 C5          >                    PUSH    BC
+207+  69E1 3E 20       >                    LD      A, 32
+207+  69E3 01 EF 00    >                    LD      BC, #00EF
+207+  69E6 ED 79       >                    OUT     (C), A
+207+  69E8 C1          >                    POP     BC
+207+  69E9 F1          >                    POP     AF
+207+  69EA             >                ENDIF
+208+  69EA 2A 9B 6B             ld      hl, (P124_X86_RESULT_AX)
+209+  69ED                      MACRO_EF_HEX16 hl
+209+  69ED             >                IF ENABLE_HARDWARE_DEBUG == 1
+209+  69ED E5          >                    PUSH    HL
+209+  69EE E5          >                    PUSH    hl
+209+  69EF E1          >                    POP     HL
+209+  69F0 CD 81 60    >                    CALL    DBG_Port_PrintHex16
+209+  69F3 E1          >                    POP     HL
+209+  69F4             >                ENDIF
+210+  69F4                      MACRO_EF_CHAR 13
+210+  69F4             >                IF ENABLE_HARDWARE_DEBUG == 1
+210+  69F4 F5          >                    PUSH    AF
+210+  69F5 C5          >                    PUSH    BC
+210+  69F6 3E 0D       >                    LD      A, 13
+210+  69F8 01 EF 00    >                    LD      BC, #00EF
+210+  69FB ED 79       >                    OUT     (C), A
+210+  69FD C1          >                    POP     BC
+210+  69FE F1          >                    POP     AF
+210+  69FF             >                ENDIF
+211+  69FF
+212+  69FF 3A 9A 6B             ld      a, (P124_X86_RESULT_STATUS)
+213+  6A02 B7                   or      a
+214+  6A03 C2 D9 6A             jp      nz, .interpreter_error
+215+  6A06
+216+  6A06 2A 9B 6B             ld      hl, (P124_X86_RESULT_AX)
+217+  6A09 CD B8 6F             call    Util_PrintHex16Screen
+218+  6A0C CD A5 6F             call    LOG_CloseActiveLine
+219+  6A0F B7                   or      a
+220+  6A10 C3 E5 6A             jp      .loader_restore_stack
+221+  6A13
+222+  6A13              ; -------------------------------------------------------------------------
+223+  6A13              ; Error exits. All return through the same original-stack restoration.
+224+  6A13              ; -------------------------------------------------------------------------
+225+  6A13              .diag_dma_error:
+226+  6A13                      MACRO_EF_STRING P124_msg_ipc_diag_dma_fail
+226+  6A13             >                IF ENABLE_HARDWARE_DEBUG == 1
+226+  6A13 E5          >                    PUSH    HL
+226+  6A14 21 38 6C    >                    LD      HL, P124_msg_ipc_diag_dma_fail
+226+  6A17 CD 6B 60    >                    CALL    DBG_Port_PrintString
+226+  6A1A E1          >                    POP     HL
+226+  6A1B             >                ENDIF
+227+  6A1B 37                   scf
+228+  6A1C C3 E5 6A             jp      .loader_restore_stack
+229+  6A1F
+230+  6A1F              .diag_protocol_error:
+231+  6A1F                      MACRO_EF_STRING P124_msg_ipc_diag_frame_fail
+231+  6A1F             >                IF ENABLE_HARDWARE_DEBUG == 1
+231+  6A1F E5          >                    PUSH    HL
+231+  6A20 21 6D 6C    >                    LD      HL, P124_msg_ipc_diag_frame_fail
+231+  6A23 CD 6B 60    >                    CALL    DBG_Port_PrintString
+231+  6A26 E1          >                    POP     HL
+231+  6A27             >                ENDIF
+232+  6A27 37                   scf
+233+  6A28 C3 E5 6A             jp      .loader_restore_stack
+234+  6A2B
+235+  6A2B              .diag_execution_error:
+236+  6A2B                      MACRO_EF_STRING P124_msg_ipc_diag_status_fail
+236+  6A2B             >                IF ENABLE_HARDWARE_DEBUG == 1
+236+  6A2B E5          >                    PUSH    HL
+236+  6A2C 21 AC 6C    >                    LD      HL, P124_msg_ipc_diag_status_fail
+236+  6A2F CD 6B 60    >                    CALL    DBG_Port_PrintString
+236+  6A32 E1          >                    POP     HL
+236+  6A33             >                ENDIF
+237+  6A33 3A 9A 6B             ld      a, (P124_X86_RESULT_STATUS)
+238+  6A36 6F                   ld      l, a
+239+  6A37 26 00                ld      h, 0
+240+  6A39                      MACRO_EF_HEX16 hl
+240+  6A39             >                IF ENABLE_HARDWARE_DEBUG == 1
+240+  6A39 E5          >                    PUSH    HL
+240+  6A3A E5          >                    PUSH    hl
+240+  6A3B E1          >                    POP     HL
+240+  6A3C CD 81 60    >                    CALL    DBG_Port_PrintHex16
+240+  6A3F E1          >                    POP     HL
+240+  6A40             >                ENDIF
+241+  6A40                      MACRO_EF_CHAR 13
+241+  6A40             >                IF ENABLE_HARDWARE_DEBUG == 1
+241+  6A40 F5          >                    PUSH    AF
+241+  6A41 C5          >                    PUSH    BC
+241+  6A42 3E 0D       >                    LD      A, 13
+241+  6A44 01 EF 00    >                    LD      BC, #00EF
+241+  6A47 ED 79       >                    OUT     (C), A
+241+  6A49 C1          >                    POP     BC
+241+  6A4A F1          >                    POP     AF
+241+  6A4B             >                ENDIF
+242+  6A4B 37                   scf
+243+  6A4C C3 E5 6A             jp      .loader_restore_stack
+244+  6A4F
+245+  6A4F              .diag_wrong_result:
+246+  6A4F                      MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
+246+  6A4F             >                IF ENABLE_HARDWARE_DEBUG == 1
+246+  6A4F E5          >                    PUSH    HL
+246+  6A50 21 E3 6C    >                    LD      HL, P124_msg_ipc_diag_wrong_ax
+246+  6A53 CD 6B 60    >                    CALL    DBG_Port_PrintString
+246+  6A56 E1          >                    POP     HL
+246+  6A57             >                ENDIF
+247+  6A57 2A 9B 6B             ld      hl, (P124_X86_RESULT_AX)
+248+  6A5A                      MACRO_EF_HEX16 hl
+248+  6A5A             >                IF ENABLE_HARDWARE_DEBUG == 1
+248+  6A5A E5          >                    PUSH    HL
+248+  6A5B E5          >                    PUSH    hl
+248+  6A5C E1          >                    POP     HL
+248+  6A5D CD 81 60    >                    CALL    DBG_Port_PrintHex16
+248+  6A60 E1          >                    POP     HL
+248+  6A61             >                ENDIF
+249+  6A61                      MACRO_EF_CHAR 13
+249+  6A61             >                IF ENABLE_HARDWARE_DEBUG == 1
+249+  6A61 F5          >                    PUSH    AF
+249+  6A62 C5          >                    PUSH    BC
+249+  6A63 3E 0D       >                    LD      A, 13
+249+  6A65 01 EF 00    >                    LD      BC, #00EF
+249+  6A68 ED 79       >                    OUT     (C), A
+249+  6A6A C1          >                    POP     BC
+249+  6A6B F1          >                    POP     AF
+249+  6A6C             >                ENDIF
+250+  6A6C 37                   scf
+251+  6A6D C3 E5 6A             jp      .loader_restore_stack
+252+  6A70
+253+  6A70              .file_not_found:
+254+  6A70                      MACRO_EF_STRING P124_msg_err_no_file
+254+  6A70             >                IF ENABLE_HARDWARE_DEBUG == 1
+254+  6A70 E5          >                    PUSH    HL
+254+  6A71 21 C4 6D    >                    LD      HL, P124_msg_err_no_file
+254+  6A74 CD 6B 60    >                    CALL    DBG_Port_PrintString
+254+  6A77 E1          >                    POP     HL
+254+  6A78             >                ENDIF
+255+  6A78 37                   scf
+256+  6A79 C3 E5 6A             jp      .loader_restore_stack
+257+  6A7C
+258+  6A7C              .empty_file_error:
+259+  6A7C                      MACRO_EF_STRING P124_msg_err_empty_file
+259+  6A7C             >                IF ENABLE_HARDWARE_DEBUG == 1
+259+  6A7C E5          >                    PUSH    HL
+259+  6A7D 21 EC 6D    >                    LD      HL, P124_msg_err_empty_file
+259+  6A80 CD 6B 60    >                    CALL    DBG_Port_PrintString
+259+  6A83 E1          >                    POP     HL
+259+  6A84             >                ENDIF
+260+  6A84 37                   scf
+261+  6A85 C3 E5 6A             jp      .loader_restore_stack
+262+  6A88
+263+  6A88              .bad_file_descriptor:
+264+  6A88                      MACRO_EF_STRING P124_msg_err_bad_descriptor
+264+  6A88             >                IF ENABLE_HARDWARE_DEBUG == 1
+264+  6A88 E5          >                    PUSH    HL
+264+  6A89 21 27 6E    >                    LD      HL, P124_msg_err_bad_descriptor
+264+  6A8C CD 6B 60    >                    CALL    DBG_Port_PrintString
+264+  6A8F E1          >                    POP     HL
+264+  6A90             >                ENDIF
+265+  6A90 37                   scf
+266+  6A91 C3 E5 6A             jp      .loader_restore_stack
+267+  6A94
+268+  6A94              .sector_read_error:
+269+  6A94                      MACRO_EF_STRING P124_msg_err_sector_read
+269+  6A94             >                IF ENABLE_HARDWARE_DEBUG == 1
+269+  6A94 E5          >                    PUSH    HL
+269+  6A95 21 62 6E    >                    LD      HL, P124_msg_err_sector_read
+269+  6A98 CD 6B 60    >                    CALL    DBG_Port_PrintString
+269+  6A9B E1          >                    POP     HL
+269+  6A9C             >                ENDIF
+270+  6A9C 2A 0F 5D             ld      hl, (#5D0F)
+271+  6A9F                      MACRO_EF_HEX16 hl
+271+  6A9F             >                IF ENABLE_HARDWARE_DEBUG == 1
+271+  6A9F E5          >                    PUSH    HL
+271+  6AA0 E5          >                    PUSH    hl
+271+  6AA1 E1          >                    POP     HL
+271+  6AA2 CD 81 60    >                    CALL    DBG_Port_PrintHex16
+271+  6AA5 E1          >                    POP     HL
+271+  6AA6             >                ENDIF
+272+  6AA6                      MACRO_EF_CHAR 13
+272+  6AA6             >                IF ENABLE_HARDWARE_DEBUG == 1
+272+  6AA6 F5          >                    PUSH    AF
+272+  6AA7 C5          >                    PUSH    BC
+272+  6AA8 3E 0D       >                    LD      A, 13
+272+  6AAA 01 EF 00    >                    LD      BC, #00EF
+272+  6AAD ED 79       >                    OUT     (C), A
+272+  6AAF C1          >                    POP     BC
+272+  6AB0 F1          >                    POP     AF
+272+  6AB1             >                ENDIF
+273+  6AB1 37                   scf
+274+  6AB2 C3 E5 6A             jp      .loader_restore_stack
+275+  6AB5
+276+  6AB5              .task_too_large:
+277+  6AB5                      MACRO_EF_STRING P124_msg_err_task_too_large
+277+  6AB5             >                IF ENABLE_HARDWARE_DEBUG == 1
+277+  6AB5 E5          >                    PUSH    HL
+277+  6AB6 21 96 6E    >                    LD      HL, P124_msg_err_task_too_large
+277+  6AB9 CD 6B 60    >                    CALL    DBG_Port_PrintString
+277+  6ABC E1          >                    POP     HL
+277+  6ABD             >                ENDIF
+278+  6ABD 37                   scf
+279+  6ABE C3 E5 6A             jp      .loader_restore_stack
+280+  6AC1
+281+  6AC1              .task_dma_error:
+282+  6AC1                      MACRO_EF_STRING P124_msg_err_dma_transfer
+282+  6AC1             >                IF ENABLE_HARDWARE_DEBUG == 1
+282+  6AC1 E5          >                    PUSH    HL
+282+  6AC2 21 E7 6E    >                    LD      HL, P124_msg_err_dma_transfer
+282+  6AC5 CD 6B 60    >                    CALL    DBG_Port_PrintString
+282+  6AC8 E1          >                    POP     HL
+282+  6AC9             >                ENDIF
+283+  6AC9 37                   scf
+284+  6ACA C3 E5 6A             jp      .loader_restore_stack
+285+  6ACD
+286+  6ACD              .result_timeout:
+287+  6ACD                      MACRO_EF_STRING P124_msg_err_result_timeout
+287+  6ACD             >                IF ENABLE_HARDWARE_DEBUG == 1
+287+  6ACD E5          >                    PUSH    HL
+287+  6ACE 21 16 6F    >                    LD      HL, P124_msg_err_result_timeout
+287+  6AD1 CD 6B 60    >                    CALL    DBG_Port_PrintString
+287+  6AD4 E1          >                    POP     HL
+287+  6AD5             >                ENDIF
+288+  6AD5 37                   scf
+289+  6AD6 C3 E5 6A             jp      .loader_restore_stack
+290+  6AD9
+291+  6AD9              .interpreter_error:
+292+  6AD9                      MACRO_EF_STRING P124_msg_err_interpreter_status
+292+  6AD9             >                IF ENABLE_HARDWARE_DEBUG == 1
+292+  6AD9 E5          >                    PUSH    HL
+292+  6ADA 21 47 6F    >                    LD      HL, P124_msg_err_interpreter_status
+292+  6ADD CD 6B 60    >                    CALL    DBG_Port_PrintString
+292+  6AE0 E1          >                    POP     HL
+292+  6AE1             >                ENDIF
+293+  6AE1 37                   scf
+294+  6AE2 C3 E5 6A             jp      .loader_restore_stack
+295+  6AE5
+296+  6AE5              .loader_restore_stack:
+297+  6AE5 2A 87 6B             ld      hl, (P124_X86_LOADER_SP_BACKUP)
+298+  6AE8 F9                   ld      sp, hl
+299+  6AE9 C9                   ret
+300+  6AEA
+301+  6AEA              ; =========================================================================
+302+  6AEA              ; NeoGS transport helpers — exact CBIT/DBIT meanings from Guide v0.1.A
+303+  6AEA              ; =========================================================================
+304+  6AEA
+305+  6AEA              ; IN: HL=source in host RAM, BC=payload byte count (1..#2FFE).
+306+  6AEA              ; OUT: Carry clear after NeoGS armed DMA, consumed the host end marker,
+307+  6AEA              ;      and disabled DMA. Carry set on timeout.
+308+  6AEA              ;
+309+  6AEA              ; Protocol:
+310+  6AEA              ;   host OUT GSCOM,CMD_LOAD_X86 -> CBIT=1
+311+  6AEA              ;   NeoGS configures DMA, clears CLRCBIT -> CBIT=0 (READY)
+312+  6AEA              ;   host LDIR to #0000..#3FFF (no dummy write)
+313+  6AEA              ;   host OUT GSCOM,#FF -> CBIT=1 (end marker)
+314+  6AEA              ;   NeoGS disables DMA, clears CLRCBIT -> CBIT=0 (DONE)
+315+  6AEA              neogs_send_dma_block:
+316+  6AEA 78                   ld      a, b
+317+  6AEB B1                   or      c
+318+  6AEC CA 44 6B             jp      z, .dma_bad_length
+319+  6AEF 78                   ld      a, b
+320+  6AF0 FE 40                cp      #40
+321+  6AF2 38 08                jr      c, .dma_length_ok
+322+  6AF4 C2 44 6B             jp      nz, .dma_bad_length
+323+  6AF7 79                   ld      a, c
+324+  6AF8 B7                   or      a
+325+  6AF9 C2 44 6B             jp      nz, .dma_bad_length
+326+  6AFC              .dma_length_ok:
+327+  6AFC 22 89 6B             ld      (P124_DMA_SOURCE), hl
+328+  6AFF ED 43 8B 6B          ld      (P124_DMA_LENGTH), bc
+329+  6B03
+330+  6B03                      ; Validate payload + 2-byte length prefix <= $3000.
+331+  6B03 C5                   push    bc
+332+  6B04 E1                   pop     hl
+333+  6B05 11 02 00             ld      de, 2
+334+  6B08 19                   add     hl, de
+335+  6B09 7C                   ld      a, h
+336+  6B0A FE 30                cp      #30
+337+  6B0C 38 08                jr      c, .dma_total_length_ok
+338+  6B0E C2 44 6B             jp      nz, .dma_bad_length
+339+  6B11 7D                   ld      a, l
+340+  6B12 B7                   or      a
+341+  6B13 C2 44 6B             jp      nz, .dma_bad_length
+342+  6B16              .dma_total_length_ok:
+343+  6B16 3E 02                ld      a, CMD_LOAD_X86
+344+  6B18 D3 BB                out     (GSCOM), a
+345+  6B1A CD 1A 68             call    neogs_wait_command_done
+346+  6B1D D8                   ret     c
+347+  6B1E
+348+  6B1E                      ; LDIR is used for BOTH pieces of the frame. This is intentional:
+349+  6B1E                      ; the DMA engine observes host memory-write cycles. The first LDIR
+350+  6B1E                      ; writes the two-byte header to host addresses #0000-#0001; the second
+351+  6B1E                      ; writes the payload to #0002 onward. No direct LD (nn),A writes and
+352+  6B1E                      ; no temporary stack are needed.
+353+  6B1E F3                   di
+354+  6B1F 2A 8B 6B             ld      hl, (P124_DMA_LENGTH)
+355+  6B22 22 8D 6B             ld      (P124_DMA_HEADER), hl
+356+  6B25 21 8D 6B             ld      hl, P124_DMA_HEADER
+357+  6B28 11 00 00             ld      de, DMA_HOST_WINDOW
+358+  6B2B 01 02 00             ld      bc, 2
+359+  6B2E ED B0                ldir
+360+  6B30
+361+  6B30 2A 89 6B             ld      hl, (P124_DMA_SOURCE)
+362+  6B33 11 02 00             ld      de, DMA_HOST_WINDOW + 2
+363+  6B36 ED 4B 8B 6B          ld      bc, (P124_DMA_LENGTH)
+364+  6B3A ED B0                ldir
+365+  6B3C
+366+  6B3C                      ; End marker is a command-byte write; it is NOT a DMA data byte.
+367+  6B3C 3E FF                ld      a, #FF
+368+  6B3E D3 BB                out     (GSCOM), a
+369+  6B40 CD 1A 68             call    neogs_wait_command_done
+370+  6B43 C9                   ret
+371+  6B44
+372+  6B44              .dma_bad_length:
+373+  6B44 37                   scf
+374+  6B45 C9                   ret
+375+  6B46
+376+  6B46              ; Send RUN command and fetch the four-byte application result frame:
+377+  6B46              ; A5 signature, status, AX low, AX high.
+378+  6B46              neogs_run_and_get_result:
+379+  6B46 3E 03                ld      a, CMD_RUN_X86
+380+  6B48 D3 BB                out     (GSCOM), a
+381+  6B4A CD 2C 68             call    neogs_wait_command_done_long
+382+  6B4D D8                   ret     c
+383+  6B4E
+384+  6B4E 3E 04                ld      a, CMD_GET_STATUS
+385+  6B50 D3 BB                out     (GSCOM), a
+386+  6B52
+387+  6B52 CD 46 68             call    neogs_wait_data_byte
+388+  6B55 D8                   ret     c
+389+  6B56 32 99 6B             ld      (P124_X86_RESULT_MAGIC), a
+390+  6B59
+391+  6B59 CD 46 68             call    neogs_wait_data_byte
+392+  6B5C D8                   ret     c
+393+  6B5D 32 9A 6B             ld      (P124_X86_RESULT_STATUS), a
+394+  6B60
+395+  6B60 CD 46 68             call    neogs_wait_data_byte
+396+  6B63 D8                   ret     c
+397+  6B64 5F                   ld      e, a
+398+  6B65
+399+  6B65 CD 46 68             call    neogs_wait_data_byte
+400+  6B68 D8                   ret     c
+401+  6B69 57                   ld      d, a
+402+  6B6A ED 53 9B 6B          ld      (P124_X86_RESULT_AX), de
+403+  6B6E ED 53 40 63          ld      (X86_RESULT_AX), de
+404+  6B72
+405+  6B72 CD 1A 68             call    neogs_wait_command_done
+406+  6B75 D8                   ret     c
+407+  6B76
+408+  6B76 3A 99 6B             ld      a, (P124_X86_RESULT_MAGIC)
+409+  6B79 FE A5                cp      NGS_RESULT_SIGNATURE
+410+  6B7B 28 02                jr      z, .result_frame_ok
+411+  6B7D 37                   scf
+412+  6B7E C9                   ret
+413+  6B7F              .result_frame_ok:
+414+  6B7F B7                   or      a
+415+  6B80 C9                   ret
+416+  6B81
+417+  6B81              ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
+418+  6B81              x86_diag_program:
+419+  6B81 B8 AA BB 40          defb    #B8, #AA, #BB, #40, #90, #F4
+419+  6B85 90 F4
+420+  6B87              x86_diag_program_end:
+421+  6B87
+422+  6B87              ; Data/state
+423+  6B87 00 00        P124_X86_LOADER_SP_BACKUP: dw 0
+424+  6B89 00 00        P124_DMA_SOURCE:           dw 0
+425+  6B8B 00 00        P124_DMA_LENGTH:           dw 0
+426+  6B8D 00 00        P124_DMA_HEADER:           dw 0
+427+  6B8F 00 00        P124_X86_REQUEST_FILENAME: dw 0
+428+  6B91 00           P124_X86_REQUEST_TYPE:     db 0
+429+  6B92 00 00        P124_X86_FILE_LENGTH:      dw 0
+430+  6B94 00 00        P124_X86_READ_BUFFER:      dw 0
+431+  6B96 00           P124_X86_READ_REMAINING:   db 0
+432+  6B97 00           P124_X86_READ_TRACK:       db 0
+433+  6B98 00           P124_X86_READ_SECTOR:      db 0
+434+  6B99 00           P124_X86_RESULT_MAGIC:     db 0
+435+  6B9A 00           P124_X86_RESULT_STATUS:    db 0
+436+  6B9B 00 00        P124_X86_RESULT_AX:        dw 0
+437+  6B9D
+438+  6B9D              ; Strings
+439+  6B9D 5B 44 42 47  P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
+439+  6BA1 5D 20 4C 4F
+439+  6BA5 41 44 45 52
+439+  6BA9 20 53 54 41
+439+  6BAD 43 4B 20 41
+439+  6BB1 54 20 23 42
+439+  6BB5 46 46 46 3B
+439+  6BB9 20 54 52 2D
+439+  6BBD 44 4F 53 20
+439+  6BC1 42 55 46 46
+439+  6BC5 45 52 20 41
+439+  6BC9 54 20 23 43
+439+  6BCD 30 30 30 2E
+439+  6BD1 0D 00
+440+  6BD3 5B 49 50 43  P124_msg_ipc_diag_start:     defb "[IPC TEST] Starting documented CBIT/DBIT + DMA diagnostic.", 13, 0
+440+  6BD7 20 54 45 53
+440+  6BDB 54 5D 20 53
+440+  6BDF 74 61 72 74
+440+  6BE3 69 6E 67 20
+440+  6BE7 64 6F 63 75
+440+  6BEB 6D 65 6E 74
+440+  6BEF 65 64 20 43
+440+  6BF3 42 49 54 2F
+440+  6BF7 44 42 49 54
+440+  6BFB 20 2B 20 44
+440+  6BFF 4D 41 20 64
+440+  6C03 69 61 67 6E
+440+  6C07 6F 73 74 69
+440+  6C0B 63 2E 0D 00
+441+  6C0F 5B 49 50 43  P124_msg_ipc_diag_pass:      defb "[IPC TEST] PASS: x86 HLT completed, AX=#", 0
+441+  6C13 20 54 45 53
+441+  6C17 54 5D 20 50
+441+  6C1B 41 53 53 3A
+441+  6C1F 20 78 38 36
+441+  6C23 20 48 4C 54
+441+  6C27 20 63 6F 6D
+441+  6C2B 70 6C 65 74
+441+  6C2F 65 64 2C 20
+441+  6C33 41 58 3D 23
+441+  6C37 00
+442+  6C38 5B 49 50 43  P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake timed out.", 13, 0
+442+  6C3C 20 54 45 53
+442+  6C40 54 5D 20 46
+442+  6C44 41 49 4C 3A
+442+  6C48 20 44 4D 41
+442+  6C4C 20 72 65 61
+442+  6C50 64 79 2F 65
+442+  6C54 6E 64 20 68
+442+  6C58 61 6E 64 73
+442+  6C5C 68 61 6B 65
+442+  6C60 20 74 69 6D
+442+  6C64 65 64 20 6F
+442+  6C68 75 74 2E 0D
+442+  6C6C 00
+443+  6C6D 5B 49 50 43  P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
+443+  6C71 20 54 45 53
+443+  6C75 54 5D 20 46
+443+  6C79 41 49 4C 3A
+443+  6C7D 20 63 6F 6D
+443+  6C81 6D 61 6E 64
+443+  6C85 2F 64 61 74
+443+  6C89 61 20 66 72
+443+  6C8D 61 6D 65 20
+443+  6C91 74 69 6D 65
+443+  6C95 6F 75 74 20
+443+  6C99 6F 72 20 62
+443+  6C9D 61 64 20 73
+443+  6CA1 69 67 6E 61
+443+  6CA5 74 75 72 65
+443+  6CA9 2E 0D 00
+444+  6CAC 5B 49 50 43  P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter status is not zero: #", 0
+444+  6CB0 20 54 45 53
+444+  6CB4 54 5D 20 46
+444+  6CB8 41 49 4C 3A
+444+  6CBC 20 78 38 36
+444+  6CC0 20 69 6E 74
+444+  6CC4 65 72 70 72
+444+  6CC8 65 74 65 72
+444+  6CCC 20 73 74 61
+444+  6CD0 74 75 73 20
+444+  6CD4 69 73 20 6E
+444+  6CD8 6F 74 20 7A
+444+  6CDC 65 72 6F 3A
+444+  6CE0 20 23 00
+445+  6CE3 5B 49 50 43  P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
+445+  6CE7 20 54 45 53
+445+  6CEB 54 5D 20 46
+445+  6CEF 41 49 4C 3A
+445+  6CF3 20 65 78 70
+445+  6CF7 65 63 74 65
+445+  6CFB 64 20 41 58
+445+  6CFF 3D 23 42 42
+445+  6D03 41 42 2C 20
+445+  6D07 67 6F 74 20
+445+  6D0B 23 00
+446+  6D0D 5B 53 54 41  P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
+446+  6D11 47 45 20 35
+446+  6D15 5D 20 5B 54
+446+  6D19 52 44 4F 53
+446+  6D1D 5D 20 54 61
+446+  6D21 73 6B 20 66
+446+  6D25 69 6C 65 20
+446+  6D29 66 6F 75 6E
+446+  6D2D 64 2E 0D 00
+447+  6D31 5B 53 54 41  P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
+447+  6D35 47 45 20 35
+447+  6D39 5D 20 5B 42
+447+  6D3D 55 46 46 45
+447+  6D41 52 5D 20 46
+447+  6D45 69 6C 65 20
+447+  6D49 73 65 63 74
+447+  6D4D 6F 72 73 20
+447+  6D51 6C 6F 61 64
+447+  6D55 65 64 20 69
+447+  6D59 6E 74 6F 20
+447+  6D5D 68 6F 73 74
+447+  6D61 20 52 41 4D
+447+  6D65 20 23 43 30
+447+  6D69 30 30 2E 0D
+447+  6D6D 00
+448+  6D6E 5B 53 54 41  P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
+448+  6D72 47 45 20 35
+448+  6D76 5D 20 5B 44
+448+  6D7A 4D 41 5D 20
+448+  6D7E 4E 65 6F 47
+448+  6D82 53 20 61 63
+448+  6D86 6B 6E 6F 77
+448+  6D8A 6C 65 64 67
+448+  6D8E 65 64 20 44
+448+  6D92 4D 41 20 63
+448+  6D96 6F 6D 70 6C
+448+  6D9A 65 74 69 6F
+448+  6D9E 6E 2E 0D 00
+449+  6DA2 5B 53 54 41  P124_msg_x86_result_ready:  defb "[STAGE 5] [RESULT] Status / AX = ", 0
+449+  6DA6 47 45 20 35
+449+  6DAA 5D 20 5B 52
+449+  6DAE 45 53 55 4C
+449+  6DB2 54 5D 20 53
+449+  6DB6 74 61 74 75
+449+  6DBA 73 20 2F 20
+449+  6DBE 41 58 20 3D
+449+  6DC2 20 00
+450+  6DC4 5B 53 54 41  P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0
+450+  6DC8 47 45 20 35
+450+  6DCC 5D 20 5B 45
+450+  6DD0 52 52 4F 52
+450+  6DD4 5D 20 54 61
+450+  6DD8 73 6B 20 66
+450+  6DDC 69 6C 65 20
+450+  6DE0 6E 6F 74 20
+450+  6DE4 66 6F 75 6E
+450+  6DE8 64 2E 0D 00
+451+  6DEC 5B 53 54 41  P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
+451+  6DF0 47 45 20 35
+451+  6DF4 5D 20 5B 45
+451+  6DF8 52 52 4F 52
+451+  6DFC 5D 20 54 61
+451+  6E00 73 6B 20 66
+451+  6E04 69 6C 65 20
+451+  6E08 69 73 20 65
+451+  6E0C 6D 70 74 79
+451+  6E10 20 6F 72 20
+451+  6E14 68 61 73 20
+451+  6E18 7A 65 72 6F
+451+  6E1C 20 73 65 63
+451+  6E20 74 6F 72 73
+451+  6E24 2E 0D 00
+452+  6E27 5B 53 54 41  P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0
+452+  6E2B 47 45 20 35
+452+  6E2F 5D 20 5B 45
+452+  6E33 52 52 4F 52
+452+  6E37 5D 20 54 52
+452+  6E3B 2D 44 4F 53
+452+  6E3F 20 66 69 6C
+452+  6E43 65 20 64 65
+452+  6E47 73 63 72 69
+452+  6E4B 70 74 6F 72
+452+  6E4F 20 69 73 20
+452+  6E53 69 6E 63 6F
+452+  6E57 6E 73 69 73
+452+  6E5B 74 65 6E 74
+452+  6E5F 2E 0D 00
+453+  6E62 5B 53 54 41  P124_msg_err_sector_read:    defb "[STAGE 5] [ERROR] TR-DOS sector read failed; code=#", 0
+453+  6E66 47 45 20 35
+453+  6E6A 5D 20 5B 45
+453+  6E6E 52 52 4F 52
+453+  6E72 5D 20 54 52
+453+  6E76 2D 44 4F 53
+453+  6E7A 20 73 65 63
+453+  6E7E 74 6F 72 20
+453+  6E82 72 65 61 64
+453+  6E86 20 66 61 69
+453+  6E8A 6C 65 64 3B
+453+  6E8E 20 63 6F 64
+453+  6E92 65 3D 23 00
+454+  6E96 5B 53 54 41  P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 12 KB executable window (max payload $2FFE).", 13, 0
+454+  6E9A 47 45 20 35
+454+  6E9E 5D 20 5B 45
+454+  6EA2 52 52 4F 52
+454+  6EA6 5D 20 54 61
+454+  6EAA 73 6B 20 65
+454+  6EAE 78 63 65 65
+454+  6EB2 64 73 20 74
+454+  6EB6 68 65 20 31
+454+  6EBA 32 20 4B 42
+454+  6EBE 20 65 78 65
+454+  6EC2 63 75 74 61
+454+  6EC6 62 6C 65 20
+454+  6ECA 77 69 6E 64
+454+  6ECE 6F 77 20 28
+454+  6ED2 6D 61 78 20
+454+  6ED6 70 61 79 6C
+454+  6EDA 6F 61 64 20
+454+  6EDE 24 32 46 46
+454+  6EE2 45 29 2E 0D
+454+  6EE6 00
+455+  6EE7 5B 53 54 41  P124_msg_err_dma_transfer:   defb "[STAGE 5] [ERROR] NeoGS DMA handshake failed.", 13, 0
+455+  6EEB 47 45 20 35
+455+  6EEF 5D 20 5B 45
+455+  6EF3 52 52 4F 52
+455+  6EF7 5D 20 4E 65
+455+  6EFB 6F 47 53 20
+455+  6EFF 44 4D 41 20
+455+  6F03 68 61 6E 64
+455+  6F07 73 68 61 6B
+455+  6F0B 65 20 66 61
+455+  6F0F 69 6C 65 64
+455+  6F13 2E 0D 00
+456+  6F16 5B 53 54 41  P124_msg_err_result_timeout: defb "[STAGE 5] [ERROR] NeoGS result frame timed out.", 13, 0
+456+  6F1A 47 45 20 35
+456+  6F1E 5D 20 5B 45
+456+  6F22 52 52 4F 52
+456+  6F26 5D 20 4E 65
+456+  6F2A 6F 47 53 20
+456+  6F2E 72 65 73 75
+456+  6F32 6C 74 20 66
+456+  6F36 72 61 6D 65
+456+  6F3A 20 74 69 6D
+456+  6F3E 65 64 20 6F
+456+  6F42 75 74 2E 0D
+456+  6F46 00
+457+  6F47 5B 53 54 41  P124_msg_err_interpreter_status: defb "[STAGE 5] [ERROR] x86 interpreter returned non-zero status.", 13, 0
+457+  6F4B 47 45 20 35
+457+  6F4F 5D 20 5B 45
+457+  6F53 52 52 4F 52
+457+  6F57 5D 20 78 38
+457+  6F5B 36 20 69 6E
+457+  6F5F 74 65 72 70
+457+  6F63 72 65 74 65
+457+  6F67 72 20 72 65
+457+  6F6B 74 75 72 6E
+457+  6F6F 65 64 20 6E
+457+  6F73 6F 6E 2D 7A
+457+  6F77 65 72 6F 20
+457+  6F7B 73 74 61 74
+457+  6F7F 75 73 2E 0D
+457+  6F83 00
+458+  6F84
+# file closed: x86_loader.asm
+231   6F84                      INCLUDE "log_debug.asm"
+# file opened: log_debug.asm
+  1+  6F84              ; =========================================================================
+  2+  6F84              ; PERFECT COMMANDER 123 — СЕРВИСНЫЙ МОДУЛЬ МНОГОСТРОЧНОЙ ПЕЧАТИ И HEX-ЛОГОВ
+  3+  6F84              ; СИСТЕМНЫЙ ПУТЬ: zx_main/log_debug.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+  4+  6F84              ; =========================================================================
+  5+  6F84
+  6+  6F84              LOG_WriteMessageToBuffer:
+  6+  6F84
+  7+  6F84 F5                   PUSH    AF
+  7+  6F85 C5             PUSH BC
+  7+  6F86 D5             PUSH DE
+  7+  6F87 E5             PUSH HL
+  7+  6F88 DD E5          PUSH IX
+  8+  6F8A E5                   PUSH    HL
+  8+  6F8B DD E1          POP IX
+  9+  6F8D
+ 10+  6F8D              .loop_text:
+ 11+  6F8D DD 7E 00             LD      A, (IX+0)
+ 11+  6F90 B7             OR A
+ 11+  6F91 28 08          JR Z, .msg_finished
+ 12+  6F93 47                   LD      B, A
+ 13+  6F94
+ 14+  6F94                      ; Отправляем символ напрямую в физический знакоместный рендерер экрана
+ 15+  6F94 CD E5 6F             CALL    Direct_PrintChar
+ 16+  6F97 DD 23                INC     IX
+ 16+  6F99 18 F2          JR .loop_text
+ 17+  6F9B
+ 18+  6F9B              .msg_finished:
+ 19+  6F9B                      ; Автоматически закрываем строку лога переводом каретки CR/LF
+ 20+  6F9B CD A5 6F             CALL    LOG_CloseActiveLine
+ 21+  6F9E
+ 22+  6F9E DD E1                POP     IX
+ 22+  6FA0 E1             POP HL
+ 22+  6FA1 D1             POP DE
+ 22+  6FA2 C1             POP BC
+ 22+  6FA3 F1             POP AF
+ 23+  6FA4 C9                   RET
+ 24+  6FA5
+ 25+  6FA5              LOG_CloseActiveLine:
+ 25+  6FA5
+ 26+  6FA5 F5                   PUSH    AF
+ 26+  6FA6 C5             PUSH BC
+ 26+  6FA7 D5             PUSH DE
+ 26+  6FA8 E5             PUSH HL
+ 27+  6FA9 3E 0D                LD      A, #0D
+ 27+  6FAB CD E5 6F       CALL Direct_PrintChar
+ 28+  6FAE 3E 0A                LD      A, #0A
+ 28+  6FB0 CD E5 6F       CALL Direct_PrintChar
+ 29+  6FB3 E1                   POP     HL
+ 29+  6FB4 D1             POP DE
+ 29+  6FB5 C1             POP BC
+ 29+  6FB6 F1             POP AF
+ 30+  6FB7 C9                   RET
+ 31+  6FB8
+ 32+  6FB8              ; -------------------------------------------------------------------------
+ 33+  6FB8              ; ВЫВОД 16-БИТНОГО HEX-ЗНАЧЕНИЯ ИЗ HL НА ЭКРАН ХОСТА
+ 34+  6FB8              ; -------------------------------------------------------------------------
+ 35+  6FB8              Util_PrintHex16Screen:
+ 35+  6FB8
+ 36+  6FB8 F5                   PUSH    AF
+ 37+  6FB9 C5                   PUSH    BC
+ 38+  6FBA 7C                   LD      A, H
+ 39+  6FBB CD CE 6F             CALL    Util_Internal_ScreenHex8   ; Печатаем старший байт (H)
+ 40+  6FBE 7D                   LD      A, L
+ 41+  6FBF CD CE 6F             CALL    Util_Internal_ScreenHex8   ; Печатаем младший байт (L)
+ 42+  6FC2 C1                   POP     BC
+ 43+  6FC3 F1                   POP     AF
+ 44+  6FC4 C9                   RET
+ 45+  6FC5
+ 46+  6FC5              ; -------------------------------------------------------------------------
+ 47+  6FC5              ; ВЫВОД 8-БИТНОГО HEX-ЗНАЧЕНИЯ ИЗ L НА ЭКРАН ХОСТА
+ 48+  6FC5              ; -------------------------------------------------------------------------
+ 49+  6FC5              Util_PrintHex8Screen:
+ 49+  6FC5
+ 50+  6FC5 F5                   PUSH    AF
+ 51+  6FC6 C5                   PUSH    BC
+ 52+  6FC7 7D                   LD      A, L
+ 53+  6FC8 CD CE 6F             CALL    Util_Internal_ScreenHex8   ; Печатаем байт напрямую
+ 54+  6FCB C1                   POP     BC
+ 55+  6FCC F1                   POP     AF
+ 56+  6FCD C9                   RET
+ 57+  6FCE
+ 58+  6FCE              ; -------------------------------------------------------------------------
+ 59+  6FCE              ; ГЛОБАЛЬНАЯ ПОДПРОГРАММА ПОБАЙТОВОГО РЕНДЕРА И ВЫВОДА В HEX НА ЭКРАН
+ 60+  6FCE              ; -------------------------------------------------------------------------
+ 61+  6FCE              Util_Internal_ScreenHex8:
+ 61+  6FCE
+ 62+  6FCE F5                   PUSH    AF
+ 63+  6FCF 1F                   RRA
+ 63+  6FD0 1F             RRA
+ 63+  6FD1 1F             RRA
+ 63+  6FD2 1F             RRA                 ; Сдвигаем старший ниббл вниз
+ 64+  6FD3 CD D7 6F             CALL    .local_nibble
+ 65+  6FD6 F1                   POP     AF
+ 66+  6FD7              .local_nibble:
+ 67+  6FD7 E6 0F                AND     #0F                        ; Изолируем 4 бита
+ 68+  6FD9 FE 0A                CP      10
+ 69+  6FDB 38 02                JR      C, .is_digit
+ 70+  6FDD C6 07                ADD     A, 7                       ; Коррекция для символов A..F
+ 71+  6FDF              .is_digit:
+ 72+  6FDF C6 30                ADD     A, "0"                     ; Перевод в ASCII-код
+ 73+  6FE1 CD E5 6F             CALL    Direct_PrintChar           ; Печать символа в знакоместо экрана
+ 74+  6FE4 C9                   RET
+ 75+  6FE5
+ 76+  6FE5
+ 77+  6FE5              ; =========================================================================
+ 78+  6FE5
+# file closed: log_debug.asm
+232   6FE5
+233   6FE5                      INCLUDE "display.asm"       ; Модуль низкоуровневого вывода знакомест
+# file opened: display.asm
+  1+  6FE5              ; =========================================================================
+  2+  6FE5              ; PROJECT 124 — LOW LEVEL GRAPHIC CHR RENDERER (FROM PROJECT 123)
+  3+  6FE5              ; СИСТЕМНЫЙ ПУТЬ: zx_main/display.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+  4+  6FE5              ; =========================================================================
+  5+  6FE5
+  6+  6FE5              ; =========================================================================
+  7+  6FE5              ; [Дописать в самое начало файла zx_main/display.asm]
+  8+  6FE5              ; =========================================================================
+  9+  6FE5              ; Связываем имя шрифта из 123-го ядра с бинарным массивом ui_engine проекта 124
+ 10+  6FE5              EXTERNAL_FONT_BIN EQU FONT_DATA_88
+ 11+  6FE5
+ 12+  6FE5
+ 13+  6FE5              ; --- ПРОЦЕДУРА ПРЯМОЙ ПЕЧАТИ НИЖНЕГО ОТЛАДЧИКА С АВТО-СКРОЛЛОМ ---
+ 14+  6FE5              Direct_PrintChar:
+ 14+  6FE5
+ 15+  6FE5 C5                   PUSH    BC
+ 16+  6FE6 D5                   PUSH    DE
+ 17+  6FE7 E5                   PUSH    HL
+ 18+  6FE8 47                   LD      B, A
+ 19+  6FE9
+ 20+  6FE9                      ; Тотальный аппаратный перехват в физический порт отладки #EF
+ 21+  6FE9                      IF ENABLE_HARDWARE_DEBUG == 1
+ 22+  6FE9 C5                   PUSH    BC
+ 23+  6FEA 01 EF 00             LD      BC, #00EF
+ 24+  6FED ED 79                OUT     (C), A
+ 25+  6FEF C1                   POP     BC
+ 26+  6FF0                      ENDIF
+ 27+  6FF0
+ 28+  6FF0 FE 0D                CP      #0D                     ; Проверяем возврат каретки (CR)
+ 29+  6FF2 20 07                JR      NZ, .check_lf
+ 30+  6FF4 AF                   XOR     A
+ 31+  6FF5 32 33 63             LD      (Console_X), A
+ 32+  6FF8 C3 35 70             JP      .done_print
+ 33+  6FFB
+ 34+  6FFB              .check_lf:
+ 35+  6FFB FE 0A                CP      #0A                     ; Проверяем перевод строки (LF)
+ 36+  6FFD 20 11                JR      NZ, .render_gate
+ 37+  6FFF AF                   XOR     A
+ 38+  7000 32 33 63             LD      (Console_X), A
+ 39+  7003 3A 34 63             LD      A, (Console_Y)
+ 40+  7006 3C                   INC     A
+ 41+  7007 32 34 63             LD      (Console_Y), A
+ 42+  700A CD 87 78             CALL    EnsureConsoleSpace
+ 43+  700D C3 35 70             JP      .done_print
+ 44+  7010
+ 45+  7010              .render_gate:
+ 46+  7010 3A 34 63             LD      A, (Console_Y)
+ 47+  7013 57                   LD      D, A
+ 48+  7014 3A 33 63             LD      A, (Console_X)
+ 49+  7017 4F                   LD      C, A
+ 50+  7018
+ 51+  7018 78                   LD      A, B
+ 52+  7019 CD 39 70             CALL    Direct_PrintChar_Args
+ 53+  701C
+ 54+  701C 3A 33 63             LD      A, (Console_X)
+ 55+  701F 3C                   INC     A
+ 56+  7020 32 33 63             LD      (Console_X), A
+ 57+  7023
+ 58+  7023 FE 20                CP      32                      ; Автоперенос по правому краю
+ 59+  7025 38 0E                JR      C, .done_print
+ 60+  7027
+ 61+  7027 AF                   XOR     A
+ 62+  7028 32 33 63             LD      (Console_X), A
+ 63+  702B 3A 34 63             LD      A, (Console_Y)
+ 64+  702E 3C                   INC     A
+ 65+  702F 32 34 63             LD      (Console_Y), A
+ 66+  7032 CD 87 78             CALL    EnsureConsoleSpace
+ 67+  7035
+ 68+  7035              .done_print:
+ 69+  7035 E1                   POP     HL
+ 70+  7036 D1                   POP     DE
+ 71+  7037 C1                   POP     BC
+ 72+  7038 C9                   RET
+ 73+  7039
+ 74+  7039              ; --- ТОЧНЫЙ КAНОНИЧЕСКИЙ РЕНДЕРЕР ЗНAКОМЕСТА ИЗ ПРОЕКТА 123 ---
+ 75+  7039              Direct_PrintChar_Args:
+ 75+  7039
+ 76+  7039 F5                   PUSH    AF
+ 77+  703A C5                   PUSH    BC
+ 78+  703B D5                   PUSH    DE
+ 79+  703C E5                   PUSH    HL
+ 80+  703D
+ 81+  703D                      ; 1. РАСЧЕТ ТОЧНОГО АДРЕСА АТРИБУТА ЦВЕТА (#5800)
+ 82+  703D 7A                   LD      A, D                    ; Console_Y (0..23)
+ 83+  703E E6 18                AND     #18
+ 84+  7040 0F                   RRCA
+ 84+  7041 0F             RRCA
+ 84+  7042 0F             RRCA
+ 85+  7043 C6 58                ADD     A, #58
+ 86+  7045 67                   LD      H, A
+ 87+  7046
+ 88+  7046 7A                   LD      A, D
+ 89+  7047 E6 07                AND     #07
+ 90+  7049 07                   RLCA
+ 90+  704A 07             RLCA
+ 90+  704B 07             RLCA
+ 90+  704C 07             RLCA
+ 90+  704D 07             RLCA
+ 91+  704E 6F                   LD      L, A
+ 92+  704F
+ 93+  704F 79                   LD      A, C                    ; Console_X (0..31)
+ 94+  7050 85                   ADD     A, L
+ 95+  7051 6F                   LD      L, A
+ 96+  7052
+ 97+  7052 7A                   LD      A, D
+ 98+  7053 FE 0C                CP      12
+ 99+  7055 30 04                JR      NC, .set_black_bg
+100+  7057 3E 4F                LD      A, %01001111            ; Верх (0..11): PAPER=1(Синий), INK=7(Белый), BRIGHT=1
+101+  7059 18 02                JR      .write_color
+102+  705B              .set_black_bg:
+103+  705B 3E 44                LD      A, %01000100            ; Низ (12..23): PAPER=0(Черный), INK=4(Зеленый), BRIGHT=1
+104+  705D              .write_color:
+105+  705D 77                   LD      (HL), A
+106+  705E
+107+  705E                      ; 2. КAНОНИЧЕСКИЙ РАСЧЕТ АДРЕСА ПИКСЕЛЕЙ В ЭКРАНЕ (#4000)
+108+  705E 7A                   LD      A, D
+109+  705F E6 18                AND     #18
+110+  7061 C6 40                ADD     A, #40
+111+  7063 67                   LD      H, A
+112+  7064
+113+  7064 7A                   LD      A, D
+114+  7065 E6 07                AND     #07
+115+  7067 0F                   RRCA
+115+  7068 0F             RRCA
+115+  7069 0F             RRCA
+116+  706A 6F                   LD      L, A
+117+  706B
+118+  706B 7D                   LD      A, L
+119+  706C E6 E0                AND     #E0
+120+  706E 81                   ADD     A, C
+121+  706F 5F                   LD      E, A
+122+  7070
+123+  7070 7D                   LD      A, L
+124+  7071 E6 07                AND     #07
+125+  7073 B4                   OR      H
+126+  7074 57                   LD      D, A                    ; DE = базовый адрес пикселей на экране
+127+  7075
+128+  7075                      ; 3. ПОСТРОЧНЫЙ РЕНДЕР ШРИФТА ИЗ ВЫБРАННОГО МАССИВА ОБОЛОЧКИ
+129+  7075 78                   LD      A, B
+130+  7076 D6 20                SUB     32
+131+  7078 6F                   LD      L, A
+132+  7079 26 00                LD      H, 0
+133+  707B 29                   ADD     HL, HL
+134+  707C 29                   ADD     HL, HL
+135+  707D 29                   ADD     HL, HL                  ; HL = смещение буквы (ASCII * 8)
+136+  707E
+137+  707E D5                   PUSH    DE
+138+  707F 3A BE 70             LD      A, (UI_Active_Font)
+139+  7082 A7                   AND     A
+140+  7083 20 05                JR      NZ, .low_font68
+141+  7085 01 00 72             LD      BC, FONT_DATA_88
+142+  7088 18 03                JR      .low_font_done
+143+  708A              .low_font68:
+144+  708A 01 00 75             LD      BC, FONT_DATA_68
+145+  708D              .low_font_done:
+146+  708D 09                   ADD     HL, BC
+147+  708E D1                   POP     DE
+148+  708F
+149+  708F                      ; Отрисовка 8 вертикальных линий
+150+  708F 06 08                LD      B, 8
+151+  7091              .draw_font_loop:
+152+  7091 7E                   LD      A, (HL)
+153+  7092 12                   LD      (DE), A
+154+  7093 23                   INC     HL
+155+  7094 14                   INC     D
+156+  7095 10 FA                DJNZ    .draw_font_loop
+157+  7097
+158+  7097 E1                   POP     HL
+159+  7098 D1                   POP     DE
+160+  7099 C1                   POP     BC
+161+  709A F1                   POP     AF
+162+  709B C9                   RET
+163+  709C
+164+  709C              ; Отрисовка разделительной рамки панелей Commander
+165+  709C              DrawCommanderPanels:
+165+  709C
+166+  709C F5                   PUSH    AF
+166+  709D C5             PUSH BC
+166+  709E D5             PUSH DE
+166+  709F E5             PUSH HL
+167+  70A0 3E 0B                LD      A, 11
+168+  70A2 32 34 63             LD      (Console_Y), A
+169+  70A5 AF                   XOR     A
+170+  70A6 32 33 63             LD      (Console_X), A
+171+  70A9 06 20                LD      B, 32
+172+  70AB              .loop_line:
+173+  70AB 3E 44                LD      A, #44                  ; Код горизонтальной линии "═"
+174+  70AD CD 39 70             CALL    Direct_PrintChar_Args
+175+  70B0 3A 33 63             LD      A, (Console_X)
+175+  70B3 3C             INC A
+175+  70B4 32 33 63       LD (Console_X), A
+176+  70B7 10 F2                DJNZ    .loop_line
+177+  70B9 E1                   POP     HL
+177+  70BA D1             POP DE
+177+  70BB C1             POP BC
+177+  70BC F1             POP AF
+178+  70BD C9                   RET
+179+  70BE
+180+  70BE
+181+  70BE              ; =========================================================================
+182+  70BE
+# file closed: display.asm
+234   70BE                      INCLUDE "ui_engine.asm"     ; Модуль прошивки шрифтов и скроллера
+# file opened: ui_engine.asm
+  1+  70BE              ; =========================================================================
+  2+  70BE              ; PROJECT 124 — USER INTERFACE & GRAPHIC TEXT ENGINE (FROM PROJECT 123)
+  3+  70BE              ; СИСТЕМНЫЙ ПУТЬ: zx_main/ui_engine.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+  4+  70BE              ; =========================================================================
+  5+  70BE
+  6+  70BE              UI_Active_Font:
+  6+  70BE 00             DB 0                    ; 0 = font88, 1 = font68
+  7+  70BF
+  8+  70BF              ; --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ КУРСОРНОЙ НАВИГАЦИИ (ИЗ ПРОЕКТА 123) ---
+  9+  70BF              CursorY:
+  9+  70BF 02                    DEFB 2                  ; Текущая строка курсора панели (2..10)
+ 10+  70C0
+ 11+  70C0              ; --- ТAБЛИЧНЫЙ СKРOЛЛИНГ НИЖНЕГO OKНA ЛOГOВ ИЗ ПРOЕKТA 123 ---
+ 12+  70C0              UI_ScrollConsoleUp:
+ 12+  70C0
+ 13+  70C0 DD E5                PUSH    IX
+ 13+  70C2 F5             PUSH AF
+ 13+  70C3 C5             PUSH BC
+ 13+  70C4 D5             PUSH DE
+ 13+  70C5 E5             PUSH HL
+ 14+  70C6 AF                   XOR     A
+ 15+  70C7 32 78 71             LD      (.local_micro_ctr), A
+ 16+  70CA              .global_loop:
+ 17+  70CA DD 21 4C 71          LD      IX, .Line_Addr_Table
+ 18+  70CE 3E 0B                LD      A, 11
+ 19+  70D0 32 79 71             LD      (.local_row_ctr), A
+ 20+  70D3              .rows_loop:
+ 21+  70D3 DD 5E 00             LD      E, (IX+0)
+ 21+  70D6 DD 56 01       LD D, (IX+1)
+ 22+  70D9 DD 6E 02             LD      L, (IX+2)
+ 22+  70DC DD 66 03       LD H, (IX+3)
+ 23+  70DF DD E5                PUSH    IX
+ 23+  70E1 C5             PUSH BC
+ 24+  70E2 3A 78 71             LD      A, (.local_micro_ctr)
+ 24+  70E5 82             ADD A, D
+ 24+  70E6 57             LD D, A
+ 25+  70E7 3A 78 71             LD      A, (.local_micro_ctr)
+ 25+  70EA 84             ADD A, H
+ 25+  70EB 67             LD H, A
+ 26+  70EC 01 20 00             LD      BC, 32
+ 26+  70EF ED B0          LDIR
+ 27+  70F1 C1                   POP     BC
+ 27+  70F2 DD E1          POP IX
+ 28+  70F4 11 04 00             LD      DE, 4
+ 28+  70F7 DD 19          ADD IX, DE
+ 29+  70F9 3A 79 71             LD      A, (.local_row_ctr)
+ 29+  70FC 3D             DEC A
+ 29+  70FD 32 79 71       LD (.local_row_ctr), A
+ 30+  7100 20 D1                JR      NZ, .rows_loop
+ 31+  7102
+ 32+  7102 3A 78 71             LD      A, (.local_micro_ctr)
+ 32+  7105 3C             INC A
+ 32+  7106 32 78 71       LD (.local_micro_ctr), A
+ 33+  7109 FE 08                CP      8
+ 34+  710B 38 BD                JR      C, .global_loop
+ 35+  710D
+ 36+  710D                      ; Сдвиг цветовых атрибутов лога
+ 37+  710D 11 80 59             LD      DE, #5980
+ 37+  7110 21 A0 59       LD HL, #59A0
+ 37+  7113 01 60 01       LD BC, 352
+ 37+  7116 ED B0          LDIR
+ 38+  7118                      ; Очистка последней строки атрибутов
+ 39+  7118 21 00 5B             LD      HL, #5B00
+ 39+  711B 11 01 5B       LD DE, #5B01
+ 39+  711E 36 44          LD (HL), %01000100
+ 39+  7120 01 1F 00       LD BC, 31
+ 39+  7123 ED B0          LDIR
+ 40+  7125                      ; Очистка пикселей 23-й строки
+ 41+  7125 AF                   XOR     A
+ 41+  7126 26 50          LD H, #50
+ 42+  7128              .clear_pixels:
+ 43+  7128 F5                   PUSH    AF
+ 43+  7129 E5             PUSH HL
+ 44+  712A 2E E0                LD      L, #E0
+ 44+  712C 0E 20          LD C, 32
+ 44+  712E AF             XOR A
+ 45+  712F              .clear_bytes:
+ 46+  712F 77                   LD      (HL), A
+ 46+  7130 23             INC HL
+ 46+  7131 0D             DEC C
+ 46+  7132 20 FB          JR NZ, .clear_bytes
+ 47+  7134 E1                   POP     HL
+ 47+  7135 24             INC H
+ 47+  7136 F1             POP AF
+ 47+  7137 3C             INC A
+ 47+  7138 FE 08          CP 8
+ 47+  713A 38 EC          JR C, .clear_pixels
+ 48+  713C
+ 49+  713C E1                   POP     HL
+ 49+  713D D1             POP DE
+ 49+  713E C1             POP BC
+ 49+  713F F1             POP AF
+ 49+  7140 DD E1          POP IX
+ 50+  7142 3E 17                LD      A, 23
+ 50+  7144 32 34 63       LD (Console_Y), A
+ 51+  7147 AF                   XOR     A
+ 51+  7148 32 33 63       LD (Console_X), A
+ 52+  714B C9                   RET
+ 53+  714C
+ 54+  714C              .Line_Addr_Table:
+ 55+  714C 80 48 A0 48          DW #4880, #48A0, #48A0, #48C0, #48C0, #48E0, #48E0, #5000
+ 55+  7150 A0 48 C0 48
+ 55+  7154 C0 48 E0 48
+ 55+  7158 E0 48 00 50
+ 56+  715C 00 50 20 50          DW #5000, #5020, #5020, #5040, #5040, #5060, #5060, #5080
+ 56+  7160 20 50 40 50
+ 56+  7164 40 50 60 50
+ 56+  7168 60 50 80 50
+ 57+  716C 80 50 A0 50          DW #5080, #50A0, #50A0, #50C0, #50C0, #50E0
+ 57+  7170 A0 50 C0 50
+ 57+  7174 C0 50 E0 50
+ 58+  7178
+ 59+  7178 00           .local_micro_ctr: DB 0
+ 60+  7179 00           .local_row_ctr:   DB 0
+ 61+  717A
+ 62+  717A              ClearScreenROM:
+ 62+  717A
+ 63+  717A C5                   PUSH    BC
+ 63+  717B D5             PUSH DE
+ 63+  717C E5             PUSH HL
+ 64+  717D 21 00 40             LD      HL, #4000
+ 64+  7180 11 01 40       LD DE, #4001
+ 64+  7183 36 00          LD (HL), 0
+ 64+  7185 01 FF 17       LD BC, 6143
+ 64+  7188 ED B0          LDIR
+ 65+  718A 21 00 58             LD      HL, #5800
+ 65+  718D 11 01 58       LD DE, #5801
+ 65+  7190 36 44          LD (HL), %01000100
+ 65+  7192 01 FF 02       LD BC, 767
+ 65+  7195 ED B0          LDIR
+ 66+  7197 E1                   POP     HL
+ 66+  7198 D1             POP DE
+ 66+  7199 C1             POP BC
+ 67+  719A C9                   RET
+ 68+  719B
+ 69+  719B              ForceInterfaceColors:
+ 69+  719B
+ 70+  719B F5                   PUSH    AF
+ 70+  719C C5             PUSH BC
+ 70+  719D D5             PUSH DE
+ 70+  719E E5             PUSH HL
+ 71+  719F 21 00 58             LD      HL, #5800
+ 72+  71A2 11 01 58             LD      DE, #5801
+ 73+  71A5 36 4F                LD      (HL), %01001111         ; Верх: Синий
+ 74+  71A7 01 7F 01             LD      BC, 383
+ 75+  71AA ED B0                LDIR
+ 76+  71AC
+ 77+  71AC 21 80 59             LD      HL, #5980
+ 78+  71AF 11 81 59             LD      DE, #5981
+ 79+  71B2 36 44                LD      (HL), %01000100         ; Низ: Черный
+ 80+  71B4 01 7F 01             LD      BC, 383
+ 81+  71B7 ED B0                LDIR
+ 82+  71B9 E1                   POP     HL
+ 82+  71BA D1             POP DE
+ 82+  71BB C1             POP BC
+ 82+  71BC F1             POP AF
+ 83+  71BD C9                   RET
+ 84+  71BE
+ 85+  71BE              ; --- АППАРАТНЫЙ ОПРОС КЛАВИШ НАВИГАЦИИ (ИЗ ПРОЕКТА 123) ---
+ 86+  71BE              GetHardwareKey:
+ 86+  71BE
+ 87+  71BE 01 FE DF             LD      BC, #DFFE
+ 87+  71C1 ED 78          IN A, (C)
+ 87+  71C3 CB 4F          BIT 1, A
+ 87+  71C5 28 0B          JR Z, .key_o_pressed
+ 88+  71C7 01 FE BF             LD      BC, #BFFE
+ 88+  71CA ED 78          IN A, (C)
+ 88+  71CC CB 4F          BIT 1, A
+ 88+  71CE 28 05          JR Z, .key_l_pressed
+ 89+  71D0 AF                   XOR     A
+ 89+  71D1 C9             RET
+ 90+  71D2 3E 01        .key_o_pressed: LD A, 1
+ 90+  71D4 C9             RET
+ 91+  71D5 3E 02        .key_l_pressed: LD A, 2
+ 91+  71D7 C9             RET
+ 92+  71D8
+ 93+  71D8              ; =========================================================================
+ 94+  71D8              ; ИМПОРТ БИНАРНЫХ ФАЙЛОВ ШРИФТОВ ИЗ ВАШЕГО КАТАЛОГА
+ 95+  71D8              ; =========================================================================
+ 96+  71D8 00 00 00...          ALIGN 256
+ 97+  7200              FONT_DATA_88:
+ 98+  7200                      INCBIN "font88.bin"             ; Крупный шрифт 8x8
+ 99+  7500
+100+  7500                      ALIGN 256
+101+  7500              FONT_DATA_68:
+102+  7500                      INCBIN "font68.bin"             ; Компактный шрифт 6x8
+103+  7800
+104+  7800
+105+  7800              ; =========================================================================
+106+  7800
+# file closed: ui_engine.asm
+235   7800                      INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
+# file opened: ui_panels.asm
+  1+  7800              ; =========================================================================
+  2+  7800              ; PROJECT 124 — FILE PANELS & HIGH LEVEL GRAPHICS (FROM PROJECT 123)
+  3+  7800              ; СИСТЕМНЫЙ ПУТЬ: zx_main/ui_panels.asm (ПОЛНЫЙ КОД ЦЕЛИКОМ)
+  4+  7800              ; =========================================================================
+  5+  7800
+  6+  7800              ; --- ТАБЛИЦА АДРЕСОВ АТРИБУТОВ СТРОК КУРСOРА ПАНЕЛИ (Y = 2..10) ---
+  7+  7800              Cursor_Row_Table:
+  8+  7800 41 58 61 58          DW #5841 , #5861 , #5881 , #58A1 , #58C1 , #58E1 , #5901 , #5921 , #5941
+  8+  7804 81 58 A1 58
+  8+  7808 C1 58 E1 58
+  8+  780C 01 59 21 59
+  8+  7810 41 59
+  9+  7812
+ 10+  7812              ; --- ВЫЧИСЛЕНИЕ АДРЕСА СТРОКИ АТРИБУТОВ ДЛЯ КУРСОРНОЙ НАВИГАЦИИ ---
+ 11+  7812              Get_Cursor_RAM_Address:
+ 12+  7812 3A BF 70             LD      A, (CursorY)
+ 13+  7815 D6 02                SUB     2
+ 14+  7817 87                   ADD     A, A
+ 15+  7818 5F                   LD      E, A
+ 16+  7819 16 00                LD      D, 0
+ 17+  781B 21 00 78             LD      HL, Cursor_Row_Table
+ 18+  781E 19                   ADD     HL, DE
+ 19+  781F 7E                   LD      A, (HL)
+ 20+  7820 5F                   LD      E, A
+ 21+  7821 23                   INC     HL
+ 22+  7822 7E                   LD      A, (HL)
+ 23+  7823 57                   LD      D, A
+ 24+  7824 EB                   EX      DE, HL
+ 25+  7825 C9                   RET
+ 26+  7826
+ 27+  7826              ; --- ОТРЕСОВКА ИНВЕРСИОННОЙ ПОЛОСЫ ВЫДЕЛЕНИЯ ФАЙЛА ---
+ 28+  7826              DrawActiveCursor:
+ 28+  7826
+ 29+  7826 C5                   PUSH    BC
+ 30+  7827 E5                   PUSH    HL
+ 31+  7828 CD 12 78             CALL    Get_Cursor_RAM_Address
+ 32+  782B 06 1E                LD      B, 30
+ 33+  782D              .loop:
+ 34+  782D 36 38                LD      (HL), %00111000         ; Инверсия: Белый фон, черный text
+ 35+  782F 23                   INC     HL
+ 36+  7830 10 FB                DJNZ    .loop
+ 37+  7832 E1                   POP     HL
+ 38+  7833 C1                   POP     BC
+ 39+  7834 C9                   RET
+ 40+  7835
+ 41+  7835              ; --- СТИРАНИЕ ИНВЕРСИОННОЙ ПОЛОСЫ С ВОЗВРАТОМ СИНЕГО ЦВЕТА ---
+ 42+  7835              EraseActiveCursor:
+ 42+  7835
+ 43+  7835 C5                   PUSH    BC
+ 44+  7836 E5                   PUSH    HL
+ 45+  7837 CD 12 78             CALL    Get_Cursor_RAM_Address
+ 46+  783A 06 1E                LD      B, 30
+ 47+  783C              .loop:
+ 48+  783C 36 4F                LD      (HL), %01001111         ; Синий фон %4F
+ 49+  783E 23                   INC     HL
+ 50+  783F 10 FB                DJNZ    .loop
+ 51+  7841 E1                   POP     HL
+ 52+  7842 C1                   POP     BC
+ 53+  7843 C9                   RET
+ 54+  7844
+ 55+  7844              ; --- ГЛОБАЛЬНАЯ ТОЧКА ИНИЦИАЛИЗАЦИИ ИНТЕРФЕЙСА ОКОН PERFECT COMMANDER ---
+ 56+  7844              INIT_PROGRAM_INTERFACE:
+ 56+  7844
+ 57+  7844 F5                   PUSH    AF
+ 57+  7845 C5             PUSH BC
+ 57+  7846 D5             PUSH DE
+ 57+  7847 E5             PUSH HL
+ 58+  7848
+ 59+  7848 CD 7A 71             CALL    ClearScreenROM          ; Полная очистка экрана и атрибутов
+ 60+  784B
+ 61+  784B 3E 0C                LD      A, 12
+ 62+  784D 32 6A 5C             LD      (#5C6A), A              ; DF_SZ = 12 строк для панели файлов
+ 63+  7850 3E 38                LD      A, %00111000
+ 64+  7852 32 8D 5C             LD      (#5C8D), A
+ 65+  7855 3E 44                LD      A, %01000100
+ 66+  7857 32 8C 5C             LD      (#5C8C), A
+ 67+  785A
+ 68+  785A AF                   XOR     A
+ 69+  785B D3 FE                OUT     (254), A                ; Черный бордюр
+ 70+  785D
+ 71+  785D 3E 38                LD      A, %00111000
+ 72+  785F 32 48 5C             LD      (#5C48), A
+ 73+  7862 32 8F 5C             LD      (#5C8F), A
+ 74+  7865 32 49 5C             LD      (#5C49), A
+ 75+  7868
+ 76+  7868 CD 9B 71             CALL    ForceInterfaceColors    ; Заливка окон цветом
+ 77+  786B CD 9C 70             CALL    DrawCommanderPanels     ; Отрисовка разделительной линии панелей
+ 78+  786E
+ 79+  786E                      ; Начальные координаты для вывода логов в нижнем черном окне
+ 80+  786E 3E 0C                LD      A, 12
+ 81+  7870 32 34 63             LD      (Console_Y), A
+ 82+  7873 AF                   XOR     A
+ 83+  7874 32 33 63             LD      (Console_X), A
+ 84+  7877
+ 85+  7877                      ; ОТРЕНДЕРИТЬ ДИНАМИЧЕСКИЙ КАТАЛОГ ДИСКА А
+ 86+  7877 CD A6 7A             CALL    Refresh_Panel_Directory
+ 87+  787A
+ 88+  787A                      ; Фиксируем полосу курсора на первую строку файлов (строка 2)
+ 89+  787A 3E 02                LD      A, 2
+ 90+  787C 32 BF 70             LD      (CursorY), A
+ 91+  787F CD 26 78             CALL    DrawActiveCursor
+ 92+  7882
+ 93+  7882 E1                   POP     HL
+ 93+  7883 D1             POP DE
+ 93+  7884 C1             POP BC
+ 93+  7885 F1             POP AF
+ 94+  7886 C9                   RET
+ 95+  7887
+ 96+  7887              ; --- АППАРАТНЫЙ КОНТРОЛЬ СВОБОДНОГО МЕСТА ДЛЯ ВЕРТИКАЛЬНОГО СКРОЛЛИНГА ---
+ 97+  7887              EnsureConsoleSpace:
+ 97+  7887
+ 98+  7887 F5                   PUSH    AF
+ 99+  7888 C5                   PUSH    BC
+100+  7889 D5                   PUSH    DE
+101+  788A E5                   PUSH    HL
+102+  788B
+103+  788B 3A 34 63             LD      A, (Console_Y)
+104+  788E FE 18                CP      24                      ; Нижний лог занимает строки 12..23
+105+  7890 38 0C                JR      C, .space_ok
+106+  7892
+107+  7892 CD C0 70             CALL    UI_ScrollConsoleUp      ; Вызываем табличный аппаратный сдвиг экрана
+108+  7895
+109+  7895 3E 17                LD      A, 23
+110+  7897 32 34 63             LD      (Console_Y), A
+111+  789A AF                   XOR     A
+112+  789B 32 33 63             LD      (Console_X), A
+113+  789E
+114+  789E              .space_ok:
+115+  789E E1                   POP     HL
+116+  789F D1                   POP     DE
+117+  78A0 C1                   POP     BC
+118+  78A1 F1                   POP     AF
+119+  78A2 C9                   RET
+120+  78A3
+121+  78A3
+122+  78A3              ; =========================================================================
+123+  78A3
+# file closed: ui_panels.asm
+236   78A3                      INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
+# file opened: file_utils.asm
+  1+  78A3              ; =========================================================================
+  2+  78A3              ; FILE: zx_main/file_utils.asm
+  3+  78A3              ; PROJECT 124 — TR-DOS directory utilities
+  4+  78A3              ; Sector API verified for TR-DOS 5.04T: C=#05, D=track, E=internal sector
+  5+  78A3              ; 0..15, B=count, HL=destination; error status at #5D0F.
+  6+  78A3              ; =========================================================================
+  7+  78A3
+  8+  78A3              ; IN: CursorY = visible row (2..10)
+  9+  78A3              ; OUT: HL = 16-byte descriptor in TRDOS_PANEL_BUFFER, carry clear.
+ 10+  78A3              ;      HL=0 and carry set for an invalid/empty row.
+ 11+  78A3              GetSelectedFileDescriptor:
+ 11+  78A3
+ 12+  78A3 3A BF 70             ld      a, (CursorY)
+ 13+  78A6 FE 02                cp      2
+ 14+  78A8 38 1C                jr      c, .bad_row
+ 15+  78AA FE 0B                cp      11
+ 16+  78AC 30 18                jr      nc, .bad_row
+ 17+  78AE D6 02                sub     2
+ 18+  78B0 6F                   ld      l, a
+ 19+  78B1 26 00                ld      h, 0
+ 20+  78B3 29                   add     hl, hl
+ 21+  78B4 29                   add     hl, hl
+ 22+  78B5 29                   add     hl, hl
+ 23+  78B6 29                   add     hl, hl
+ 24+  78B7 11 00 C0             ld      de, TRDOS_PANEL_BUFFER
+ 25+  78BA 19                   add     hl, de
+ 26+  78BB
+ 27+  78BB                      ; Reject an empty/deleted/invalid catalogue slot.
+ 28+  78BB 7E                   ld      a, (hl)
+ 29+  78BC FE 20                cp      32
+ 30+  78BE 38 06                jr      c, .bad_row
+ 31+  78C0 FE 7F                cp      127
+ 32+  78C2 30 02                jr      nc, .bad_row
+ 33+  78C4 B7                   or      a
+ 34+  78C5 C9                   ret
+ 35+  78C6              .bad_row:
+ 36+  78C6 21 00 00             ld      hl, 0
+ 37+  78C9 37                   scf
+ 38+  78CA C9                   ret
+ 39+  78CB
+ 40+  78CB              LogSelectedFile:
+ 40+  78CB
+ 41+  78CB E5                   push    hl
+ 42+  78CC 21 D4 78             ld      hl, .str_exec_prefix
+ 43+  78CF CD 84 6F             call    LOG_WriteMessageToBuffer
+ 44+  78D2 E1                   pop     hl
+ 45+  78D3 C9                   ret
+ 46+  78D4              .str_exec_prefix:
+ 47+  78D4 5B 4C 41 55          defb "[LAUNCH] Invoking system CODE loader for selected workspace node...", #0D, #0A, 0
+ 47+  78D8 4E 43 48 5D
+ 47+  78DC 20 49 6E 76
+ 47+  78E0 6F 6B 69 6E
+ 47+  78E4 67 20 73 79
+ 47+  78E8 73 74 65 6D
+ 47+  78EC 20 43 4F 44
+ 47+  78F0 45 20 6C 6F
+ 47+  78F4 61 64 65 72
+ 47+  78F8 20 66 6F 72
+ 47+  78FC 20 73 65 6C
+ 47+  7900 65 63 74 65
+ 47+  7904 64 20 77 6F
+ 47+  7908 72 6B 73 70
+ 47+  790C 61 63 65 20
+ 47+  7910 6E 6F 64 65
+ 47+  7914 2E 2E 2E 0D
+ 47+  7918 0A 00
+ 48+  791A
+ 49+  791A              ; Read and render the complete 128-entry TR-DOS catalogue (8 * 256 bytes).
+ 50+  791A              PrintDiskDirectory:
+ 50+  791A
+ 51+  791A F5                   push    af
+ 52+  791B C5                   push    bc
+ 53+  791C D5                   push    de
+ 54+  791D E5                   push    hl
+ 55+  791E
+ 56+  791E                      ; Select drive A and clear the two-byte TR-DOS error result.
+ 57+  791E AF                   xor     a
+ 58+  791F 32 19 5D             ld      (#5D19), a
+ 59+  7922 32 0F 5D             ld      (#5D0F), a
+ 60+  7925 32 10 5D             ld      (#5D10), a
+ 61+  7928
+ 62+  7928                      ; C=#05 raw resident convention: D=track 0, E=sector 0..15.
+ 63+  7928 11 00 00             ld      de, #0000
+ 64+  792B 06 08                ld      b, 8
+ 65+  792D 0E 05                ld      c, 5
+ 66+  792F 21 00 C0             ld      hl, TRDOS_PANEL_BUFFER
+ 67+  7932 CD 13 3D             call    #3D13
+ 68+  7935
+ 69+  7935                      ; C=#05 reports read errors in the TR-DOS error byte #5D0F.
+ 70+  7935 3A 0F 5D             ld      a, (#5D0F)
+ 71+  7938 47                   ld      b, a
+ 72+  7939 3A 10 5D             ld      a, (#5D10)
+ 73+  793C B0                   or      b
+ 74+  793D C2 39 7A             jp      nz, .directory_read_error
+ 75+  7940
+ 76+  7940 06 80                ld      b, 128
+ 77+  7942 21 00 C0             ld      hl, TRDOS_PANEL_BUFFER
+ 78+  7945 3E 02                ld      a, 2
+ 79+  7947 32 CC 7A             ld      (File_Y), a
+ 80+  794A
+ 81+  794A              .loop_slots:
+ 82+  794A C5                   push    bc
+ 83+  794B E5                   push    hl
+ 84+  794C
+ 85+  794C 7E                   ld      a, (hl)
+ 86+  794D B7                   or      a
+ 87+  794E CA 2C 7A             jp      z, .empty_slot
+ 88+  7951 FE 01                cp      1
+ 89+  7953 CA 1F 7A             jp      z, .invalid_slot
+ 90+  7956 FE 20                cp      32
+ 91+  7958 DA 1F 7A             jp      c, .invalid_slot
+ 92+  795B FE 7F                cp      127
+ 93+  795D D2 1F 7A             jp      nc, .invalid_slot
+ 94+  7960
+ 95+  7960 3E 02                ld      a, 2
+ 96+  7962 32 CB 7A             ld      (File_X), a
+ 97+  7965 0E 19                ld      c, 25
+ 98+  7967              .clear_pixels_loop:
+ 99+  7967 C5                   push    bc
+100+  7968 E5                   push    hl
+101+  7969 3A CB 7A             ld      a, (File_X)
+102+  796C 4F                   ld      c, a
+103+  796D 3A CC 7A             ld      a, (File_Y)
+104+  7970 57                   ld      d, a
+105+  7971 06 20                ld      b, " "
+106+  7973 CD 39 70             call    Direct_PrintChar_Args
+107+  7976 E1                   pop     hl
+108+  7977 C1                   pop     bc
+109+  7978 3A CB 7A             ld      a, (File_X)
+110+  797B 3C                   inc     a
+111+  797C 32 CB 7A             ld      (File_X), a
+112+  797F 0D                   dec     c
+113+  7980 20 E5                jr      nz, .clear_pixels_loop
+114+  7982
+115+  7982 3E 02                ld      a, 2
+116+  7984 32 CB 7A             ld      (File_X), a
+117+  7987 0E 08                ld      c, 8
+118+  7989              .print_name:
+119+  7989 7E                   ld      a, (hl)
+120+  798A C5                   push    bc
+121+  798B E5                   push    hl
+122+  798C 47                   ld      b, a
+123+  798D 3A CB 7A             ld      a, (File_X)
+124+  7990 4F                   ld      c, a
+125+  7991 3A CC 7A             ld      a, (File_Y)
+126+  7994 57                   ld      d, a
+127+  7995 CD 39 70             call    Direct_PrintChar_Args
+128+  7998 3A CB 7A             ld      a, (File_X)
+129+  799B 3C                   inc     a
+130+  799C 32 CB 7A             ld      (File_X), a
+131+  799F E1                   pop     hl
+132+  79A0 C1                   pop     bc
+133+  79A1 23                   inc     hl
+134+  79A2 0D                   dec     c
+135+  79A3 20 E4                jr      nz, .print_name
+136+  79A5
+137+  79A5                      ; Extension separator at X=10.
+138+  79A5 3E 0A                ld      a, 10
+139+  79A7 32 CB 7A             ld      (File_X), a
+140+  79AA E5                   push    hl
+141+  79AB 0E 0A                ld      c, 10
+142+  79AD 3A CC 7A             ld      a, (File_Y)
+143+  79B0 57                   ld      d, a
+144+  79B1 06 2E                ld      b, "."
+145+  79B3 CD 39 70             call    Direct_PrintChar_Args
+146+  79B6 E1                   pop     hl
+147+  79B7
+148+  79B7                      ; File type at X=11.
+149+  79B7 3E 0B                ld      a, 11
+150+  79B9 32 CB 7A             ld      (File_X), a
+151+  79BC 7E                   ld      a, (hl)
+152+  79BD E5                   push    hl
+153+  79BE 47                   ld      b, a
+154+  79BF 3E 0B                ld      a, 11
+155+  79C1 4F                   ld      c, a
+156+  79C2 3A CC 7A             ld      a, (File_Y)
+157+  79C5 57                   ld      d, a
+158+  79C6 CD 39 70             call    Direct_PrintChar_Args
+159+  79C9 E1                   pop     hl
+160+  79CA
+161+  79CA                      ; Descriptor byte 13 = allocated sector count. Display ceil(sectors/4)
+162+  79CA                      ; without 8-bit overflow: (sectors + 3) is calculated in 16 bits.
+163+  79CA E5                   push    hl
+164+  79CB 11 0D 00             ld      de, 13
+165+  79CE 19                   add     hl, de
+166+  79CF 7E                   ld      a, (hl)
+167+  79D0 5F                   ld      e, a
+168+  79D1 16 00                ld      d, 0
+169+  79D3 21 03 00             ld      hl, 3
+170+  79D6 19                   add     hl, de
+171+  79D7 CB 3C                srl     h
+172+  79D9 CB 1D                rr      l
+173+  79DB CB 3C                srl     h
+174+  79DD CB 1D                rr      l
+175+  79DF 7D                   ld      a, l
+176+  79E0 E1                   pop     hl
+177+  79E1
+178+  79E1 0E 10                ld      c, 16
+179+  79E3 CD 3F 7A             call    Util_PrintDecimalByte
+180+  79E6
+181+  79E6 3E 14                ld      a, 20
+182+  79E8 32 CB 7A             ld      (File_X), a
+183+  79EB 3A CC 7A             ld      a, (File_Y)
+184+  79EE 57                   ld      d, a
+185+  79EF 0E 14                ld      c, 20
+186+  79F1 06 4B                ld      b, "K"
+187+  79F3 CD 39 70             call    Direct_PrintChar_Args
+188+  79F6
+189+  79F6 3E 15                ld      a, 21
+190+  79F8 32 CB 7A             ld      (File_X), a
+191+  79FB 3A CC 7A             ld      a, (File_Y)
+192+  79FE 57                   ld      d, a
+193+  79FF 0E 15                ld      c, 21
+194+  7A01 06 62                ld      b, "b"
+195+  7A03 CD 39 70             call    Direct_PrintChar_Args
+196+  7A06
+197+  7A06 3A CC 7A             ld      a, (File_Y)
+198+  7A09 3C                   inc     a
+199+  7A0A 32 CC 7A             ld      (File_Y), a
+200+  7A0D FE 0B                cp      11
+201+  7A0F D2 31 7A             jp      nc, .directory_done
+202+  7A12
+203+  7A12                      ; Advance to next 16-byte descriptor. Restore saved slot counter.
+204+  7A12 E1                   pop     hl
+205+  7A13 11 10 00             ld      de, 16
+206+  7A16 19                   add     hl, de
+207+  7A17 C1                   pop     bc
+208+  7A18 05                   dec     b
+209+  7A19 C2 4A 79             jp      nz, .loop_slots
+210+  7A1C C3 33 7A             jp      .directory_success
+211+  7A1F
+212+  7A1F              .invalid_slot:
+213+  7A1F                      ; Drop the per-slot saves, advance HL, and decrement the ORIGINAL
+214+  7A1F                      ; 128-entry counter. Do not load 16 into BC (that destroys B), and
+215+  7A1F                      ; do not push the per-slot saves again before re-entering the loop.
+216+  7A1F E1                   pop     hl
+217+  7A20 C1                   pop     bc
+218+  7A21 11 10 00             ld      de, 16
+219+  7A24 19                   add     hl, de
+220+  7A25 05                   dec     b
+221+  7A26 C2 4A 79             jp      nz, .loop_slots
+222+  7A29 C3 33 7A             jp      .directory_success
+223+  7A2C
+224+  7A2C              .empty_slot:
+225+  7A2C                      ; Per-slot BC/HL saves are still present.
+226+  7A2C E1                   pop     hl
+227+  7A2D C1                   pop     bc
+228+  7A2E C3 33 7A             jp      .directory_success
+229+  7A31
+230+  7A31              .directory_done:
+231+  7A31                      ; Per-slot BC/HL saves are still present.
+232+  7A31 E1                   pop     hl
+233+  7A32 C1                   pop     bc
+234+  7A33              .directory_success:
+235+  7A33 E1                   pop     hl
+236+  7A34 D1                   pop     de
+237+  7A35 C1                   pop     bc
+238+  7A36 F1                   pop     af
+239+  7A37 B7                   or      a
+240+  7A38 C9                   ret
+241+  7A39
+242+  7A39              .directory_read_error:
+243+  7A39 E1                   pop     hl
+244+  7A3A D1                   pop     de
+245+  7A3B C1                   pop     bc
+246+  7A3C F1                   pop     af
+247+  7A3D 37                   scf
+248+  7A3E C9                   ret
+249+  7A3F
+250+  7A3F              ; IN: A=value 0..255, C=screen X. Prints exactly three decimal digits.
+251+  7A3F              Util_PrintDecimalByte:
+252+  7A3F F5                   push    af
+253+  7A40 C5                   push    bc
+254+  7A41 D5                   push    de
+255+  7A42 E5                   push    hl
+256+  7A43 5F                   ld      e, a
+257+  7A44 79                   ld      a, c
+258+  7A45 32 CB 7A             ld      (File_X), a
+259+  7A48 7B                   ld      a, e
+260+  7A49 06 00                ld      b, 0
+261+  7A4B              .hundreds:
+262+  7A4B FE 64                cp      100
+263+  7A4D 38 05                jr      c, .p_hundreds
+264+  7A4F D6 64                sub     100
+265+  7A51 04                   inc     b
+266+  7A52 18 F7                jr      .hundreds
+267+  7A54              .p_hundreds:
+268+  7A54 5F                   ld      e, a
+269+  7A55 78                   ld      a, b
+270+  7A56 C6 30                add     a, #30
+271+  7A58 D5                   push    de
+272+  7A59 47                   ld      b, a
+273+  7A5A 3A CB 7A             ld      a, (File_X)
+274+  7A5D 4F                   ld      c, a
+275+  7A5E 3A CC 7A             ld      a, (File_Y)
+276+  7A61 57                   ld      d, a
+277+  7A62 CD 39 70             call    Direct_PrintChar_Args
+278+  7A65 3A CB 7A             ld      a, (File_X)
+279+  7A68 3C                   inc     a
+280+  7A69 32 CB 7A             ld      (File_X), a
+281+  7A6C D1                   pop     de
+282+  7A6D
+283+  7A6D 7B                   ld      a, e
+284+  7A6E 06 00                ld      b, 0
+285+  7A70              .tens:
+286+  7A70 FE 0A                cp      10
+287+  7A72 38 05                jr      c, .p_tens
+288+  7A74 D6 0A                sub     10
+289+  7A76 04                   inc     b
+290+  7A77 18 F7                jr      .tens
+291+  7A79              .p_tens:
+292+  7A79 5F                   ld      e, a
+293+  7A7A 78                   ld      a, b
+294+  7A7B C6 30                add     a, #30
+295+  7A7D D5                   push    de
+296+  7A7E 47                   ld      b, a
+297+  7A7F 3A CB 7A             ld      a, (File_X)
+298+  7A82 4F                   ld      c, a
+299+  7A83 3A CC 7A             ld      a, (File_Y)
+300+  7A86 57                   ld      d, a
+301+  7A87 CD 39 70             call    Direct_PrintChar_Args
+302+  7A8A 3A CB 7A             ld      a, (File_X)
+303+  7A8D 3C                   inc     a
+304+  7A8E 32 CB 7A             ld      (File_X), a
+305+  7A91 D1                   pop     de
+306+  7A92
+307+  7A92 7B                   ld      a, e
+308+  7A93 C6 30                add     a, #30
+309+  7A95 47                   ld      b, a
+310+  7A96 3A CB 7A             ld      a, (File_X)
+311+  7A99 4F                   ld      c, a
+312+  7A9A 3A CC 7A             ld      a, (File_Y)
+313+  7A9D 57                   ld      d, a
+314+  7A9E CD 39 70             call    Direct_PrintChar_Args
+315+  7AA1 E1                   pop     hl
+316+  7AA2 D1                   pop     de
+317+  7AA3 C1                   pop     bc
+318+  7AA4 F1                   pop     af
+319+  7AA5 C9                   ret
+320+  7AA6
+321+  7AA6              Refresh_Panel_Directory:
+321+  7AA6
+322+  7AA6 F5                   push    af
+323+  7AA7 C5                   push    bc
+324+  7AA8 D5                   push    de
+325+  7AA9 E5                   push    hl
+326+  7AAA
+327+  7AAA                      ; Fill 320 attribute bytes with #4F. The original byte sequence was
+328+  7AAA                      ; LD HL,#5841, leaving DE undefined. This is the correct fill idiom.
+329+  7AAA 21 40 58             ld      hl, #5840
+330+  7AAD 36 4F                ld      (hl), %01001111
+331+  7AAF 11 41 58             ld      de, #5841
+332+  7AB2 01 3F 01             ld      bc, 319
+333+  7AB5 ED B0                ldir
+334+  7AB7
+335+  7AB7 CD 1A 79             call    PrintDiskDirectory
+336+  7ABA 38 09                jr      c, .refresh_failed
+337+  7ABC CD 26 78             call    DrawActiveCursor
+338+  7ABF E1                   pop     hl
+339+  7AC0 D1                   pop     de
+340+  7AC1 C1                   pop     bc
+341+  7AC2 F1                   pop     af
+342+  7AC3 B7                   or      a
+343+  7AC4 C9                   ret
+344+  7AC5              .refresh_failed:
+345+  7AC5 E1                   pop     hl
+346+  7AC6 D1                   pop     de
+347+  7AC7 C1                   pop     bc
+348+  7AC8 F1                   pop     af
+349+  7AC9 37                   scf
+350+  7ACA C9                   ret
+351+  7ACB
+352+  7ACB 00           File_X: DB 0
+353+  7ACC 00           File_Y: DB 0
+354+  7ACD
+# file closed: file_utils.asm
+237   7ACD
+238   7ACD              ; Переключение на Банк 0 ОЗУ хоста для хранения двух NeoGS бинарников.
+239   7ACD              ; Оба файла создаются командой sjasmplus neogs_sub/build_firmware.asm.
+240   7ACD                      PAGE    0
+241   7ACD              neogs_bootstrap_start:
+242   7ACD                      INCBIN "neogs_bootstrap.bin"
+243   7B34              neogs_bootstrap_end:
+244   7B34
+245   7B34              neogs_binary_start:
+246   7B34                      INCBIN "neogs_code.bin"
+247   8139              neogs_binary_end:
+248   8139
+249   8139              ProgramEnd:
+250   8139                      ; Code/data must end before the application stack at #AFFF and well
+251   8139                      ; before the TR-DOS buffer at #C000 / BASIC loader at #E000.
+252   8139                      ASSERT ProgramEnd <= #A000
+253   8139
+254   8139              ; Возвращаем базовый контекст компиляции для загрузчика
+255   8139                      ORG     #E000
+256   E000                      INCLUDE "boot_loader.asm"
+# file opened: boot_loader.asm
+  1+  E000              ; =========================================================================
+  2+  E000              ; FILE: zx_main/boot_loader.asm
+  3+  E000              ; =========================================================================
+  4+  E000              ; PROJECT 124 — TR-DOS BASIC BOOTLOADER (ПОЛНЫЙ БИНАРНЫЙ КОД ЦЕЛИКОМ)
+  5+  E000              ; ОПИСАНИЕ: Исправлен барьер CLEAR для предотвращения порчи системных переменных
+  6+  E000              ; =========================================================================
+  7+  E000
+  8+  E000              CLEAR       EQU     $FD
+  9+  E000              LOAD        EQU     $EF
+ 10+  E000              CODE        EQU     $AF
+ 11+  E000              RANDOMIZE   EQU     $F9
+ 12+  E000              USR         EQU     $C0
+ 13+  E000              REM         EQU     $EA
+ 14+  E000              VAL         EQU     $B0
+ 15+  E000              OUT_CMD     EQU     $DF             ; Токен команды OUT ($DF) из карты ПЗУ
+ 16+  E000
+ 17+  E000              BASIC_START:
+ 18+  E000              basic_loader:
+ 19+  E000                      ; --- Строка 10: OUT 239,1: CLEAR 24000 ---
+ 20+  E000                      ; 🔥 ФИКС: Опускаем границу CLEAR до 24000, защищая всю область памяти с адреса 24576
+ 21+  E000 00 0A                DB      0, 10
+ 22+  E002 20 00                DW      LINE10_END-LINE10
+ 23+  E004              LINE10:
+ 24+  E004 DF                   DB      OUT_CMD                 ; OUT
+ 25+  E005 32 33 39 0E          DB      "239", $0E, $00, $00, $EF, $00, $00 ; Бинарный маркер числа 239
+ 25+  E009 00 00 EF 00
+ 25+  E00D 00
+ 26+  E00E 2C                   DB      ","
+ 27+  E00F 31 0E 00 00          DB      "1", $0E, $00, $00, $01, $00, $00   ; Бинарный маркер числа 1
+ 27+  E013 01 00 00
+ 28+  E016 3A                   DB      ":"
+ 29+  E017 FD                   DB      CLEAR                   ; CLEAR
+ 30+  E018 32 34 30 30          DB      "24000", $0E, $00, $00, $5D, $C0, $00 ; Бинарный маркер числа 24000 (#5DC0)
+ 30+  E01C 30 0E 00 00
+ 30+  E020 5D C0 00
+ 31+  E023 0D                   DB      $0D
+ 32+  E024              LINE10_END:
+ 33+  E024
+ 34+  E024                      ; --- Строка 11: Вывод приветствия "P124 START" в порт отладки #EF ---
+ 35+  E024 00 0B                DB      0, 11
+ 36+  E026 A8 00                DW      LINE11_END-LINE11
+ 37+  E028              LINE11:
+ 38+  E028 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "50", 34, ":"
+ 38+  E02C 33 39 22 2C
+ 38+  E030 B0 22 35 30
+ 38+  E034 22 3A
+ 39+  E036 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "31", 34, ":"
+ 39+  E03A 33 39 22 2C
+ 39+  E03E B0 22 33 31
+ 39+  E042 22 3A
+ 40+  E044 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "32", 34, ":"
+ 40+  E048 33 39 22 2C
+ 40+  E04C B0 22 33 32
+ 40+  E050 22 3A
+ 41+  E052 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "34", 34, ":"
+ 41+  E056 33 39 22 2C
+ 41+  E05A B0 22 33 34
+ 41+  E05E 22 3A
+ 42+  E060 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "32", 34, ":"
+ 42+  E064 33 39 22 2C
+ 42+  E068 B0 22 33 32
+ 42+  E06C 22 3A
+ 43+  E06E DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "83", 34, ":"
+ 43+  E072 33 39 22 2C
+ 43+  E076 B0 22 38 33
+ 43+  E07A 22 3A
+ 44+  E07C DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "84", 34, ":"
+ 44+  E080 33 39 22 2C
+ 44+  E084 B0 22 38 34
+ 44+  E088 22 3A
+ 45+  E08A DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "65", 34, ":"
+ 45+  E08E 33 39 22 2C
+ 45+  E092 B0 22 36 35
+ 45+  E096 22 3A
+ 46+  E098 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "82", 34, ":"
+ 46+  E09C 33 39 22 2C
+ 46+  E0A0 B0 22 38 32
+ 46+  E0A4 22 3A
+ 47+  E0A6 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "84", 34, ":"
+ 47+  E0AA 33 39 22 2C
+ 47+  E0AE B0 22 38 34
+ 47+  E0B2 22 3A
+ 48+  E0B4 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "13", 34, ":"
+ 48+  E0B8 33 39 22 2C
+ 48+  E0BC B0 22 31 33
+ 48+  E0C0 22 3A
+ 49+  E0C2 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "10", 34
+ 49+  E0C6 33 39 22 2C
+ 49+  E0CA B0 22 31 30
+ 49+  E0CE 22
+ 50+  E0CF 0D                   DB      $0D
+ 51+  E0D0              LINE11_END:
+ 52+  E0D0
+ 53+  E0D0                      ; --- Строка 20: RANDOMIZE USR 15619 : REM : LOAD "proj124" CODE 24576 ---
+ 54+  E0D0 00 14                DB      0, 20
+ 55+  E0D2 2A 00                DW      LINE20_END-LINE20
+ 56+  E0D4              LINE20:
+ 57+  E0D4 F9                   DB      RANDOMIZE               ; RANDOMIZE
+ 58+  E0D5 C0 31 35 36          DB      USR, "15619", $0E, 0, 0 ; USR 15619
+ 58+  E0D9 31 39 0E 00
+ 58+  E0DD 00
+ 59+  E0DE 03 3D                DW      15619
+ 60+  E0E0 00                   DB      0
+ 61+  E0E1 3A EA 3A             DB      $3A, REM, $3A
+ 62+  E0E4 4C 4F 41 44          DB      "LOAD ", 34, "proj124", 34, " CODE 24576", $0D
+ 62+  E0E8 20 22 70 72
+ 62+  E0EC 6F 6A 31 32
+ 62+  E0F0 34 22 20 43
+ 62+  E0F4 4F 44 45 20
+ 62+  E0F8 32 34 35 37
+ 62+  E0FC 36 0D
+ 63+  E0FE              LINE20_END:
+ 64+  E0FE
+ 65+  E0FE                      ; --- Строка 21: Вывод метки "LOADED" в порт отладки #EF после чтения файла ---
+ 66+  E0FE 00 15                DB      0, 21
+ 67+  E100 70 00                DW      LINE21_END-LINE21
+ 68+  E102              LINE21:
+ 69+  E102 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "76", 34, ":"
+ 69+  E106 33 39 22 2C
+ 69+  E10A B0 22 37 36
+ 69+  E10E 22 3A
+ 70+  E110 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "79", 34, ":"
+ 70+  E114 33 39 22 2C
+ 70+  E118 B0 22 37 39
+ 70+  E11C 22 3A
+ 71+  E11E DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "65", 34, ":"
+ 71+  E122 33 39 22 2C
+ 71+  E126 B0 22 36 35
+ 71+  E12A 22 3A
+ 72+  E12C DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "68", 34, ":"
+ 72+  E130 33 39 22 2C
+ 72+  E134 B0 22 36 38
+ 72+  E138 22 3A
+ 73+  E13A DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "69", 34, ":"
+ 73+  E13E 33 39 22 2C
+ 73+  E142 B0 22 36 39
+ 73+  E146 22 3A
+ 74+  E148 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "68", 34, ":"
+ 74+  E14C 33 39 22 2C
+ 74+  E150 B0 22 36 38
+ 74+  E154 22 3A
+ 75+  E156 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "13", 34, ":"
+ 75+  E15A 33 39 22 2C
+ 75+  E15E B0 22 31 33
+ 75+  E162 22 3A
+ 76+  E164 DF B0 22 32          DB      OUT_CMD, VAL, 34, "239", 34, ",", VAL, 34, "10", 34
+ 76+  E168 33 39 22 2C
+ 76+  E16C B0 22 31 30
+ 76+  E170 22
+ 77+  E171 0D                   DB      $0D
+ 78+  E172              LINE21_END:
+ 79+  E172
+ 80+  E172                      ; --- Строка 30: OUT 239,2: RANDOMIZE USR VAL "24585" ---
+ 81+  E172 00 1E                DB      0, 30
+ 82+  E174 1E 00                DW      LINE30_END-LINE30
+ 83+  E176              LINE30:
+ 84+  E176 DF                   DB      OUT_CMD                 ; OUT
+ 85+  E177 32 33 39 0E          DB      "239", $0E, $00, $00, $EF, $00, $00 ; Бинарный маркер числа 239
+ 85+  E17B 00 00 EF 00
+ 85+  E17F 00
+ 86+  E180 2C                   DB      ","
+ 87+  E181 32 0E 00 00          DB      "2", $0E, $00, $00, $02, $00, $00   ; Бинарный маркер числа 2
+ 87+  E185 02 00 00
+ 88+  E188 3A                   DB      ":"
+ 89+  E189 F9                   DB      RANDOMIZE               ; RANDOMIZE
+ 90+  E18A C0                   DB      USR                     ; USR ($C0)
+ 91+  E18B B0                   DB      VAL                     ; VAL ($B0)
+ 92+  E18C 22                   DB      34
+ 93+  E18D 32 34 35 38          DEFM    "24585"                 ; Переход на Init_Z80_System
+ 93+  E191 35
+ 94+  E192 22                   DB      34
+ 95+  E193 0D                   DB      $0D
+ 96+  E194              LINE30_END:
+ 97+  E194
+ 98+  E194 80                   DB      $80                     ; Системный маркер конца BASIC-программы
+ 99+  E195
+100+  E195              BASIC_END:
+101+  E195
+# file closed: boot_loader.asm
+257   E195
+258   E195              ; NeoGS firmware is built as a separate binary by neogs_sub/build_firmware.asm.
+259   E195
+260   E195              ; =========================================================================
+261   E195              ; СЕКТОР ФИНАЛЬНОГО ОКОНЧАТЕЛЬНОГО ЭКСПОРТА НА ДИСК
+262   E195              ; =========================================================================
+263   E195                      PAGE    0                       ; Возвращаем базовый нулевой банк памяти хоста
+264   E195
+265   E195                      ; Синхронный экспорт бинарных блоков в образ TRD
+266   E195                      SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
+267   E195                      SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
+268   E195                      ; Диагностический x86 payload для проверки TR-DOS -> DMA -> interpreter.
+269   E195                      ; Это тест из 6 байт, а не полноценное x86-ядро/операционная система.
+270   E195                      SAVETRD "disk_A.trd", "neoprog.C", x86_diag_program, x86_diag_program_end - x86_diag_program
+271   E195
+272   E195
+273   E195              ; =========================================================================
+274   E195
+# file closed: main.asm

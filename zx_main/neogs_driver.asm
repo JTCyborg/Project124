@@ -1,6 +1,6 @@
 ; =========================================================================
 ; PROJECT 124 — NeoGS host-side driver
-; Stage 2 uses the standard GS105a ROM loader and a two-stage bootstrap.
+; Stage 2 uses GS105a #14 (RECEIVE BLOCK) and #13 (JUMP) to start a two-stage bootstrap.
 ; =========================================================================
         INCLUDE "../shared/neogs_io.inc"
 
@@ -14,13 +14,12 @@ IPC_CMD_TIMEOUT EQU #FFFF
 ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
 ;
 ; Cold/warm reset path:
-;   #F4 cold restart (custom firmware maps stock ROM back and JP $0000)
+;   #F4 cold restart
 ;   #20 get total RAM, read three bytes to prove stock ROM is ready
-;   #00 reset flags
-;   #30 load module, #D1 open stream, bootstrap bytes, #D2 close stream
-;   read/echo module handle, #31 run module
+;   #14 receive executable bootstrap directly into RAM at $4000
+;   #13 jump to $4000
 ;   #A1 bootstrap ready, send length, receive #A3 length accepted
-;   send custom firmware bytes, receive #A2 firmware ready
+;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
 ; -------------------------------------------------------------------------
 upload_firmware::
         ld      (neo_fw_source), hl
@@ -73,90 +72,76 @@ upload_firmware::
         jp      c, .upload_failed
 .stock_rom_ready:
 
-        ; Phase 3: clear residual flags before the module stream.
+        ; Phase 3: use the native GS105a memory loader, not the MOD player.
+        ; #14 RECEIVE BLOCK expects the first (negative length low) byte
+        ; before the command, then negative length high, address low/high,
+        ; and exactly N payload bytes. The payload is written directly to RAM.
         ld      a, 3
         ld      (neo_fw_timeout_phase), a
-        ld      a, GS_CMD_RESET_FLAGS
+        ld      hl, 0
+        ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+        or      a
+        sbc     hl, de                  ; HL = -bootstrap length
+        ld      (neo_fw_block_length), hl
+        ld      a, l
+        call    gs_boot_write_command_argument
+        jp      c, .upload_failed
+        ld      a, GS_CMD_RECEIVE_BLOCK
         call    gs_boot_send_command
         jp      c, .upload_failed
 
-        ; Phase 4: allocate/load a module in the stock GS105a ROM.
-        ld      a, 4
-        ld      (neo_fw_timeout_phase), a
-        ld      a, GS_CMD_LOAD_MODULE
-        call    gs_boot_send_command
+        ; Remaining #14 header: -length high, destination $4000.
+        ld      a, (neo_fw_block_length+1)
+        call    gs_boot_send_data_byte
         jp      c, .upload_failed
-
-        ; Some GS105a revisions expose the module handle immediately after
-        ; #30; the published transfer example exposes it after #D2. Accept
-        ; either documented timing without leaving DBIT pending.
         xor     a
-        ld      (neo_fw_handle_valid), a
-        call    gs_boot_receive_data_byte
-        jr      c, .no_early_module_handle
-        ld      (neo_fw_module_handle), a
-        ld      a, 1
-        ld      (neo_fw_handle_valid), a
-.no_early_module_handle:
-
-        ; Phase 5: open the module stream.
-        ld      a, 5
-        ld      (neo_fw_timeout_phase), a
-        ld      a, GS_CMD_OPEN_STREAM
-        call    gs_boot_send_command
+        call    gs_boot_send_data_byte  ; destination low = $00
+        jp      c, .upload_failed
+        ld      a, #40
+        call    gs_boot_send_data_byte  ; destination high = $40
         jp      c, .upload_failed
 
-        ; Phase 6: transfer the small resident bootstrap to $5B00-$5FFF.
-        ld      a, 6
+        ; Phase 4: transfer the executable bootstrap into RAM $4000.
+        ld      a, 4
         ld      (neo_fw_timeout_phase), a
         ld      hl, neogs_bootstrap_start
         ld      de, neogs_bootstrap_end - neogs_bootstrap_start
-.bootstrap_stream_loop:
+.bootstrap_block_loop:
         ld      a, d
         or      e
-        jr      z, .bootstrap_stream_done
+        jr      z, .bootstrap_block_done
         ld      a, (hl)
         call    gs_boot_send_data_byte
         jp      c, .upload_failed
         inc     hl
         dec     de
-        jr      .bootstrap_stream_loop
+        jr      .bootstrap_block_loop
+.bootstrap_block_done:
 
-.bootstrap_stream_done:
-        ; Phase 7: close stream, read module handle, then return it for #31.
-        ld      a, 7
+        ; Phase 5: #13 JUMP TO ADDRESS. The low byte is the command's
+        ; first argument and must be written before issuing the command.
+        ld      a, 5
         ld      (neo_fw_timeout_phase), a
-        ld      a, GS_CMD_CLOSE_STREAM
-        call    gs_boot_send_command
-        jp      c, .upload_failed
-        call    gs_boot_receive_data_byte
-        jr      c, .no_late_module_handle
-        ld      (neo_fw_module_handle), a
-        ld      a, 1
-        ld      (neo_fw_handle_valid), a
-.no_late_module_handle:
-        ld      a, (neo_fw_handle_valid)
-        or      a
-        jp      z, .upload_failed
-        ; The GS #31 example writes the handle first and immediately sends
-        ; #31; the ROM consumes this argument while processing that command.
-        ld      a, (neo_fw_module_handle)
+        xor     a                       ; entry address low = $00
         call    gs_boot_write_command_argument
         jp      c, .upload_failed
-
-        ; Phase 8: run the resident bootstrap and wait for ACK #A1.
-        ld      a, 8
-        ld      (neo_fw_timeout_phase), a
-        ld      a, GS_CMD_RUN_MODULE
+        ld      a, GS_CMD_JUMP_ADDRESS
         call    gs_boot_send_command
         jp      c, .upload_failed
+        ld      a, #40                  ; entry address high = $40
+        call    gs_boot_send_data_byte
+        jp      c, .upload_failed
+
+        ; Phase 6: bootstrap has enabled RAM-over-ROM and is waiting at $0000.
+        ld      a, 6
+        ld      (neo_fw_timeout_phase), a
         call    gs_boot_receive_data_byte
         jp      c, .upload_failed
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, .upload_failed
 
-        ; Phase 9: send firmware length low/high and require ACK #A3.
-        ld      a, 9
+        ; Phase 7: send firmware length low/high and require ACK #A3.
+        ld      a, 7
         ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_length)
         ld      a, l
@@ -170,8 +155,8 @@ upload_firmware::
         cp      NGS_BOOTSTRAP_LENGTH_ACK
         jp      nz, .upload_failed
 
-        ; Phase 10: stream the custom firmware to RAM address $0000.
-        ld      a, 10
+        ; Phase 8: stream the custom firmware to RAM address $0000.
+        ld      a, 8
         ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_source)
         ld      de, (neo_fw_length)
@@ -187,8 +172,8 @@ upload_firmware::
         jr      .firmware_stream_loop
 
 .firmware_stream_done:
-        ; Phase 11: new firmware has jumped to $0000 and sends ACK #A2.
-        ld      a, 11
+        ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+        ld      a, 9
         ld      (neo_fw_timeout_phase), a
         call    gs_boot_receive_data_byte
         jp      c, .upload_failed
@@ -283,9 +268,8 @@ gs_boot_send_command:
         or      a
         ret
 
-; Write one command argument to GSDAT without waiting for its post-write
-; DBIT clear. The following command (#31) consumes this argument, matching
-; the published GS105a module-run sequence.
+; Preload the first argument byte of GS105a commands #13/#14. Those
+; handlers read this byte before clearing CBIT; later arguments use DBIT.
 gs_boot_write_command_argument:
         ld      (neo_fw_tx_byte), a
         ld      bc, FW_BYTE_TIMEOUT
@@ -359,6 +343,7 @@ gs_boot_receive_data_byte:
         ret
 .receive_ready:
         in      a, (GSDAT)
+        ld      (neo_fw_last_rx_byte), a
         or      a
         ret
 
@@ -424,13 +409,14 @@ neogs_wait_data_byte::
 ; Stage 2 diagnostics consumed by zx_main/main.asm.
 neo_fw_source:          dw 0
 neo_fw_length:          dw 0
-neo_fw_module_handle:   db 0
-neo_fw_handle_valid:    db 0
+neo_fw_bootstrap_address: dw #4000
+neo_fw_block_length:    dw 0
 neo_fw_rom_ram_low:     db 0
 neo_fw_rom_ram_mid:     db 0
 neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
+neo_fw_last_rx_byte:    db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
 neo_fw_last_status:     db 0

@@ -86,20 +86,31 @@ Init_Z80_System::
         ld      bc, #EFF7
         out     (C), a          ; Инициализация Pentagon-расширения
 
+        ; Raw startup marker: confirms Init_Z80_System reached its end.
+        ld      a, 'I'
+        out     (#EF), a
         jp      START_APPLICATION
 
 ; Подключение системы отладки и макросов порта #EF
         INCLUDE "debug_system.asm"
 
 START_APPLICATION:
+        ; Raw markers bypass timestamp/RTC code so an early hang is visible.
+        ld      a, 'C'
+        out     (#EF), a
+
         ; ЭТАП 1 — ЗАПУСК CMOS ЧАСОВ К512ВИ1
         call    CHECK_AND_INIT_CMOS
+        ld      a, 'D'
+        out     (#EF), a
+        ld      a, 'E'
+        out     (#EF), a
         MACRO_EF_STRING msg_stage1
 
         ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
-        ; Сначала штатная GS105a ROM загружает малый модуль в $5B00;
-        ; модуль включает RAM-over-ROM, принимает образ в адрес $0000 и
-        ; передаёт управление новой прошивке.
+        ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
+        ; команда #13 запускает его, после чего он включает RAM-over-ROM,
+        ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
         ld      hl, neogs_binary_start
         ld      de, neogs_binary_end - neogs_binary_start
         call    upload_firmware
@@ -129,6 +140,16 @@ START_APPLICATION:
         ld      a, (neo_fw_timeout_phase)
         ld      l, a
         ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_rx
+        ld      a, (neo_fw_last_rx_byte)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_bootstrap
+        ld      hl, (neo_fw_bootstrap_address)
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
         di
@@ -194,7 +215,11 @@ msg_stage2_initial:
 msg_stage2_status:
         DEFB "[FW] LAST GSSTAT #BB = ", 0
 msg_stage2_phase:
-        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#00,4=#30,5=#D1,6=STREAM,7=#D2,8=#31,9=LEN,10=FW,11=READY) = ", 0
+        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
+msg_stage2_rx:
+        DEFB "[FW] LAST RX BYTE = ", 0
+msg_stage2_bootstrap:
+        DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
 
 ; =========================================================================
 ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА

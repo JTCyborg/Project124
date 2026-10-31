@@ -1,0 +1,34 @@
+MODIFIED / ADDED
+----------------
+build_project124.ps1             [updated: detects tools/sjasmplus locally]
+README_PROJECT124_FIX_RU.txt
+PATCH_MANIFEST.txt
+shared/neogs_io.inc
+zx_main/main.asm                 [updated: JR out-of-range -> JP]
+zx_main/main_data.asm
+zx_main/boot_loader.asm
+zx_main/neogs_driver.asm
+zx_main/x86_loader.asm
+zx_main/file_utils.asm
+neogs_sub/main.asm
+neogs_sub/bootstrap.asm          [NEW]
+neogs_sub/x86_interpreter.asm
+neogs_sub/build_firmware.asm
+font88.bin                       [NEW, 768 bytes]
+font68.bin                       [NEW, 768 bytes]
+zx_main/font88.bin               [copy]
+zx_main/font68.bin               [copy]
+assets/zx_spectrum_6x8.bin        [source font, 2048 bytes]
+assets/zx_6x8_768.bin             [source font, 768 bytes]
+
+CARRIED OVER UNCHANGED FROM THE SAVED PROJECT DUMP
+---------------------------------------------------
+zx_main/debug_system.asm
+zx_main/driver_cmos.asm
+zx_main/log_debug.asm
+zx_main/display.asm
+zx_main/ui_engine.asm
+zx_main/ui_panels.asm
+
+The six carried-over modules are included only to preserve the project tree;
+replace them with newer local copies if they have changed since the saved dump.
