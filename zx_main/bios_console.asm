@@ -233,6 +233,35 @@ BIOS_DebugConsole_PrintChar::
         pop     af
         ret
 
+; IN: HL=16-bit value. Render four hexadecimal digits in the 6x8 console.
+BIOS_DebugConsole_PrintHex16::
+        push    af
+        push    bc
+        ld      a, h
+        call    bios_dbg_print_hex8
+        ld      a, l
+        call    bios_dbg_print_hex8
+        pop     bc
+        pop     af
+        ret
+
+bios_dbg_print_hex8:
+        push    af
+        rra
+        rra
+        rra
+        rra
+        call    bios_dbg_print_nibble
+        pop     af
+bios_dbg_print_nibble:
+        and     #0F
+        cp      10
+        jr      c, .hex_digit
+        add     a, 7
+.hex_digit:
+        add     a, '0'
+        jp      BIOS_DebugConsole_PrintChar
+
 ; Advance one 8-pixel character row and scroll the existing lower window.
 bios_dbg_newline:
         ld      a, (bios_dbg_row)
