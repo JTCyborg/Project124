@@ -78,11 +78,11 @@ Util_Internal_ScreenHex8::
 
 
 ; =========================================================================
-; LOWER SCREEN VRAM HEX DUMP — PORT #EF
-; Dumps the actual Spectrum bitmap scanlines Y=96..191 (3072 bytes) and
-; the corresponding lower 12 attribute rows (#5980..#5AFF, 384 bytes).
-; Output is ASCII only: frame marker, scanline Y/address, 32 bytes per line,
-; then attribute address and 16 bytes per line. Does not draw on the screen.
+; =========================================================================
+; LOWER SCREEN BITMAP HEX DUMP — PORT #EF
+; Dumps ONLY the Spectrum bitmap for the lower half: Y=96..191, 3072 bytes.
+; Color attributes are deliberately excluded.
+; Output is ASCII HEX with scanline labels and Spectrum bitmap addresses.
 ; IN: A = frame number.
 ; =========================================================================
 P124_DumpLowerScreen::
@@ -140,37 +140,6 @@ P124_DumpLowerScreen::
         cp      192
         jr      c, .bitmap_line
 
-        ld      hl, P124_VRAM_ATTR_HEADER
-        call    P124_VRAM_DumpString
-        ld      hl, #5980
-        ld      (P124_VRAM_PTR), hl
-        xor     a
-        ld      (P124_VRAM_ATTR_LINE), a
-.attribute_line:
-        ld      hl, (P124_VRAM_PTR)
-        call    P124_VRAM_DumpHex16
-        ld      a, ':'
-        call    P124_VRAM_DumpPutChar
-        ld      a, ' '
-        call    P124_VRAM_DumpPutChar
-        ld      b, 16
-.attribute_byte:
-        ld      hl, (P124_VRAM_PTR)
-        ld      a, (hl)
-        call    P124_VRAM_DumpHex8
-        ld      hl, (P124_VRAM_PTR)
-        inc     hl
-        ld      (P124_VRAM_PTR), hl
-        ld      a, ' '
-        call    P124_VRAM_DumpPutChar
-        djnz    .attribute_byte
-        call    P124_VRAM_DumpCRLF
-        ld      a, (P124_VRAM_ATTR_LINE)
-        inc     a
-        ld      (P124_VRAM_ATTR_LINE), a
-        cp      24
-        jr      c, .attribute_line
-
         ld      hl, P124_VRAM_DUMP_END
         call    P124_VRAM_DumpString
         pop     hl
@@ -204,7 +173,7 @@ P124_VRAM_DumpHex8:
         call    P124_VRAM_DumpNibble
         ret
 
-; A = 16-bit value, output four uppercase hexadecimal digits.
+; HL = 16-bit value, output four uppercase hexadecimal digits.
 P124_VRAM_DumpHex16:
         push    hl
         ld      a, h
@@ -242,12 +211,10 @@ P124_VRAM_DumpCRLF:
         pop     af
         ret
 
-P124_VRAM_DUMP_HEADER:  defb 13,10,"===== P124 VRAM FRAME ",0
-P124_VRAM_BITMAP_HEADER:defb " BITMAP Y=96..191 (32 BYTES/SCANLINE) =====",13,10,0
-P124_VRAM_Y_LABEL:      defb "Y=",0
-P124_VRAM_ATTR_HEADER: defb "===== LOWER ATTRIBUTES #5980..#5AFF (16 BYTES/LINE) =====",13,10,0
-P124_VRAM_DUMP_END:     defb "===== END P124 VRAM FRAME =====",13,10,0
-P124_VRAM_FRAME:       db 0
-P124_VRAM_Y:           db 0
-P124_VRAM_ATTR_LINE:   db 0
-P124_VRAM_PTR:         dw 0
+P124_VRAM_DUMP_HEADER:   defb 13,10,"===== P124 BITMAP FRAME ",0
+P124_VRAM_BITMAP_HEADER: defb " LOWER SCREEN PIXELS Y=96..191 (32 BYTES/SCANLINE) =====",13,10,0
+P124_VRAM_Y_LABEL:       defb "Y=",0
+P124_VRAM_DUMP_END:      defb "===== END P124 BITMAP FRAME =====",13,10,0
+P124_VRAM_FRAME:         db 0
+P124_VRAM_Y:             db 0
+P124_VRAM_PTR:           dw 0
