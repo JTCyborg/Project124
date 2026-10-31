@@ -188,6 +188,148 @@ upload_firmware::
         ret
 
 ; -------------------------------------------------------------------------
+; Load a binary file from TR-DOS into the host staging buffer #C000.
+; IN : HL = 8-byte TR-DOS filename, A = file type.
+; OUT: HL = #C000, DE = exact file byte length, carry clear on success.
+;      Carry set on any catalogue, descriptor, size, or sector-read error.
+; The caller must have moved the host stack away from #C000 and above.
+; -------------------------------------------------------------------------
+neogs_load_trdos_file::
+        ld      (neo_trdos_filename_ptr), hl
+        ld      (neo_trdos_file_type), a
+
+        ld      de, #5CDD
+        ld      bc, 8
+        ldir
+        ld      a, (neo_trdos_file_type)
+        ld      (#5CE5), a
+        ld      a, 9
+        ld      (#5D06), a
+        ld      c, 10
+        call    #3D13
+        ld      a, c
+        cp      #FF
+        jp      z, .file_not_found
+
+        ; C=#0A returns the catalogue entry index. C=#08 fetches
+        ; the complete descriptor into #5CE8..#5CEC.
+        ld      a, c
+        push    af
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        pop     af
+        ld      c, 8
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .bad_descriptor
+
+        ld      bc, (#5CE8)
+        ld      a, b
+        or      c
+        jp      z, .bad_length
+
+        ; GS105a firmware accepts 1..$3000 bytes at RAM $0000.
+        ld      a, b
+        cp      #30
+        jr      c, .length_valid
+        jp      nz, .bad_length
+        ld      a, c
+        or      a
+        jp      nz, .bad_length
+.length_valid:
+        ld      (neo_trdos_file_length), bc
+
+        ; Descriptor sector count must equal ceil(byte_length / 256).
+        ld      hl, (neo_trdos_file_length)
+        ld      de, 255
+        add     hl, de
+        ld      e, h
+        ld      a, (#5CEA)
+        or      a
+        jp      z, .bad_sector_count
+        cp      e
+        jp      nz, .bad_sector_count
+        ld      (neo_trdos_sectors_remaining), a
+
+        ld      a, (#5CEB)
+        cp      16
+        jp      nc, .bad_descriptor
+        ld      (neo_trdos_sector), a
+        ld      a, (#5CEC)
+        ld      (neo_trdos_track), a
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      (neo_trdos_buffer), hl
+
+.read_sector:
+        ld      a, (neo_trdos_track)
+        ld      d, a
+        ld      a, (neo_trdos_sector)
+        ld      e, a
+        ld      hl, (neo_trdos_buffer)
+        ld      b, 1
+        ld      c, 5
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .sector_read_error
+
+        ld      hl, (neo_trdos_buffer)
+        ld      de, 256
+        add     hl, de
+        ld      (neo_trdos_buffer), hl
+
+        ld      a, (neo_trdos_sector)
+        inc     a
+        cp      16
+        jr      c, .same_track
+        xor     a
+        ld      (neo_trdos_sector), a
+        ld      a, (neo_trdos_track)
+        inc     a
+        ld      (neo_trdos_track), a
+        jr      .sector_advanced
+.same_track:
+        ld      (neo_trdos_sector), a
+.sector_advanced:
+        ld      a, (neo_trdos_sectors_remaining)
+        dec     a
+        ld      (neo_trdos_sectors_remaining), a
+        jp      nz, .read_sector
+
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      de, (neo_trdos_file_length)
+        or      a
+        ret
+
+.file_not_found:
+        ld      a, 1
+        jr      .load_error
+.bad_descriptor:
+        ld      a, 2
+        jr      .load_error
+.bad_length:
+        ld      a, 3
+        jr      .load_error
+.bad_sector_count:
+        ld      a, 4
+        jr      .load_error
+.sector_read_error:
+        ld      a, 5
+.load_error:
+        ld      (neo_trdos_error), a
+        scf
+        ret
+
+; -------------------------------------------------------------------------
 ; Standard GS105a ROM transport primitives.
 ; Commands use CBIT; data bytes use DBIT. All waits are bounded.
 ; -------------------------------------------------------------------------
@@ -421,3 +563,13 @@ neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
 neo_fw_last_status:     db 0
 neo_fw_timeout_phase:   db 0
+
+; TR-DOS firmware-file loader state.
+neo_trdos_filename_ptr:     dw 0
+neo_trdos_file_type:        db 0
+neo_trdos_file_length:      dw 0
+neo_trdos_buffer:           dw 0
+neo_trdos_sectors_remaining: db 0
+neo_trdos_sector:           db 0
+neo_trdos_track:            db 0
+neo_trdos_error:            db 0
