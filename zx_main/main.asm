@@ -210,7 +210,7 @@ START_APPLICATION:
         halt
         jr      .core_halt
 
-; Ошибка выполнения этапа загрузки/запуска x86-задачи.
+; Ошибка выполнения диагностики загруженной прошивки NeoGS.
 .x86_stage_failed:
         MACRO_EF_STRING msg_stage5_fail
         di
@@ -255,8 +255,8 @@ msg_stage2_bootstrap:
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
-; Переключение на Банк 0 ОЗУ хоста для хранения двух NeoGS бинарников.
-; Оба файла создаются командой sjasmplus neogs_sub/build_firmware.asm.
+; Bootstrap NeoGS встраивается в host-код; основная прошивка хранится
+; отдельно в TR-DOS-файле neoprog.C и загружается оттуда при старте.
         PAGE    0
 neogs_bootstrap_start:
         INCBIN "neogs_bootstrap.bin"
