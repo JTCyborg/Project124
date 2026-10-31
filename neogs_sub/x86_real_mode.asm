@@ -82,9 +82,9 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_4
 
-        ; Verify all eight MOV r16,imm16 destinations.
+        ; Verify retained MOV destinations; CX is validated by LOOP reaching zero.
         ld      hl, (x86_reg_cx)
-        ld      de, #1234
+        ld      de, 0
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -104,12 +104,12 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_si)
-        ld      de, #BEEF
+        ld      de, #8000
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_di)
-        ld      de, #F00D
+        ld      de, #7FFF
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -121,7 +121,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_ip)
-        ld      de, #501D
+        ld      de, #5002 + (x86_guest_main_image_end - x86_guest_main_image)
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -131,7 +131,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_flags)
-        ld      de, #0302
+        ld      de, #0B16
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -238,7 +238,15 @@ x86_real_next:
         cp      #90
         jp      z, x86_real_nop
         cp      #40
-        jp      z, x86_real_inc_ax
+        jp      c, .not_inc_r16
+        cp      #48
+        jp      c, x86_real_inc_r16
+.not_inc_r16:
+        cp      #48
+        jp      c, .not_dec_r16
+        cp      #50
+        jp      c, x86_real_dec_r16
+.not_dec_r16:
         cp      #B0
         jp      c, .not_mov_r8
         cp      #B8
@@ -249,6 +257,18 @@ x86_real_next:
         cp      #C0
         jp      c, x86_real_mov_r16_imm16
 .not_mov_r16:
+        cp      #70
+        jp      c, .not_jcc_short
+        cp      #80
+        jp      c, x86_real_jcc_short
+.not_jcc_short:
+        cp      #E0
+        jp      c, .not_loop_short
+        cp      #E4
+        jp      c, x86_real_loop_short
+.not_loop_short:
+        cp      #EB
+        jp      z, x86_real_jmp_short
         cp      #F4
         jp      z, x86_real_hlt
         cp      #CD
@@ -266,11 +286,408 @@ x86_real_next:
 x86_real_nop:
         jp      x86_real_next
 
-x86_real_inc_ax:
-        ld      hl, (x86_reg_ax)
-        inc     hl
-        ld      (x86_reg_ax), hl
+; -------------------------------------------------------------------------
+; Short relative control flow: 70-7F Jcc, E0-E3 LOOP/JCXZ, EB JMP.
+; Displacements are signed 8-bit values added to IP AFTER the displacement
+; byte has been fetched. All target fetches still pass through the bounded
+; CS:IP fetch path; guest FLAGS are never modified by these instructions.
+; -------------------------------------------------------------------------
+
+x86_real_jmp_short:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_byte), a
+        jp      x86_real_apply_rel8
+
+x86_real_apply_rel8:
+        ld      a, (x86_real_imm_byte)
+        ld      e, a
+        ld      d, 0
+        bit     7, a
+        jr      z, .positive
+        dec     d
+.positive:
+        ld      hl, (x86_reg_ip)
+        add     hl, de
+        ld      (x86_reg_ip), hl
         jp      x86_real_next
+
+; E0 LOOPNZ, E1 LOOPZ, E2 LOOP, E3 JCXZ.
+x86_real_loop_short:
+        ld      (x86_real_opcode), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_byte), a
+
+        ld      a, (x86_real_opcode)
+        cp      #E3
+        jr      z, x86_real_jcxz
+
+        ; LOOP family decrements CX without changing any guest FLAGS bit.
+        ld      hl, (x86_reg_cx)
+        dec     hl
+        ld      (x86_reg_cx), hl
+        ld      a, h
+        or      l
+        jp      z, x86_real_next
+
+        ld      a, (x86_real_opcode)
+        cp      #E2
+        jp      z, x86_real_apply_rel8
+        ld      a, (x86_reg_flags)
+        bit     6, a                  ; ZF
+        jr      z, x86_real_loop_zf_clear
+        ; ZF=1: only LOOPZ (E1) is taken.
+        ld      a, (x86_real_opcode)
+        cp      #E1
+        jp      z, x86_real_apply_rel8
+        jp      x86_real_next
+
+x86_real_loop_zf_clear:
+        ; ZF=0: only LOOPNZ (E0) is taken.
+        ld      a, (x86_real_opcode)
+        cp      #E0
+        jp      z, x86_real_apply_rel8
+        jp      x86_real_next
+
+x86_real_jcxz:
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      z, x86_real_apply_rel8
+        jp      x86_real_next
+
+; All sixteen 8086 short conditional branches (70h-7Fh).
+x86_real_jcc_short:
+        ld      (x86_real_opcode), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_byte), a
+        ld      a, (x86_real_opcode)
+        and     #0F
+        cp      0
+        jp      z, x86_real_jcc_jo
+        cp      1
+        jp      z, x86_real_jcc_jno
+        cp      2
+        jp      z, x86_real_jcc_jb
+        cp      3
+        jp      z, x86_real_jcc_jae
+        cp      4
+        jp      z, x86_real_jcc_je
+        cp      5
+        jp      z, x86_real_jcc_jne
+        cp      6
+        jp      z, x86_real_jcc_jbe
+        cp      7
+        jp      z, x86_real_jcc_ja
+        cp      8
+        jp      z, x86_real_jcc_js
+        cp      9
+        jp      z, x86_real_jcc_jns
+        cp      #0A
+        jp      z, x86_real_jcc_jp
+        cp      #0B
+        jp      z, x86_real_jcc_jnp
+        cp      #0C
+        jp      z, x86_real_jcc_jl
+        cp      #0D
+        jp      z, x86_real_jcc_jge
+        cp      #0E
+        jp      z, x86_real_jcc_jle
+        jp      x86_real_jcc_jg
+
+x86_real_jcc_jo:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a                  ; OF
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jno:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jb:
+        ld      a, (x86_reg_flags)
+        bit     0, a                  ; CF
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jae:
+        ld      a, (x86_reg_flags)
+        bit     0, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_je:
+        ld      a, (x86_reg_flags)
+        bit     6, a                  ; ZF
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jne:
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jbe:
+        ld      a, (x86_reg_flags)
+        bit     0, a
+        jp      nz, x86_real_jcc_taken
+        bit     6, a
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_ja:
+        ld      a, (x86_reg_flags)
+        bit     0, a
+        jp      nz, x86_real_jcc_not_taken
+        bit     6, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_js:
+        ld      a, (x86_reg_flags)
+        bit     7, a                  ; SF
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jns:
+        ld      a, (x86_reg_flags)
+        bit     7, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jp:
+        ld      a, (x86_reg_flags)
+        bit     2, a                  ; PF
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+x86_real_jcc_jnp:
+        ld      a, (x86_reg_flags)
+        bit     2, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+
+; JL/JGE compare SF with OF.
+x86_real_jcc_jl:
+        ld      a, (x86_reg_flags)
+        bit     7, a
+        jr      z, .sf_zero
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+.sf_zero:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+
+x86_real_jcc_jge:
+        ld      a, (x86_reg_flags)
+        bit     7, a
+        jr      z, .sf_zero
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+.sf_zero:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+
+x86_real_jcc_jle:
+        ld      a, (x86_reg_flags)
+        bit     6, a                  ; ZF
+        jp      nz, x86_real_jcc_taken
+        ; Otherwise JL condition (SF != OF).
+        ld      a, (x86_reg_flags)
+        bit     7, a
+        jr      z, .sf_zero
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+.sf_zero:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+
+x86_real_jcc_jg:
+        ld      a, (x86_reg_flags)
+        bit     6, a                  ; ZF must be clear
+        jp      nz, x86_real_jcc_not_taken
+        ; Otherwise JGE condition (SF == OF).
+        ld      a, (x86_reg_flags)
+        bit     7, a
+        jr      z, .sf_zero
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      nz, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+.sf_zero:
+        ld      a, (x86_reg_flags+1)
+        bit     3, a
+        jp      z, x86_real_jcc_taken
+        jp      x86_real_jcc_not_taken
+
+x86_real_jcc_taken:
+        ld      a, (x86_real_imm_byte)
+        jp      x86_real_apply_rel8
+x86_real_jcc_not_taken:
+        jp      x86_real_next
+
+; 40-47 INC r16 and 48-4F DEC r16.
+; The register file is contiguous in 8086 encoding order (AX,CX,DX,BX,
+; SP,BP,SI,DI). INC/DEC preserve CF and all non-status/control FLAGS bits.
+x86_real_inc_r16:
+        ld      (x86_real_opcode), a
+        xor     a
+        ld      (x86_real_incdec_mode), a
+        jp      x86_real_incdec_r16
+
+x86_real_dec_r16:
+        ld      (x86_real_opcode), a
+        ld      a, 1
+        ld      (x86_real_incdec_mode), a
+
+x86_real_incdec_r16:
+        ld      a, (x86_real_opcode)
+        and     7
+        add     a, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      (x86_real_reg_ptr), hl
+
+        ; Save original operand before changing the selected guest register.
+        ld      a, (hl)
+        ld      (x86_real_old_low), a
+        inc     hl
+        ld      a, (hl)
+        ld      (x86_real_old_high), a
+
+        ld      a, (x86_real_old_low)
+        ld      l, a
+        ld      a, (x86_real_old_high)
+        ld      h, a
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .decrement_word
+        inc     hl
+        jr      .store_word
+.decrement_word:
+        dec     hl
+.store_word:
+        ld      (x86_real_result), hl
+        ld      de, (x86_real_reg_ptr)
+        ld      a, l
+        ld      (de), a
+        inc     de
+        ld      a, h
+        ld      (de), a
+
+        call    x86_real_update_incdec_flags
+        jp      x86_real_next
+
+; Update only OF/SF/ZF/AF/PF. CF is copied from the old FLAGS word;
+; all reserved/control bits are retained. PF is even parity of result AL.
+x86_real_update_incdec_flags:
+        ld      a, (x86_reg_flags)
+        and     1
+        ld      (x86_real_new_flags), a
+        xor     a
+        ld      (x86_real_new_flags+1), a
+
+        ; PF: even parity of the low result byte.
+        ld      hl, (x86_real_result)
+        ld      a, l
+        and     a
+        jp      pe, .set_pf
+        jr      .no_pf
+.set_pf:
+        ld      hl, x86_real_new_flags
+        set     2, (hl)
+.no_pf:
+        ; ZF: full 16-bit result is zero.
+        ld      hl, (x86_real_result)
+        ld      a, h
+        or      l
+        jr      nz, .no_zf
+        ld      hl, x86_real_new_flags
+        set     6, (hl)
+.no_zf:
+        ; SF: result bit 15.
+        ld      hl, (x86_real_result)
+        bit     7, h
+        jr      z, .no_sf
+        ld      hl, x86_real_new_flags
+        set     7, (hl)
+.no_sf:
+        ; AF: INC when old low nibble was F; DEC when it was 0.
+        ld      a, (x86_real_old_low)
+        and     #0F
+        ld      b, a
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .check_dec_af
+        ld      a, b
+        cp      #0F
+        jr      nz, .no_af
+        jr      .set_af
+.check_dec_af:
+        ld      a, b
+        or      a
+        jr      nz, .no_af
+.set_af:
+        ld      hl, x86_real_new_flags
+        set     4, (hl)
+.no_af:
+        ; OF: INC 7FFF->8000; DEC 8000->7FFF.
+        ld      a, (x86_real_old_low)
+        cp      #FF
+        jr      nz, .no_of
+        ld      a, (x86_real_old_high)
+        cp      #7F
+        jr      nz, .no_of
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .no_of
+        jr      .set_of
+.set_of:
+        ld      hl, x86_real_new_flags
+        inc     hl
+        set     3, (hl)
+.no_of:
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      z, .flags_merge
+        ld      a, (x86_real_old_low)
+        or      a
+        jr      nz, .flags_merge
+        ld      a, (x86_real_old_high)
+        cp      #80
+        jr      nz, .flags_merge
+        ld      hl, x86_real_new_flags
+        inc     hl
+        set     3, (hl)
+
+.flags_merge:
+        ; Merge new status bits with all untouched old FLAGS bits.
+        ld      hl, (x86_reg_flags)
+        ld      de, #772B             ; clear PF/AF/ZF/OF/SF; preserve CF and other bits
+        ld      a, h
+        and     d
+        ld      h, a
+        ld      a, l
+        and     e
+        ld      l, a
+        ld      de, (x86_real_new_flags)
+        ld      a, h
+        or      d
+        ld      h, a
+        ld      a, l
+        or      e
+        ld      l, a
+        ld      (x86_reg_flags), hl
+        ret
 
 ; B8-BF — MOV r16,imm16 (AX,CX,DX,BX,SP,BP,SI,DI).
 ; The eight word registers are contiguous in x86_modrm.asm in opcode order.
@@ -412,6 +829,12 @@ x86_real_imm_high:   db 0
 x86_real_int_vector: db 0
 x86_real_opcode: db 0
 x86_real_imm_byte: db 0
+x86_real_incdec_mode: db 0
+x86_real_old_low: db 0
+x86_real_old_high: db 0
+x86_real_new_flags: dw 0
+x86_real_reg_ptr: dw 0
+x86_real_result: dw 0
 x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 
@@ -422,8 +845,63 @@ x86_guest_main_image:
         db #BB,#9A,#BC             ; MOV BX,BC9A
         db #BC,#00,#01             ; MOV SP,0100 (preserve test stack)
         db #BD,#DE,#AD             ; MOV BP,ADDE
-        db #BE,#EF,#BE             ; MOV SI,BEEF
-        db #BF,#0D,#F0             ; MOV DI,F00D
+        db #BE,#FF,#7F             ; MOV SI,7FFF
+        db #46                     ; INC SI -> 8000, OF/SF/AF/PF
+        db #BF,#00,#80             ; MOV DI,8000
+        db #4F                     ; DEC DI -> 7FFF, OF/AF/PF
+
+        ; LOOP: CX=2, branch backwards once, then fall through at CX=0.
+        db #B9,#02,#00
+x86_guest_loop_body:
+        db #90
+        db #E2,#FD
+
+        ; JCXZ takes the forward branch when CX is zero.
+        db #E3,#01
+        db #00                     ; must be skipped
+x86_guest_jcxz_target:
+        db #90
+
+        ; JMP rel8 skips an unsupported opcode.
+        db #EB,#01
+        db #00                     ; must be skipped
+x86_guest_jmp_target:
+        db #90
+
+        ; JNZ is taken because ZF=0 after DEC DI.
+        db #75,#01
+        db #00                     ; must be skipped
+x86_guest_jnz_target:
+        db #90
+
+        ; JZ is not taken: NOP + JMP skip the unsupported-opcode trap.
+        db #74,#03
+        db #90
+        db #EB,#01
+x86_guest_jz_trap:
+        db #00
+x86_guest_jz_done:
+        db #90
+
+        ; JO is taken (OF=1); JB is not taken (CF=0); JL is taken (SF!=OF).
+        db #70,#01
+        db #00
+x86_guest_jo_target:
+        db #90
+
+        db #72,#03
+        db #90
+        db #EB,#01
+x86_guest_jb_trap:
+        db #00
+x86_guest_jb_done:
+        db #90
+
+        db #7C,#01
+        db #00
+x86_guest_jl_target:
+        db #90
+
         db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
