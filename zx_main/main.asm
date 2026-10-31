@@ -200,6 +200,11 @@ START_APPLICATION:
         ; neoprog.C повторно не читается и не исполняется как x86-код.
         di
         call    RUN_NEOGS_DIAGNOSTICS
+        jr      c, .diagnostics_failed
+
+        ; ЭТАП 6 — ЗАГРУЗКА ВНЕШНЕГО НАБОРА ИЗ TR-DOS TEST.C.
+        ; TEST.ASM собирается NASM в TEST.BIN, затем экспортируется как TEST.C.
+        call    RUN_TRDOS_X86_TEST
         ei
         jr      c, .diagnostics_failed
 
@@ -293,6 +298,17 @@ neogs_firmware_disk_end:
         ASSERT  neogs_firmware_disk_end - neogs_firmware_disk_start <= #3000
         ASSERT  neogs_firmware_disk_end <= #F000
         SAVETRD "disk_A.trd", "neoprog.C", neogs_firmware_disk_start, neogs_firmware_disk_end - neogs_firmware_disk_start
+
+        ; TEST.C — внешний контейнер x86-тестов, собранный из tests/TEST.ASM.
+        ; Хост загружает его в #C000 и передаёт каждый машинный блок NeoGS.
+        PAGE    0
+        ORG     #C000
+x86_tests_disk_start:
+        INCBIN  "TEST.BIN"
+x86_tests_disk_end:
+        ASSERT  x86_tests_disk_end - x86_tests_disk_start <= #3000
+        ASSERT  x86_tests_disk_end <= #F000
+        SAVETRD "disk_A.trd", "TEST.C", x86_tests_disk_start, x86_tests_disk_end - x86_tests_disk_start
 
 
 ; =========================================================================
