@@ -204,6 +204,11 @@ BIOS_DebugConsole_PrintChar::
         cp      8
         jr      c, .glyph_scanline
 
+        ; The full-screen glyph test suppresses only the final auto-wrap,
+        ; so row 11 remains visible instead of scrolling the test's first row.
+        ld      a, (bios_dbg_no_wrap)
+        or      a
+        jr      nz, .done
         ld      a, (bios_dbg_col)
         inc     a
         ld      (bios_dbg_col), a
@@ -232,6 +237,74 @@ BIOS_DebugConsole_PrintChar::
         pop     de
         pop     bc
         pop     af
+        ret
+
+; Full-screen renderer test: 12 rows, 42 identical glyphs per row.
+; Rows A-L are drawn through the same 6x8 PrintChar routine used by INT 10h.
+; The final glyph suppresses automatic wrap to prevent scrolling row A away.
+BIOS_DebugConsole_TestPattern::
+        call    BIOS_DebugConsole_Clear
+        xor     a
+        ld      (bios_dbg_test_row), a
+        ld      a, 'A'
+        ld      (bios_dbg_test_char), a
+
+.test_row:
+        ld      a, (bios_dbg_test_row)
+        ld      c, 0
+        call    BIOS_DebugConsole_SetCursor
+        ld      a, (bios_dbg_test_row)
+        cp      BIOS_DEBUG_ROWS - 1
+        jr      nz, .row_started
+        xor     a
+        ld      (bios_dbg_test_col), a
+        ld      b, BIOS_DEBUG_COLUMNS
+        jr      .test_char
+.row_started:
+        xor     a
+        ld      (bios_dbg_test_col), a
+        ld      b, BIOS_DEBUG_COLUMNS
+
+.test_char:
+        ld      a, (bios_dbg_test_row)
+        cp      BIOS_DEBUG_ROWS - 1
+        jr      nz, .emit_char
+        ld      a, (bios_dbg_test_col)
+        cp      BIOS_DEBUG_COLUMNS - 1
+        jr      nz, .emit_char
+        ld      a, 1
+        ld      (bios_dbg_no_wrap), a
+.emit_char:
+        ld      a, (bios_dbg_test_char)
+        ld      bc, #00EF
+        out     (c), a
+        call    BIOS_DebugConsole_PrintChar
+        xor     a
+        ld      (bios_dbg_no_wrap), a
+        ld      a, (bios_dbg_test_col)
+        inc     a
+        ld      (bios_dbg_test_col), a
+        djnz    .test_char
+
+        ; Add line endings to the emulator log only; the screen has already
+        ; advanced by the console's normal 42-column automatic wrap.
+        ld      a, 13
+        out     (#EF), a
+        ld      a, 10
+        out     (#EF), a
+
+        ld      a, (bios_dbg_test_row)
+        inc     a
+        ld      (bios_dbg_test_row), a
+        cp      BIOS_DEBUG_ROWS
+        jr      nc, .test_done
+        ld      a, (bios_dbg_test_char)
+        inc     a
+        ld      (bios_dbg_test_char), a
+        jr      .test_row
+.test_done:
+        xor     a
+        ld      (bios_dbg_no_wrap), a
         ret
 
 ; IN: HL=16-bit value. Render four hexadecimal digits in the 6x8 console.
@@ -311,3 +384,7 @@ bios_dbg_bits:      db 0
 bios_dbg_mask:      db 0
 bios_dbg_font_ptr:  dw 0
 bios_dbg_clear_y:   db 0
+bios_dbg_no_wrap:   db 0
+bios_dbg_test_row:  db 0
+bios_dbg_test_col:  db 0
+bios_dbg_test_char: db 0
