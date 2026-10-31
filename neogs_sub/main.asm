@@ -375,7 +375,6 @@ neo_debug_buffer:
         BLOCK   255, 0
 neo_startup_message:
         db "[NEOGS] STARTUP OK: LOADED FIRMWARE EXECUTION STARTED.", 13, 0
-neo_debug_msg_x86_started: db "[NEOGS] X86 PAYLOAD EXECUTION STARTED.", 13, 0
 neo_debug_msg_memtest_started: db "[NEOGS] MEMORY TEST STARTED.", 13, 0
 neo_debug_msg_memtest_pass: db "[NEOGS] MEMORY TEST PASS.", 13, 0
 neo_debug_msg_memtest_fail: db "[NEOGS] MEMORY TEST FAIL.", 13, 0
