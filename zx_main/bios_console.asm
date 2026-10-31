@@ -260,6 +260,16 @@ BIOS_DebugConsole_TestPattern::
         ld      b, BIOS_DEBUG_COLUMNS
 
 .test_char:
+        ; Suppress only the final wrap, leaving all 12 completed rows visible.
+        ld      a, (bios_dbg_test_row)
+        cp      29
+        jr      nz, .emit_char
+        ld      a, (bios_dbg_test_col)
+        cp      BIOS_DEBUG_COLUMNS - 1
+        jr      nz, .emit_char
+        ld      a, 1
+        ld      (bios_dbg_no_wrap), a
+.emit_char:
         ld      a, (bios_dbg_test_char)
         ; Preserve B: it is the 42-character loop counter.
         push    bc
