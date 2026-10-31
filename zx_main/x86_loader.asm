@@ -497,6 +497,14 @@ neogs_get_result_frame:
         ld      (P124_X86_RESULT_AX), de
         ld      (X86_RESULT_AX), de
 
+        call    neogs_wait_data_byte
+        ret     c
+        ld      e, a
+        call    neogs_wait_data_byte
+        ret     c
+        ld      d, a
+        ld      (P124_X86_RESULT_IP), de
+
         call    neogs_wait_command_done
         ret     c
 
@@ -571,6 +579,7 @@ P124_DMA_HEADER:             dw 0
 P124_X86_RESULT_MAGIC:       db 0
 P124_X86_RESULT_STATUS:      db 0
 P124_X86_RESULT_AX:          dw 0
+P124_X86_RESULT_IP:          dw 0
 P124_DIAG_EXPECT_STATUS:     db 0
 P124_DIAG_EXPECT_AX:         dw 0
 
