@@ -14,7 +14,7 @@
 ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
 ; =========================================================================
 
-X86_REAL_STEP_LIMIT EQU 32
+X86_REAL_STEP_LIMIT EQU 256
 
 x86_real_mode_test:
         call    x86_mem_init
@@ -182,6 +182,10 @@ x86_real_next:
         jp      z, x86_real_inc_ax
         cp      #B8
         jp      z, x86_real_mov_ax_imm16
+        cp      #BA
+        jp      z, x86_real_mov_dx_imm16
+        cp      #BB
+        jp      z, x86_real_mov_bx_imm16
         cp      #F4
         jp      z, x86_real_hlt
         cp      #CD
@@ -220,8 +224,40 @@ x86_real_mov_ax_imm16:
 x86_real_int_imm8:
         call    x86_real_fetch8
         ret     c
+        ld      (x86_real_int_vector), a
         call    x86_int_enter
         ret     c
+        ld      a, (x86_real_int_vector)
+        cp      #10
+        jp      nz, x86_real_next
+        call    bios_int10_dispatch
+        ret     c
+        call    x86_iret_return
+        ret     c
+        jp      x86_real_next
+
+x86_real_mov_bx_imm16:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_low), a
+        call    x86_real_fetch8
+        ret     c
+        ld      h, a
+        ld      a, (x86_real_imm_low)
+        ld      l, a
+        ld      (x86_reg_bx), hl
+        jp      x86_real_next
+
+x86_real_mov_dx_imm16:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_low), a
+        call    x86_real_fetch8
+        ret     c
+        ld      h, a
+        ld      a, (x86_real_imm_low)
+        ld      l, a
+        ld      (x86_reg_dx), hl
         jp      x86_real_next
 
 x86_real_int3:
@@ -295,6 +331,7 @@ x86_real_copy_source: dw 0
 x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
 x86_real_imm_low:    db 0
+x86_real_int_vector: db 0
 
 x86_guest_main_image:
         db #B8,#00,#00,#CD,#20,#F4
