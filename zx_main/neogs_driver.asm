@@ -140,7 +140,7 @@ upload_firmware::
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, .upload_failed
 
-; Phase 7: send firmware length low/high and require ACK #A3.
+        ; Phase 7: send firmware length low/high and require ACK #A3.
         ld      a, 7
         ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_length)
