@@ -80,24 +80,17 @@ upload_firmware::
         call    gs_boot_send_command
         jp      c, .upload_failed
 
-        ; Phase 4: allocate/load a module in the stock GS105a ROM.
+        ; Phase 4: #30 allocates a module and returns its handle in GSDAT.
+        ; The result is DBIT-framed while CBIT is still asserted. Read it first,
+        ; then wait for CBIT to clear; waiting for CBIT first deadlocks #30.
         ld      a, 4
         ld      (neo_fw_timeout_phase), a
         ld      a, GS_CMD_LOAD_MODULE
-        call    gs_boot_send_command
+        call    gs_boot_send_command_result
         jp      c, .upload_failed
-
-        ; Some GS105a revisions expose the module handle immediately after
-        ; #30; the published transfer example exposes it after #D2. Accept
-        ; either documented timing without leaving DBIT pending.
-        xor     a
-        ld      (neo_fw_handle_valid), a
-        call    gs_boot_receive_data_byte
-        jr      c, .no_early_module_handle
         ld      (neo_fw_module_handle), a
         ld      a, 1
         ld      (neo_fw_handle_valid), a
-.no_early_module_handle:
 
         ; Phase 5: open the module stream.
         ld      a, 5
@@ -123,18 +116,14 @@ upload_firmware::
         jr      .bootstrap_stream_loop
 
 .bootstrap_stream_done:
-        ; Phase 7: close stream, read module handle, then return it for #31.
+        ; Phase 7: #D2 is consumed inside the ROM's active LOAD loop.
+        ; It terminates the stream and clears CBIT; it does NOT return a new
+        ; module handle. Preserve the handle returned by #30 for command #31.
         ld      a, 7
         ld      (neo_fw_timeout_phase), a
         ld      a, GS_CMD_CLOSE_STREAM
         call    gs_boot_send_command
         jp      c, .upload_failed
-        call    gs_boot_receive_data_byte
-        jr      c, .no_late_module_handle
-        ld      (neo_fw_module_handle), a
-        ld      a, 1
-        ld      (neo_fw_handle_valid), a
-.no_late_module_handle:
         ld      a, (neo_fw_handle_valid)
         or      a
         jp      z, .upload_failed
@@ -260,6 +249,47 @@ gs_boot_send_command_long:
         ret
 .long_done:
         pop     de
+        or      a
+        ret
+
+; #30 is special: GS105a asserts DBIT with the new module handle before
+; clearing CBIT. The host MUST read GSDAT first, then wait for CBIT=0.
+; OUT: A = module handle; carry set on either handshake timeout.
+gs_boot_send_command_result:
+        ld      (neo_fw_command_byte), a
+        ld      a, (neo_fw_command_byte)
+        out     (GSCOM), a
+        ld      bc, FW_BYTE_TIMEOUT
+.result_wait_data:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jr      nz, .result_read_data
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .result_wait_data
+        scf
+        ret
+.result_read_data:
+        in      a, (GSDAT)
+        ld      (neo_fw_result_byte), a
+        push    af
+        ld      bc, FW_BYTE_TIMEOUT
+.result_wait_command:
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_CBIT, a
+        jr      z, .result_command_done
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .result_wait_command
+        pop     af
+        scf
+        ret
+.result_command_done:
+        pop     af
         or      a
         ret
 
@@ -431,6 +461,7 @@ neo_fw_rom_ram_mid:     db 0
 neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
+neo_fw_result_byte:     db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
 neo_fw_last_status:     db 0
