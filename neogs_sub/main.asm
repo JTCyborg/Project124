@@ -393,6 +393,7 @@ rom_return_trampoline_code:
 rom_return_trampoline_end:
 
         INCLUDE "x86_memory.asm"
+        INCLUDE "x86_system.asm"
         INCLUDE "x86_runtime.asm"
         INCLUDE "x86_interpreter.asm"
 
