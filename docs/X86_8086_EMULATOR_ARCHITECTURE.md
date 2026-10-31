@@ -21,7 +21,7 @@ Project branch: `main`.
 
 The legacy linear diagnostic interpreter still supports only `90 NOP`, `40 INC AX`, `B8 MOV AX,imm16`, and `F4 HLT`.
 
-The separate bounded real-mode executor used by the current task path fetches through CS:IP and supports `90 NOP`, `40-47 INC r16`, `48-4F DEC r16`, `B0-B7 MOV r8,imm8`, `B8-BF MOV r16,imm16`, `F4 HLT`, `CD INT imm8`, `CC INT3`, and `CF IRET`. INC/DEC implement OF/SF/ZF/AF/PF and preserve CF and unrelated FLAGS bits. Its interrupt service trap currently dispatches INT 10h. The instruction set is still a small functional subset, not a complete 8086.
+The separate bounded real-mode executor used by the current task path fetches through CS:IP and supports `90 NOP`, `40-47 INC r16`, `48-4F DEC r16`, `70-7F short Jcc` (all sixteen conditions), `B0-B7 MOV r8,imm8`, `B8-BF MOV r16,imm16`, `E0-E3 LOOPNZ/LOOPZ/LOOP/JCXZ`, `EB JMP rel8`, `F4 HLT`, `CD INT imm8`, `CC INT3`, and `CF IRET`. INC/DEC implement OF/SF/ZF/AF/PF and preserve CF and unrelated FLAGS bits. LOOP-family instructions preserve FLAGS; Jcc evaluates the architectural CF/PF/ZF/SF/OF bits. Relative targets are calculated from IP after the displacement byte, and subsequent fetches remain bounded to the loaded task. The Stage 2B guest regression exercises backward LOOP, JCXZ, JMP rel8, and taken/not-taken JNZ/JZ/JO/JB/JL cases. Its final register/FLAGS checks also verify that control-flow instructions do not alter FLAGS. The interrupt service trap currently dispatches INT 10h. The instruction set is still a small functional subset, not a complete 8086.
 
 Its task image is loaded at logical NeoGS address `$5002`, with a two-byte length header at `$5000`. The current payload window is `$2FFE` bytes.
 
