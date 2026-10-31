@@ -1,6 +1,6 @@
 ; =========================================================================
 ; PROJECT 124 — NeoGS host-side driver
-; Stage 2 uses the standard GS105a ROM loader and a two-stage bootstrap.
+; Stage 2 uses GS105a #14 (RECEIVE BLOCK) and #13 (JUMP) to start a two-stage bootstrap.
 ; =========================================================================
         INCLUDE "../shared/neogs_io.inc"
 
@@ -14,13 +14,12 @@ IPC_CMD_TIMEOUT EQU #FFFF
 ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
 ;
 ; Cold/warm reset path:
-;   #F4 cold restart (custom firmware maps stock ROM back and JP $0000)
+;   #F4 cold restart
 ;   #20 get total RAM, read three bytes to prove stock ROM is ready
-;   #00 reset flags
-;   #30 load module, #D1 open stream, bootstrap bytes, #D2 close stream
-;   read/echo module handle, #31 run module
+;   #14 receive executable bootstrap directly into RAM at $4000
+;   #13 jump to $4000
 ;   #A1 bootstrap ready, send length, receive #A3 length accepted
-;   send custom firmware bytes, receive #A2 firmware ready
+;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
 ; -------------------------------------------------------------------------
 upload_firmware::
         ld      (neo_fw_source), hl
@@ -141,8 +140,8 @@ upload_firmware::
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, .upload_failed
 
-; Phase 9: send firmware length low/high and require ACK #A3.
-        ld      a, 9
+; Phase 7: send firmware length low/high and require ACK #A3.
+        ld      a, 7
         ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_length)
         ld      a, l
@@ -156,8 +155,8 @@ upload_firmware::
         cp      NGS_BOOTSTRAP_LENGTH_ACK
         jp      nz, .upload_failed
 
-        ; Phase 10: stream the custom firmware to RAM address $0000.
-        ld      a, 10
+        ; Phase 8: stream the custom firmware to RAM address $0000.
+        ld      a, 8
         ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_source)
         ld      de, (neo_fw_length)
@@ -173,8 +172,8 @@ upload_firmware::
         jr      .firmware_stream_loop
 
 .firmware_stream_done:
-        ; Phase 11: new firmware has jumped to $0000 and sends ACK #A2.
-        ld      a, 11
+        ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+        ld      a, 9
         ld      (neo_fw_timeout_phase), a
         call    gs_boot_receive_data_byte
         jp      c, .upload_failed
@@ -249,50 +248,6 @@ gs_boot_send_command_long:
         or      a
         ret
 
-; #30 (COM30) has a bidirectional exchange in the stock GS105a ROM:
-;   1) host supplies one argument byte before issuing the command;
-;   2) ROM publishes the allocated module number (DBIT=1);
-;   3) ROM waits for the host argument to be consumed (DBIT=0);
-;   4) ROM's module number remains available as the command result;
-;   5) CBIT is cleared when COM30 returns.
-; The shared DBIT must therefore be observed through the full 1->0->1
-; sequence. Waiting only for DBIT=1 sees the host's own preloaded argument.
-; OUT: A = module handle; carry set on handshake timeout.
-gs_boot_send_command_result:
-        ld      (neo_fw_command_byte), a
-
-        ; COM30 expects a one-byte host argument. Per GS protocol this
-        ; argument must be placed in GSDAT BEFORE the command is issued.
-        ; The command argument/result exchange is not DBIT-framed.
-        xor     a
-        out     (GSDAT), a
-
-        ; Issue #30 after the argument is ready.
-        ld      a, (neo_fw_command_byte)
-        out     (GSCOM), a
-
-        ; COM30 writes the allocated module number to ZXDATWR and then
-        ; consumes the preloaded argument before clearing CBIT. Wait for
-        ; command completion, then read the retained result directly.
-        ld      bc, FW_BYTE_TIMEOUT
-.result_wait_command_done:
-        in      a, (GSSTAT)
-        ld      (neo_fw_last_status), a
-        bit     B_CBIT, a
-        jr      z, .result_read_data
-        dec     bc
-        ld      a, b
-        or      c
-        jr      nz, .result_wait_command_done
-        scf
-        ret
-
-.result_read_data:
-        in      a, (GSDAT)
-        ld      (neo_fw_result_byte), a
-        or      a
-        ret
-
 gs_boot_send_command:
         ld      (neo_fw_command_byte), a
         ld      a, (neo_fw_command_byte)
@@ -313,9 +268,8 @@ gs_boot_send_command:
         or      a
         ret
 
-; Write one command argument to GSDAT without waiting for its post-write
-; DBIT clear. The following command (#31) consumes this argument, matching
-; the published GS105a module-run sequence.
+; Preload the first argument byte of GS105a commands #13/#14. Those
+; handlers read this byte before clearing CBIT; later arguments use DBIT.
 gs_boot_write_command_argument:
         ld      (neo_fw_tx_byte), a
         ld      bc, FW_BYTE_TIMEOUT
