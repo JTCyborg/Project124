@@ -112,7 +112,7 @@ START_APPLICATION:
         ; neoprog.C является полным бинарным образом прошивки NeoGS.
         ; Сначала читаем его секторами в #C000, затем штатный bootstrap
         ; передаёт этот буфер в NeoGS RAM по адресу #0000.
-        ld      hl, task_filename
+        ld      hl, neogs_firmware_filename
         ld      a, 'C'
         call    neogs_load_trdos_file
         jr      c, .firmware_file_failed
@@ -201,7 +201,7 @@ START_APPLICATION:
         di
         call    RUN_NEOGS_DIAGNOSTICS
         ei
-        jr      c, .x86_stage_failed
+        jr      c, .diagnostics_failed
 
         ; Финальная точка останова ядра после завершения всех этапов
 .core_halt:
@@ -211,12 +211,12 @@ START_APPLICATION:
         jr      .core_halt
 
 ; Ошибка выполнения диагностики загруженной прошивки NeoGS.
-.x86_stage_failed:
+.diagnostics_failed:
         MACRO_EF_STRING msg_stage5_fail
         di
-.x86_stage_failed_halt:
+.diagnostics_failed_halt:
         halt
-        jr      .x86_stage_failed_halt
+        jr      .diagnostics_failed_halt
 
 msg_stage5_fail:
         DEFB "[CORE] ERROR: NeoGS diagnostics failed; startup halted.", 13, 0
