@@ -177,6 +177,11 @@ RUN_TRDOS_X86_TEST::
 
         ; Validate the X86T container header before reading any record.
         ld      hl, TRDOS_PANEL_BUFFER
+        ld      de, (neo_trdos_file_length)
+        add     hl, de
+        ld      (P124_TEST_FILE_END), hl
+
+        ld      hl, TRDOS_PANEL_BUFFER
         ld      a, (hl)
         cp      'X'
         jp      nz, .test_format_failed
@@ -201,6 +206,12 @@ RUN_TRDOS_X86_TEST::
         or      a
         jp      z, .test_format_failed
         ld      (P124_TESTS_REMAINING), a
+        push    hl
+        ld      de, (P124_TEST_FILE_END)
+        or      a
+        sbc     hl, de
+        pop     hl
+        jp      nc, .test_format_failed
         xor     a
         ld      (P124_TESTS_PASSED), a
         ld      (P124_TESTS_FAILED), a
@@ -211,6 +222,18 @@ RUN_TRDOS_X86_TEST::
         ; Record: ID word, expected status byte, expected AX word,
         ; code length word, then exact x86 machine-code bytes.
         ld      hl, (P124_TEST_RECORD_PTR)
+        push    hl
+        ld      de, 7
+        add     hl, de
+        ld      de, (P124_TEST_FILE_END)
+        or      a
+        sbc     hl, de
+        pop     hl
+        jp      c, .test_record_header_in_bounds
+        jp      nz, .test_format_failed
+        ; Exactly end-of-file cannot contain a complete record header.
+        jp      .test_format_failed
+.test_record_header_in_bounds:
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
@@ -250,6 +273,14 @@ RUN_TRDOS_X86_TEST::
         ld      de, (P124_TEST_LENGTH)
         add     hl, de
         ld      (P124_TEST_NEXT_RECORD), hl
+        push    hl
+        ld      de, (P124_TEST_FILE_END)
+        or      a
+        sbc     hl, de
+        pop     hl
+        jp      c, .test_payload_in_bounds
+        jp      nz, .test_format_failed
+.test_payload_in_bounds:
         pop     hl
 
         ; Transfer only the x86 payload, not the container metadata.
@@ -366,6 +397,7 @@ RUN_TRDOS_X86_TEST::
 
 P124_test_filename:               defb "TEST    "
 P124_TEST_RECORD_PTR:             dw 0
+P124_TEST_FILE_END:                dw 0
 P124_TEST_NEXT_RECORD:            dw 0
 P124_TEST_PAYLOAD:                dw 0
 P124_TEST_LENGTH:                 dw 0
