@@ -37,7 +37,7 @@ The self-test runs the guest caller at `0000:5002` and handler at
 `0000:5100`. It verifies all eight `MOV r16,imm16` destinations, `INC SI` (`7FFFh` to
 `8000h`) and `DEC DI` (`8000h` to `7FFFh`), including OF/SF/ZF/AF/PF
 behavior and CF preservation. It then checks AX=`1234h`, IRET return
-IP=`5025h`, FLAGS=`0B16h` and SP restoration.
+IP=`501Fh`, FLAGS=`0B16h` and SP restoration.
 Host command: `09h`. Expected result: status 0 / AX=`1A02h`.
 
 ## Stage 3A: BIOS INT 10h text services
