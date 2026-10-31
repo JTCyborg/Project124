@@ -36,8 +36,7 @@ execute_neogs_x86:
         add     hl, de
         ld      (x86_program_end), hl
 
-        ld      hl, 0
-        ld      (saved_z80_ax), hl
+        call    x86_cpu_reset
         ld      hl, #FFFF
         ld      (x86_steps_remaining), hl
         xor     a
@@ -45,16 +44,18 @@ execute_neogs_x86:
 
         call    x86_sys_log_started
         ld      bc, X86_RAM_RUN_ADDR
+        ld      (x86_reg_ip), bc
         call    x86_execute_loop
 
-        ld      hl, (saved_z80_ax)
+        ld      hl, (x86_reg_ax)
         ld      (saved_x86_ax), hl
         ld      (x86_last_ip), bc
+        ld      (x86_reg_ip), bc
         ret
 
 .invalid_x86_length:
         ld      hl, #FFFF
-        ld      (saved_z80_ax), hl
+        ld      (x86_reg_ax), hl
         ld      (saved_x86_ax), hl
         ld      (x86_last_ip), hl
         ld      a, 4
