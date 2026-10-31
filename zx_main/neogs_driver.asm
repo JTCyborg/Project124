@@ -87,17 +87,13 @@ upload_firmware::
         call    gs_boot_send_command
         jp      c, .upload_failed
 
-        ; Some GS105a revisions expose the module handle immediately after
-        ; #30; the published transfer example exposes it after #D2. Accept
-        ; either documented timing without leaving DBIT pending.
-        xor     a
-        ld      (neo_fw_handle_valid), a
-        call    gs_boot_receive_data_byte
-        jr      c, .no_early_module_handle
+        ; #30 returns the module handle in GSDAT after CBIT clears.
+        ; This is a command result, not a stream byte: DBIT is not asserted.
+        ; Read GSDAT directly; do NOT wait for DBIT=1 here.
+        in      a, (GSDAT)
         ld      (neo_fw_module_handle), a
         ld      a, 1
         ld      (neo_fw_handle_valid), a
-.no_early_module_handle:
 
         ; Phase 5: open the module stream.
         ld      a, 5
@@ -123,18 +119,17 @@ upload_firmware::
         jr      .bootstrap_stream_loop
 
 .bootstrap_stream_done:
-        ; Phase 7: close stream, read module handle, then return it for #31.
+        ; Phase 7: close stream. The GS105a example reads the module handle
+        ; directly from GSDAT after #D2; this result is not DBIT-framed.
         ld      a, 7
         ld      (neo_fw_timeout_phase), a
         ld      a, GS_CMD_CLOSE_STREAM
         call    gs_boot_send_command
         jp      c, .upload_failed
-        call    gs_boot_receive_data_byte
-        jr      c, .no_late_module_handle
+        in      a, (GSDAT)
         ld      (neo_fw_module_handle), a
         ld      a, 1
         ld      (neo_fw_handle_valid), a
-.no_late_module_handle:
         ld      a, (neo_fw_handle_valid)
         or      a
         jp      z, .upload_failed
