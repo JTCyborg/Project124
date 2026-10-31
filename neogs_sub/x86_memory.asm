@@ -41,8 +41,8 @@ x86_mem_map_addr:
         add     a, a
         ld      b, a
         ld      a, (x86_mem_addr+1)
-        rrca
-        rrca
+        rlca
+        rlca
         and     #03
         or      b
         add     a, X86_MEM_NGSPAGE_BASE
