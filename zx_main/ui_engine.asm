@@ -36,7 +36,7 @@ UI_ScrollConsoleUp::
         ; Сдвиг цветовых атрибутов лога
         LD      DE, #5980: LD HL, #59A0: LD BC, 352: LDIR                            
         ; Очистка последней строки атрибутов
-        LD      HL, #5B00: LD DE, #5B01: LD (HL), %01000100: LD BC, 31: LDIR                            
+        LD      HL, #5AE0: LD DE, #5AE1: LD (HL), %01000100: LD BC, 31: LDIR                            
         ; Очистка пикселей 23-й строки
         XOR     A: LD H, #50                  
 .clear_pixels:
