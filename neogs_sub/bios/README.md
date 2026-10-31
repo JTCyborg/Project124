@@ -58,3 +58,26 @@ then should IVT entries point to BIOS service handlers.
 The physical memory backend still maps the complete 1 MiB as RAM. The table
 above is the guest-visible layout contract being established; it is not yet
 hardware-enforced memory protection or ROM shadowing.
+
+
+## Interrupt engine — Stage 2A
+
+The sibling module `neogs_sub/x86_interrupt.asm` implements the real-mode
+interrupt frame primitives independently of the legacy opcode fetch loop:
+
+- `x86_int_enter` reads the four-byte IVT entry, pushes FLAGS, CS, then IP
+  (so the final stack top is IP), clears IF and TF, and loads the target CS:IP.
+- `x86_iret_return` restores IP, CS, and FLAGS from SS:SP and advances SP by
+  six bytes.
+- `x86_int_self_test` installs a temporary vector 20h, checks the exact
+  frame bytes and live register state, executes the IRET primitive, checks
+  full restoration, and clears the temporary vector.
+
+The host runs this test with command 08h after BIOS Stage 1 POST. Expected
+result is status 0 / AX=1A01h and the host log line begins `[INT] PASS`.
+
+**Scope boundary:** Stage 2A validates the interrupt frame engine, not guest
+instruction dispatch. The current minimal interpreter still does not decode
+CDh (INT imm8), CCh (INT 3), or CFh (IRET), and this test does not execute a
+guest handler. Stage 2B must integrate those opcodes with a segmented x86
+instruction-fetch path before BIOS vectors or INT services are installed.
