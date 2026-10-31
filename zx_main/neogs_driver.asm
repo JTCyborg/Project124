@@ -455,14 +455,13 @@ neogs_wait_data_byte::
 ; Stage 2 diagnostics consumed by zx_main/main.asm.
 neo_fw_source:          dw 0
 neo_fw_length:          dw 0
-neo_fw_module_handle:   db 0
-neo_fw_handle_valid:    db 0
+neo_fw_bootstrap_address: dw #4000
+neo_fw_block_length:    dw 0
 neo_fw_rom_ram_low:     db 0
 neo_fw_rom_ram_mid:     db 0
 neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
-neo_fw_result_byte:     db 0
 neo_fw_last_rx_byte:    db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
