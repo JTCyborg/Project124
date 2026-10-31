@@ -37,6 +37,24 @@ bios_int10_dispatch:
         or      a
         ret
 
+; Install IVT[10h] -> 0000:5200 (firmware service trap).
+bios_int10_install_vector:
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0040
+        ld      (x86_mem_offset), hl
+        ld      hl, #5200
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        ret     c
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0042
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_word_value), hl
+        jp      x86_mem_write16
+
 ; AH=00h — only mode 03h is supported by this project console.
 bios_int10_set_mode:
         ld      a, l
@@ -252,22 +270,7 @@ bios_int10_video_test:
         call    x86_real_copy_image
         jp      c, bios_video_test_fail_1
 
-        ; IVT[10h] -> 0000:5200. The target is a firmware-trap address.
-        ld      hl, 0
-        ld      (x86_mem_segment), hl
-        ld      hl, #0040
-        ld      (x86_mem_offset), hl
-        ld      hl, #5200
-        ld      (x86_mem_word_value), hl
-        call    x86_mem_write16
-        jp      c, bios_video_test_fail_2
-        ld      hl, 0
-        ld      (x86_mem_segment), hl
-        ld      hl, #0042
-        ld      (x86_mem_offset), hl
-        ld      hl, 0
-        ld      (x86_mem_word_value), hl
-        call    x86_mem_write16
+        call    bios_int10_install_vector
         jp      c, bios_video_test_fail_2
 
         ; Initialize guest registers and real-mode stack.
@@ -315,24 +318,6 @@ bios_int10_video_test:
         or      a
         sbc     hl, de
         jp      nz, bios_video_test_fail_6
-
-        ; Remove vector 10h after the self-test.
-        ld      hl, 0
-        ld      (x86_mem_segment), hl
-        ld      hl, #0040
-        ld      (x86_mem_offset), hl
-        ld      hl, 0
-        ld      (x86_mem_word_value), hl
-        call    x86_mem_write16
-        jp      c, bios_video_test_fail_7
-        ld      hl, 0
-        ld      (x86_mem_segment), hl
-        ld      hl, #0042
-        ld      (x86_mem_offset), hl
-        ld      hl, 0
-        ld      (x86_mem_word_value), hl
-        call    x86_mem_write16
-        jp      c, bios_video_test_fail_7
 
         ld      hl, #1A10
         ld      (saved_x86_ax), hl
