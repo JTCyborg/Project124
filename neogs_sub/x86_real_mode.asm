@@ -6,11 +6,9 @@
 ; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
-; handler at 0000:5100, then executes:
-;   MOV AX,0000 / INT 20h / HLT
-; handler:
-;   MOV AX,1234 / IRET
-; The test checks AX, CS:IP return path, FLAGS and SP balance.
+; handler at 0000:5100. The guest loads all eight general registers with
+; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
+; The test checks all MOV destinations, interrupt return, FLAGS and SP.
 ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
 ; =========================================================================
 
@@ -84,14 +82,46 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_4
 
-        ; Verify original control-flow context and stack were restored.
+        ; Verify all eight MOV r16,imm16 destinations.
+        ld      hl, (x86_reg_cx)
+        ld      de, #1234
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_dx)
+        ld      de, #7856
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_bx)
+        ld      de, #BC9A
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_bp)
+        ld      de, #ADDE
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_si)
+        ld      de, #BEEF
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_di)
+        ld      de, #F00D
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+
+        ; Verify original control-flow context, SP and FLAGS were restored.
         ld      hl, (x86_reg_cs)
         ld      de, 0
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_ip)
-        ld      de, #5008
+        ld      de, #501D
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -215,11 +245,10 @@ x86_real_next:
         jp      c, x86_real_mov_r8_imm8
 .not_mov_r8:
         cp      #B8
-        jp      z, x86_real_mov_ax_imm16
-        cp      #BA
-        jp      z, x86_real_mov_dx_imm16
-        cp      #BB
-        jp      z, x86_real_mov_bx_imm16
+        jp      c, .not_mov_r16
+        cp      #C0
+        jp      c, x86_real_mov_r16_imm16
+.not_mov_r16:
         cp      #F4
         jp      z, x86_real_hlt
         cp      #CD
@@ -243,16 +272,29 @@ x86_real_inc_ax:
         ld      (x86_reg_ax), hl
         jp      x86_real_next
 
-x86_real_mov_ax_imm16:
+; B8-BF — MOV r16,imm16 (AX,CX,DX,BX,SP,BP,SI,DI).
+; The eight word registers are contiguous in x86_modrm.asm in opcode order.
+x86_real_mov_r16_imm16:
+        ld      (x86_real_opcode), a
         call    x86_real_fetch8
         ret     c
         ld      (x86_real_imm_low), a
         call    x86_real_fetch8
         ret     c
-        ld      h, a
+        ld      (x86_real_imm_high), a
+
+        ld      a, (x86_real_opcode)
+        sub     #B8
+        add     a, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
         ld      a, (x86_real_imm_low)
-        ld      l, a
-        ld      (x86_reg_ax), hl
+        ld      (hl), a
+        inc     hl
+        ld      a, (x86_real_imm_high)
+        ld      (hl), a
         jp      x86_real_next
 
 ; B0-B7 — MOV r8,imm8 (AL,CL,DL,BL,AH,CH,DH,BH).
@@ -293,30 +335,6 @@ x86_real_int_imm8:
         ret     c
         call    x86_iret_return
         ret     c
-        jp      x86_real_next
-
-x86_real_mov_bx_imm16:
-        call    x86_real_fetch8
-        ret     c
-        ld      (x86_real_imm_low), a
-        call    x86_real_fetch8
-        ret     c
-        ld      h, a
-        ld      a, (x86_real_imm_low)
-        ld      l, a
-        ld      (x86_reg_bx), hl
-        jp      x86_real_next
-
-x86_real_mov_dx_imm16:
-        call    x86_real_fetch8
-        ret     c
-        ld      (x86_real_imm_low), a
-        call    x86_real_fetch8
-        ret     c
-        ld      h, a
-        ld      a, (x86_real_imm_low)
-        ld      l, a
-        ld      (x86_reg_dx), hl
         jp      x86_real_next
 
 x86_real_int3:
@@ -390,6 +408,7 @@ x86_real_copy_source: dw 0
 x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
 x86_real_imm_low:    db 0
+x86_real_imm_high:   db 0
 x86_real_int_vector: db 0
 x86_real_opcode: db 0
 x86_real_imm_byte: db 0
@@ -397,7 +416,15 @@ x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 
 x86_guest_main_image:
-        db #B8,#00,#00,#CD,#20,#F4
+        db #B8,#00,#00             ; MOV AX,0000
+        db #B9,#34,#12             ; MOV CX,1234
+        db #BA,#56,#78             ; MOV DX,7856
+        db #BB,#9A,#BC             ; MOV BX,BC9A
+        db #BC,#00,#01             ; MOV SP,0100 (preserve test stack)
+        db #BD,#DE,#AD             ; MOV BP,ADDE
+        db #BE,#EF,#BE             ; MOV SI,BEEF
+        db #BF,#0D,#F0             ; MOV DI,F00D
+        db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
         db #B8,#34,#12,#CF

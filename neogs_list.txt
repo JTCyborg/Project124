@@ -382,13 +382,13 @@
 270+  026D              .real_length_valid:
 271+  026D 11 02 50             ld      de, X86_RAM_RUN_ADDR
 272+  0270 19                   add     hl, de
-273+  0271 22 FB 11             ld      (x86_real_task_end), hl
+273+  0271 22 27 12             ld      (x86_real_task_end), hl
 274+  0274
 275+  0274 CD 89 03             call    x86_mem_init
 276+  0277 21 02 50             ld      hl, X86_RAM_RUN_ADDR
 277+  027A 11 02 50             ld      de, #5002
 278+  027D ED 4B 00 50          ld      bc, (X86_DMA_HEADER_ADDR)
-279+  0281 CD 0B 10             call    x86_real_copy_image
+279+  0281 CD 53 10             call    x86_real_copy_image
 280+  0284 DA E2 02             jp      c, .real_copy_failed
 281+  0287
 282+  0287                      ; Reset the guest register file to a deterministic real-mode entry.
@@ -413,13 +413,13 @@
 301+  02BD 22 88 09             ld      (x86_reg_flags), hl
 302+  02C0
 303+  02C0 3E 01                ld      a, 1
-304+  02C2 32 FA 11             ld      (x86_real_bounds_enable), a
-305+  02C5 CD 9A 10             call    x86_real_execute
+304+  02C2 32 26 12             ld      (x86_real_bounds_enable), a
+305+  02C5 CD E2 10             call    x86_real_execute
 306+  02C8 F5                   push    af
 307+  02C9 2A 6E 09             ld      hl, (x86_reg_ax)
 308+  02CC 22 7E 03             ld      (saved_x86_ax), hl
 309+  02CF AF                   xor     a
-310+  02D0 32 FA 11             ld      (x86_real_bounds_enable), a
+310+  02D0 32 26 12             ld      (x86_real_bounds_enable), a
 311+  02D3 F1                   pop     af
 312+  02D4 C9                   ret
 313+  02D5
@@ -472,7 +472,7 @@
 360+  0313
 361+  0313              ; Stage 3A: guest INT 10h video BIOS service test.
 362+  0313              command_bios_video_test:
-363+  0313 CD B7 13             call    bios_int10_video_test
+363+  0313 CD F8 13             call    bios_int10_video_test
 364+  0316 AF                   xor     a
 365+  0317 D3 05                out     (CLRCBIT), a
 366+  0319 C3 37 01             jp      main_loop
@@ -1183,7 +1183,7 @@
 188++ 0758 DA 1A 08             jp      c, bios_post_fail_8
 189++ 075B
 190++ 075B                      ; Publish the INT 10h firmware trap after the IVT zero-fill check.
-191++ 075B CD 26 12             call    bios_int10_install_vector
+191++ 075B CD 67 12             call    bios_int10_install_vector
 192++ 075E DA 1A 08             jp      c, bios_post_fail_8
 193++ 0761
 194++ 0761 21 05 B1             ld      hl, BIOS_POST_SIGNATURE
@@ -2254,964 +2254,990 @@
   6++ 0F29              ; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
   7++ 0F29              ;
   8++ 0F29              ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
-  9++ 0F29              ; handler at 0000:5100, then executes:
- 10++ 0F29              ;   MOV AX,0000 / INT 20h / HLT
- 11++ 0F29              ; handler:
- 12++ 0F29              ;   MOV AX,1234 / IRET
- 13++ 0F29              ; The test checks AX, CS:IP return path, FLAGS and SP balance.
- 14++ 0F29              ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
- 15++ 0F29              ; =========================================================================
+  9++ 0F29              ; handler at 0000:5100. The guest loads all eight general registers with
+ 10++ 0F29              ; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
+ 11++ 0F29              ; The test checks all MOV destinations, interrupt return, FLAGS and SP.
+ 12++ 0F29              ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
+ 13++ 0F29              ; =========================================================================
+ 14++ 0F29
+ 15++ 0F29              X86_REAL_STEP_LIMIT EQU #FFFF
  16++ 0F29
- 17++ 0F29              X86_REAL_STEP_LIMIT EQU #FFFF
- 18++ 0F29
- 19++ 0F29              x86_real_mode_test:
- 20++ 0F29 AF                   xor     a
- 21++ 0F2A 32 FA 11             ld      (x86_real_bounds_enable), a
- 22++ 0F2D CD 89 03             call    x86_mem_init
- 23++ 0F30
- 24++ 0F30                      ; Copy main guest program to physical 0000:5002.
- 25++ 0F30 21 FD 11             ld      hl, x86_guest_main_image
- 26++ 0F33 11 02 50             ld      de, #5002
- 27++ 0F36 01 06 00             ld      bc, x86_guest_main_image_end - x86_guest_main_image
- 28++ 0F39 CD 0B 10             call    x86_real_copy_image
- 29++ 0F3C DA CB 11             jp      c, x86_real_test_fail_1
- 30++ 0F3F
- 31++ 0F3F                      ; Copy interrupt handler to physical 0000:5100.
- 32++ 0F3F 21 03 12             ld      hl, x86_guest_handler_image
- 33++ 0F42 11 00 51             ld      de, #5100
- 34++ 0F45 01 04 00             ld      bc, x86_guest_handler_image_end - x86_guest_handler_image
- 35++ 0F48 CD 0B 10             call    x86_real_copy_image
- 36++ 0F4B DA CB 11             jp      c, x86_real_test_fail_1
- 37++ 0F4E
- 38++ 0F4E                      ; Install IVT[20h] = 0000:5100.
- 39++ 0F4E 21 00 00             ld      hl, 0
- 40++ 0F51 22 DC 05             ld      (x86_mem_segment), hl
- 41++ 0F54 21 80 00             ld      hl, #0080
- 42++ 0F57 22 DE 05             ld      (x86_mem_offset), hl
- 43++ 0F5A 21 00 51             ld      hl, #5100
- 44++ 0F5D 22 E2 05             ld      (x86_mem_word_value), hl
- 45++ 0F60 CD C1 04             call    x86_mem_write16
- 46++ 0F63 DA CF 11             jp      c, x86_real_test_fail_2
- 47++ 0F66 21 00 00             ld      hl, 0
- 48++ 0F69 22 DC 05             ld      (x86_mem_segment), hl
- 49++ 0F6C 21 82 00             ld      hl, #0082
- 50++ 0F6F 22 DE 05             ld      (x86_mem_offset), hl
- 51++ 0F72 21 00 00             ld      hl, 0
- 52++ 0F75 22 E2 05             ld      (x86_mem_word_value), hl
- 53++ 0F78 CD C1 04             call    x86_mem_write16
- 54++ 0F7B DA CF 11             jp      c, x86_real_test_fail_2
- 55++ 0F7E
- 56++ 0F7E                      ; Initialize guest architectural state.
- 57++ 0F7E 21 00 00             ld      hl, 0
- 58++ 0F81 22 6E 09             ld      (x86_reg_ax), hl
- 59++ 0F84 22 70 09             ld      (x86_reg_cx), hl
- 60++ 0F87 22 72 09             ld      (x86_reg_dx), hl
- 61++ 0F8A 22 74 09             ld      (x86_reg_bx), hl
- 62++ 0F8D 22 78 09             ld      (x86_reg_bp), hl
- 63++ 0F90 22 7A 09             ld      (x86_reg_si), hl
- 64++ 0F93 22 7C 09             ld      (x86_reg_di), hl
- 65++ 0F96 22 7E 09             ld      (x86_reg_es), hl
- 66++ 0F99 22 84 09             ld      (x86_reg_ds), hl
- 67++ 0F9C 22 80 09             ld      (x86_reg_cs), hl
- 68++ 0F9F 21 02 50             ld      hl, #5002
- 69++ 0FA2 22 86 09             ld      (x86_reg_ip), hl
- 70++ 0FA5 21 00 70             ld      hl, #7000
- 71++ 0FA8 22 82 09             ld      (x86_reg_ss), hl
- 72++ 0FAB 21 00 01             ld      hl, #0100
- 73++ 0FAE 22 76 09             ld      (x86_reg_sp), hl
- 74++ 0FB1 21 02 03             ld      hl, #0302
- 75++ 0FB4 22 88 09             ld      (x86_reg_flags), hl
- 76++ 0FB7
- 77++ 0FB7 CD 9A 10             call    x86_real_execute
- 78++ 0FBA DA D3 11             jp      c, x86_real_test_fail_3
- 79++ 0FBD
- 80++ 0FBD                      ; Handler's MOV AX,1234 must execute before guest IRET returns to HLT.
- 81++ 0FBD 2A 6E 09             ld      hl, (x86_reg_ax)
- 82++ 0FC0 11 34 12             ld      de, #1234
- 83++ 0FC3 B7                   or      a
- 84++ 0FC4 ED 52                sbc     hl, de
- 85++ 0FC6 C2 D7 11             jp      nz, x86_real_test_fail_4
- 86++ 0FC9
- 87++ 0FC9                      ; Verify original control-flow context and stack were restored.
- 88++ 0FC9 2A 80 09             ld      hl, (x86_reg_cs)
- 89++ 0FCC 11 00 00             ld      de, 0
- 90++ 0FCF B7                   or      a
- 91++ 0FD0 ED 52                sbc     hl, de
- 92++ 0FD2 C2 DB 11             jp      nz, x86_real_test_fail_5
- 93++ 0FD5 2A 86 09             ld      hl, (x86_reg_ip)
- 94++ 0FD8 11 08 50             ld      de, #5008
- 95++ 0FDB B7                   or      a
- 96++ 0FDC ED 52                sbc     hl, de
- 97++ 0FDE C2 DB 11             jp      nz, x86_real_test_fail_5
- 98++ 0FE1 2A 76 09             ld      hl, (x86_reg_sp)
- 99++ 0FE4 11 00 01             ld      de, #0100
-100++ 0FE7 B7                   or      a
-101++ 0FE8 ED 52                sbc     hl, de
-102++ 0FEA C2 DB 11             jp      nz, x86_real_test_fail_5
-103++ 0FED 2A 88 09             ld      hl, (x86_reg_flags)
-104++ 0FF0 11 02 03             ld      de, #0302
-105++ 0FF3 B7                   or      a
-106++ 0FF4 ED 52                sbc     hl, de
-107++ 0FF6 C2 DB 11             jp      nz, x86_real_test_fail_5
-108++ 0FF9
-109++ 0FF9 CD A0 11             call    x86_real_clear_vector
-110++ 0FFC DA DF 11             jp      c, x86_real_test_fail_6
-111++ 0FFF
-112++ 0FFF 21 02 1A             ld      hl, #1A02
-113++ 1002 22 7E 03             ld      (saved_x86_ax), hl
-114++ 1005 AF                   xor     a
-115++ 1006 32 04 0D             ld      (x86_exit_status), a
-116++ 1009 B7                   or      a
-117++ 100A C9                   ret
-118++ 100B
-119++ 100B              ; IN: HL=source in firmware, DE=physical x86 destination, BC=length.
-120++ 100B              x86_real_copy_image:
-121++ 100B 22 F0 11             ld      (x86_real_copy_source), hl
-122++ 100E ED 53 F2 11          ld      (x86_real_copy_dest), de
-123++ 1012 ED 43 F4 11          ld      (x86_real_copy_count), bc
-124++ 1016              x86_real_copy_loop:
-125++ 1016 ED 4B F4 11          ld      bc, (x86_real_copy_count)
-126++ 101A 78                   ld      a, b
-127++ 101B B1                   or      c
-128++ 101C C8                   ret     z
-129++ 101D 2A F0 11             ld      hl, (x86_real_copy_source)
-130++ 1020 7E                   ld      a, (hl)
-131++ 1021 32 D9 05             ld      (x86_mem_value), a
-132++ 1024 2A F2 11             ld      hl, (x86_real_copy_dest)
-133++ 1027 22 D6 05             ld      (x86_mem_addr), hl
-134++ 102A AF                   xor     a
-135++ 102B 32 D8 05             ld      (x86_mem_addr+2), a
-136++ 102E CD BE 03             call    x86_mem_write8
-137++ 1031 D8                   ret     c
-138++ 1032 2A F0 11             ld      hl, (x86_real_copy_source)
-139++ 1035 23                   inc     hl
-140++ 1036 22 F0 11             ld      (x86_real_copy_source), hl
-141++ 1039 2A F2 11             ld      hl, (x86_real_copy_dest)
-142++ 103C 23                   inc     hl
-143++ 103D 22 F2 11             ld      (x86_real_copy_dest), hl
-144++ 1040 2A F4 11             ld      hl, (x86_real_copy_count)
-145++ 1043 2B                   dec     hl
-146++ 1044 22 F4 11             ld      (x86_real_copy_count), hl
-147++ 1047 18 CD                jr      x86_real_copy_loop
-148++ 1049
-149++ 1049              ; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
-150++ 1049              ; OUT A=byte; guest IP advances only after a successful memory read.
-151++ 1049              x86_real_fetch8:
-152++ 1049 3A FA 11             ld      a, (x86_real_bounds_enable)
-153++ 104C B7                   or      a
-154++ 104D 28 26                jr      z, .fetch_unbounded
-155++ 104F 2A 80 09             ld      hl, (x86_reg_cs)
-156++ 1052 7C                   ld      a, h
-157++ 1053 B5                   or      l
-158++ 1054 C2 93 10             jp      nz, x86_real_fetch_out_of_range
-159++ 1057 2A 86 09             ld      hl, (x86_reg_ip)
-160++ 105A 11 02 50             ld      de, #5002
-161++ 105D B7                   or      a
-162++ 105E ED 52                sbc     hl, de
-163++ 1060 DA 93 10             jp      c, x86_real_fetch_out_of_range
-164++ 1063 2A FB 11             ld      hl, (x86_real_task_end)
-165++ 1066 ED 5B 86 09          ld      de, (x86_reg_ip)
-166++ 106A B7                   or      a
-167++ 106B ED 52                sbc     hl, de
-168++ 106D DA 93 10             jp      c, x86_real_fetch_out_of_range
-169++ 1070 7C                   ld      a, h
-170++ 1071 B5                   or      l
-171++ 1072 CA 93 10             jp      z, x86_real_fetch_out_of_range
-172++ 1075              .fetch_unbounded:
-173++ 1075 2A 86 09             ld      hl, (x86_reg_ip)
-174++ 1078 22 E0 05             ld      (x86_mem_offset_work), hl
-175++ 107B 2A 80 09             ld      hl, (x86_reg_cs)
-176++ 107E 22 DC 05             ld      (x86_mem_segment), hl
-177++ 1081 CD 43 04             call    x86_mem_calc_phys
-178++ 1084 CD B7 03             call    x86_mem_read8
-179++ 1087 D8                   ret     c
-180++ 1088 F5                   push    af
-181++ 1089 2A 86 09             ld      hl, (x86_reg_ip)
-182++ 108C 23                   inc     hl
-183++ 108D 22 86 09             ld      (x86_reg_ip), hl
-184++ 1090 F1                   pop     af
-185++ 1091 B7                   or      a
-186++ 1092 C9                   ret
-187++ 1093
-188++ 1093              x86_real_fetch_out_of_range:
-189++ 1093 3E 04                ld      a, 4
-190++ 1095 32 04 0D             ld      (x86_exit_status), a
-191++ 1098 37                   scf
-192++ 1099 C9                   ret
-193++ 109A
-194++ 109A              x86_real_execute:
-195++ 109A 21 FF FF             ld      hl, X86_REAL_STEP_LIMIT
-196++ 109D 22 EE 11             ld      (x86_real_steps), hl
-197++ 10A0              x86_real_next:
-198++ 10A0 2A EE 11             ld      hl, (x86_real_steps)
-199++ 10A3 7C                   ld      a, h
-200++ 10A4 B5                   or      l
-201++ 10A5 CA 99 11             jp      z, x86_real_budget_fail
-202++ 10A8 2B                   dec     hl
-203++ 10A9 22 EE 11             ld      (x86_real_steps), hl
-204++ 10AC
-205++ 10AC CD 49 10             call    x86_real_fetch8
-206++ 10AF D8                   ret     c
-207++ 10B0
-208++ 10B0 FE 90                cp      #90
-209++ 10B2 CA EE 10             jp      z, x86_real_nop
-210++ 10B5 FE 40                cp      #40
-211++ 10B7 CA F1 10             jp      z, x86_real_inc_ax
-212++ 10BA FE B0                cp      #B0
-213++ 10BC DA C4 10             jp      c, .not_mov_r8
-214++ 10BF FE B8                cp      #B8
-215++ 10C1 DA 11 11             jp      c, x86_real_mov_r8_imm8
-216++ 10C4              .not_mov_r8:
-217++ 10C4 FE B8                cp      #B8
-218++ 10C6 CA FB 10             jp      z, x86_real_mov_ax_imm16
-219++ 10C9 FE BA                cp      #BA
-220++ 10CB CA 6D 11             jp      z, x86_real_mov_dx_imm16
-221++ 10CE FE BB                cp      #BB
-222++ 10D0 CA 57 11             jp      z, x86_real_mov_bx_imm16
-223++ 10D3 FE F4                cp      #F4
-224++ 10D5 CA 93 11             jp      z, x86_real_hlt
-225++ 10D8 FE CD                cp      #CD
-226++ 10DA CA 39 11             jp      z, x86_real_int_imm8
-227++ 10DD FE CC                cp      #CC
-228++ 10DF CA 83 11             jp      z, x86_real_int3
-229++ 10E2 FE CF                cp      #CF
-230++ 10E4 CA 8C 11             jp      z, x86_real_iret
-231++ 10E7
-232++ 10E7 3E 02                ld      a, 2
-233++ 10E9 32 04 0D             ld      (x86_exit_status), a
-234++ 10EC 37                   scf
-235++ 10ED C9                   ret
-236++ 10EE
-237++ 10EE              x86_real_nop:
-238++ 10EE C3 A0 10             jp      x86_real_next
-239++ 10F1
-240++ 10F1              x86_real_inc_ax:
-241++ 10F1 2A 6E 09             ld      hl, (x86_reg_ax)
-242++ 10F4 23                   inc     hl
-243++ 10F5 22 6E 09             ld      (x86_reg_ax), hl
-244++ 10F8 C3 A0 10             jp      x86_real_next
-245++ 10FB
-246++ 10FB              x86_real_mov_ax_imm16:
-247++ 10FB CD 49 10             call    x86_real_fetch8
-248++ 10FE D8                   ret     c
-249++ 10FF 32 F6 11             ld      (x86_real_imm_low), a
-250++ 1102 CD 49 10             call    x86_real_fetch8
-251++ 1105 D8                   ret     c
-252++ 1106 67                   ld      h, a
-253++ 1107 3A F6 11             ld      a, (x86_real_imm_low)
-254++ 110A 6F                   ld      l, a
-255++ 110B 22 6E 09             ld      (x86_reg_ax), hl
-256++ 110E C3 A0 10             jp      x86_real_next
-257++ 1111
-258++ 1111              ; B0-B7 — MOV r8,imm8 (AL,CL,DL,BL,AH,CH,DH,BH).
-259++ 1111              x86_real_mov_r8_imm8:
-260++ 1111 32 F8 11             ld      (x86_real_opcode), a
-261++ 1114 CD 49 10             call    x86_real_fetch8
-262++ 1117 D8                   ret     c
-263++ 1118 32 F9 11             ld      (x86_real_imm_byte), a
-264++ 111B 3A F8 11             ld      a, (x86_real_opcode)
-265++ 111E D6 B0                sub     #B0
-266++ 1120 FE 04                cp      4
-267++ 1122 38 06                jr      c, .low_byte_register
-268++ 1124 D6 04                sub     4
-269++ 1126 87                   add     a, a
-270++ 1127 3C                   inc     a
-271++ 1128 18 01                jr      .register_offset_ready
-272++ 112A              .low_byte_register:
-273++ 112A 87                   add     a, a
-274++ 112B              .register_offset_ready:
-275++ 112B 5F                   ld      e, a
-276++ 112C 16 00                ld      d, 0
-277++ 112E 21 6E 09             ld      hl, x86_reg_ax
-278++ 1131 19                   add     hl, de
-279++ 1132 3A F9 11             ld      a, (x86_real_imm_byte)
-280++ 1135 77                   ld      (hl), a
-281++ 1136 C3 A0 10             jp      x86_real_next
-282++ 1139
-283++ 1139              x86_real_int_imm8:
-284++ 1139 CD 49 10             call    x86_real_fetch8
-285++ 113C D8                   ret     c
-286++ 113D 32 F7 11             ld      (x86_real_int_vector), a
-287++ 1140 CD 05 0D             call    x86_int_enter
-288++ 1143 D8                   ret     c
-289++ 1144 3A F7 11             ld      a, (x86_real_int_vector)
-290++ 1147 FE 10                cp      #10
-291++ 1149 C2 A0 10             jp      nz, x86_real_next
-292++ 114C CD 07 12             call    bios_int10_dispatch
-293++ 114F D8                   ret     c
-294++ 1150 CD 60 0D             call    x86_iret_return
-295++ 1153 D8                   ret     c
-296++ 1154 C3 A0 10             jp      x86_real_next
-297++ 1157
-298++ 1157              x86_real_mov_bx_imm16:
-299++ 1157 CD 49 10             call    x86_real_fetch8
-300++ 115A D8                   ret     c
-301++ 115B 32 F6 11             ld      (x86_real_imm_low), a
-302++ 115E CD 49 10             call    x86_real_fetch8
-303++ 1161 D8                   ret     c
-304++ 1162 67                   ld      h, a
-305++ 1163 3A F6 11             ld      a, (x86_real_imm_low)
-306++ 1166 6F                   ld      l, a
-307++ 1167 22 74 09             ld      (x86_reg_bx), hl
-308++ 116A C3 A0 10             jp      x86_real_next
-309++ 116D
-310++ 116D              x86_real_mov_dx_imm16:
-311++ 116D CD 49 10             call    x86_real_fetch8
-312++ 1170 D8                   ret     c
-313++ 1171 32 F6 11             ld      (x86_real_imm_low), a
-314++ 1174 CD 49 10             call    x86_real_fetch8
-315++ 1177 D8                   ret     c
-316++ 1178 67                   ld      h, a
-317++ 1179 3A F6 11             ld      a, (x86_real_imm_low)
-318++ 117C 6F                   ld      l, a
-319++ 117D 22 72 09             ld      (x86_reg_dx), hl
-320++ 1180 C3 A0 10             jp      x86_real_next
-321++ 1183
-322++ 1183              x86_real_int3:
-323++ 1183 3E 03                ld      a, 3
-324++ 1185 CD 05 0D             call    x86_int_enter
-325++ 1188 D8                   ret     c
-326++ 1189 C3 A0 10             jp      x86_real_next
-327++ 118C
-328++ 118C              x86_real_iret:
-329++ 118C CD 60 0D             call    x86_iret_return
-330++ 118F D8                   ret     c
-331++ 1190 C3 A0 10             jp      x86_real_next
-332++ 1193
-333++ 1193              x86_real_hlt:
-334++ 1193 AF                   xor     a
-335++ 1194 32 04 0D             ld      (x86_exit_status), a
-336++ 1197 B7                   or      a
-337++ 1198 C9                   ret
-338++ 1199
-339++ 1199              x86_real_budget_fail:
-340++ 1199 3E 01                ld      a, 1
-341++ 119B 32 04 0D             ld      (x86_exit_status), a
-342++ 119E 37                   scf
-343++ 119F C9                   ret
-344++ 11A0
-345++ 11A0              x86_real_clear_vector:
-346++ 11A0 21 00 00             ld      hl, 0
-347++ 11A3 22 DC 05             ld      (x86_mem_segment), hl
-348++ 11A6 21 80 00             ld      hl, #0080
-349++ 11A9 22 DE 05             ld      (x86_mem_offset), hl
-350++ 11AC 21 00 00             ld      hl, 0
-351++ 11AF 22 E2 05             ld      (x86_mem_word_value), hl
-352++ 11B2 CD C1 04             call    x86_mem_write16
-353++ 11B5 D8                   ret     c
-354++ 11B6 21 00 00             ld      hl, 0
-355++ 11B9 22 DC 05             ld      (x86_mem_segment), hl
-356++ 11BC 21 82 00             ld      hl, #0082
-357++ 11BF 22 DE 05             ld      (x86_mem_offset), hl
-358++ 11C2 21 00 00             ld      hl, 0
-359++ 11C5 22 E2 05             ld      (x86_mem_word_value), hl
-360++ 11C8 C3 C1 04             jp      x86_mem_write16
-361++ 11CB
-362++ 11CB              x86_real_test_fail_1:
-363++ 11CB 3E 01                ld      a, 1
-364++ 11CD 18 12                jr      x86_real_test_fail
-365++ 11CF              x86_real_test_fail_2:
-366++ 11CF 3E 02                ld      a, 2
-367++ 11D1 18 0E                jr      x86_real_test_fail
-368++ 11D3              x86_real_test_fail_3:
-369++ 11D3 3E 03                ld      a, 3
-370++ 11D5 18 0A                jr      x86_real_test_fail
-371++ 11D7              x86_real_test_fail_4:
-372++ 11D7 3E 04                ld      a, 4
-373++ 11D9 18 06                jr      x86_real_test_fail
-374++ 11DB              x86_real_test_fail_5:
-375++ 11DB 3E 05                ld      a, 5
-376++ 11DD 18 02                jr      x86_real_test_fail
-377++ 11DF              x86_real_test_fail_6:
-378++ 11DF 3E 06                ld      a, 6
-379++ 11E1              x86_real_test_fail:
-380++ 11E1 6F                   ld      l, a
-381++ 11E2 26 1B                ld      h, #1B
-382++ 11E4 22 7E 03             ld      (saved_x86_ax), hl
-383++ 11E7 3E 09                ld      a, 9
-384++ 11E9 32 04 0D             ld      (x86_exit_status), a
-385++ 11EC 37                   scf
-386++ 11ED C9                   ret
-387++ 11EE
-388++ 11EE 00 00        x86_real_steps:       dw 0
-389++ 11F0 00 00        x86_real_copy_source: dw 0
-390++ 11F2 00 00        x86_real_copy_dest:   dw 0
-391++ 11F4 00 00        x86_real_copy_count:  dw 0
-392++ 11F6 00           x86_real_imm_low:    db 0
-393++ 11F7 00           x86_real_int_vector: db 0
-394++ 11F8 00           x86_real_opcode: db 0
-395++ 11F9 00           x86_real_imm_byte: db 0
-396++ 11FA 00           x86_real_bounds_enable: db 0
-397++ 11FB 00 00        x86_real_task_end: dw 0
-398++ 11FD
-399++ 11FD              x86_guest_main_image:
-400++ 11FD B8 00 00 CD          db #B8,#00,#00,#CD,#20,#F4
-400++ 1201 20 F4
-401++ 1203              x86_guest_main_image_end:
-402++ 1203              x86_guest_handler_image:
-403++ 1203 B8 34 12 CF          db #B8,#34,#12,#CF
-404++ 1207              x86_guest_handler_image_end:
-405++ 1207
+ 17++ 0F29              x86_real_mode_test:
+ 18++ 0F29 AF                   xor     a
+ 19++ 0F2A 32 26 12             ld      (x86_real_bounds_enable), a
+ 20++ 0F2D CD 89 03             call    x86_mem_init
+ 21++ 0F30
+ 22++ 0F30                      ; Copy main guest program to physical 0000:5002.
+ 23++ 0F30 21 29 12             ld      hl, x86_guest_main_image
+ 24++ 0F33 11 02 50             ld      de, #5002
+ 25++ 0F36 01 1B 00             ld      bc, x86_guest_main_image_end - x86_guest_main_image
+ 26++ 0F39 CD 53 10             call    x86_real_copy_image
+ 27++ 0F3C DA F6 11             jp      c, x86_real_test_fail_1
+ 28++ 0F3F
+ 29++ 0F3F                      ; Copy interrupt handler to physical 0000:5100.
+ 30++ 0F3F 21 44 12             ld      hl, x86_guest_handler_image
+ 31++ 0F42 11 00 51             ld      de, #5100
+ 32++ 0F45 01 04 00             ld      bc, x86_guest_handler_image_end - x86_guest_handler_image
+ 33++ 0F48 CD 53 10             call    x86_real_copy_image
+ 34++ 0F4B DA F6 11             jp      c, x86_real_test_fail_1
+ 35++ 0F4E
+ 36++ 0F4E                      ; Install IVT[20h] = 0000:5100.
+ 37++ 0F4E 21 00 00             ld      hl, 0
+ 38++ 0F51 22 DC 05             ld      (x86_mem_segment), hl
+ 39++ 0F54 21 80 00             ld      hl, #0080
+ 40++ 0F57 22 DE 05             ld      (x86_mem_offset), hl
+ 41++ 0F5A 21 00 51             ld      hl, #5100
+ 42++ 0F5D 22 E2 05             ld      (x86_mem_word_value), hl
+ 43++ 0F60 CD C1 04             call    x86_mem_write16
+ 44++ 0F63 DA FA 11             jp      c, x86_real_test_fail_2
+ 45++ 0F66 21 00 00             ld      hl, 0
+ 46++ 0F69 22 DC 05             ld      (x86_mem_segment), hl
+ 47++ 0F6C 21 82 00             ld      hl, #0082
+ 48++ 0F6F 22 DE 05             ld      (x86_mem_offset), hl
+ 49++ 0F72 21 00 00             ld      hl, 0
+ 50++ 0F75 22 E2 05             ld      (x86_mem_word_value), hl
+ 51++ 0F78 CD C1 04             call    x86_mem_write16
+ 52++ 0F7B DA FA 11             jp      c, x86_real_test_fail_2
+ 53++ 0F7E
+ 54++ 0F7E                      ; Initialize guest architectural state.
+ 55++ 0F7E 21 00 00             ld      hl, 0
+ 56++ 0F81 22 6E 09             ld      (x86_reg_ax), hl
+ 57++ 0F84 22 70 09             ld      (x86_reg_cx), hl
+ 58++ 0F87 22 72 09             ld      (x86_reg_dx), hl
+ 59++ 0F8A 22 74 09             ld      (x86_reg_bx), hl
+ 60++ 0F8D 22 78 09             ld      (x86_reg_bp), hl
+ 61++ 0F90 22 7A 09             ld      (x86_reg_si), hl
+ 62++ 0F93 22 7C 09             ld      (x86_reg_di), hl
+ 63++ 0F96 22 7E 09             ld      (x86_reg_es), hl
+ 64++ 0F99 22 84 09             ld      (x86_reg_ds), hl
+ 65++ 0F9C 22 80 09             ld      (x86_reg_cs), hl
+ 66++ 0F9F 21 02 50             ld      hl, #5002
+ 67++ 0FA2 22 86 09             ld      (x86_reg_ip), hl
+ 68++ 0FA5 21 00 70             ld      hl, #7000
+ 69++ 0FA8 22 82 09             ld      (x86_reg_ss), hl
+ 70++ 0FAB 21 00 01             ld      hl, #0100
+ 71++ 0FAE 22 76 09             ld      (x86_reg_sp), hl
+ 72++ 0FB1 21 02 03             ld      hl, #0302
+ 73++ 0FB4 22 88 09             ld      (x86_reg_flags), hl
+ 74++ 0FB7
+ 75++ 0FB7 CD E2 10             call    x86_real_execute
+ 76++ 0FBA DA FE 11             jp      c, x86_real_test_fail_3
+ 77++ 0FBD
+ 78++ 0FBD                      ; Handler's MOV AX,1234 must execute before guest IRET returns to HLT.
+ 79++ 0FBD 2A 6E 09             ld      hl, (x86_reg_ax)
+ 80++ 0FC0 11 34 12             ld      de, #1234
+ 81++ 0FC3 B7                   or      a
+ 82++ 0FC4 ED 52                sbc     hl, de
+ 83++ 0FC6 C2 02 12             jp      nz, x86_real_test_fail_4
+ 84++ 0FC9
+ 85++ 0FC9                      ; Verify all eight MOV r16,imm16 destinations.
+ 86++ 0FC9 2A 70 09             ld      hl, (x86_reg_cx)
+ 87++ 0FCC 11 34 12             ld      de, #1234
+ 88++ 0FCF B7                   or      a
+ 89++ 0FD0 ED 52                sbc     hl, de
+ 90++ 0FD2 C2 06 12             jp      nz, x86_real_test_fail_5
+ 91++ 0FD5 2A 72 09             ld      hl, (x86_reg_dx)
+ 92++ 0FD8 11 56 78             ld      de, #7856
+ 93++ 0FDB B7                   or      a
+ 94++ 0FDC ED 52                sbc     hl, de
+ 95++ 0FDE C2 06 12             jp      nz, x86_real_test_fail_5
+ 96++ 0FE1 2A 74 09             ld      hl, (x86_reg_bx)
+ 97++ 0FE4 11 9A BC             ld      de, #BC9A
+ 98++ 0FE7 B7                   or      a
+ 99++ 0FE8 ED 52                sbc     hl, de
+100++ 0FEA C2 06 12             jp      nz, x86_real_test_fail_5
+101++ 0FED 2A 78 09             ld      hl, (x86_reg_bp)
+102++ 0FF0 11 DE AD             ld      de, #ADDE
+103++ 0FF3 B7                   or      a
+104++ 0FF4 ED 52                sbc     hl, de
+105++ 0FF6 C2 06 12             jp      nz, x86_real_test_fail_5
+106++ 0FF9 2A 7A 09             ld      hl, (x86_reg_si)
+107++ 0FFC 11 EF BE             ld      de, #BEEF
+108++ 0FFF B7                   or      a
+109++ 1000 ED 52                sbc     hl, de
+110++ 1002 C2 06 12             jp      nz, x86_real_test_fail_5
+111++ 1005 2A 7C 09             ld      hl, (x86_reg_di)
+112++ 1008 11 0D F0             ld      de, #F00D
+113++ 100B B7                   or      a
+114++ 100C ED 52                sbc     hl, de
+115++ 100E C2 06 12             jp      nz, x86_real_test_fail_5
+116++ 1011
+117++ 1011                      ; Verify original control-flow context, SP and FLAGS were restored.
+118++ 1011 2A 80 09             ld      hl, (x86_reg_cs)
+119++ 1014 11 00 00             ld      de, 0
+120++ 1017 B7                   or      a
+121++ 1018 ED 52                sbc     hl, de
+122++ 101A C2 06 12             jp      nz, x86_real_test_fail_5
+123++ 101D 2A 86 09             ld      hl, (x86_reg_ip)
+124++ 1020 11 1D 50             ld      de, #501D
+125++ 1023 B7                   or      a
+126++ 1024 ED 52                sbc     hl, de
+127++ 1026 C2 06 12             jp      nz, x86_real_test_fail_5
+128++ 1029 2A 76 09             ld      hl, (x86_reg_sp)
+129++ 102C 11 00 01             ld      de, #0100
+130++ 102F B7                   or      a
+131++ 1030 ED 52                sbc     hl, de
+132++ 1032 C2 06 12             jp      nz, x86_real_test_fail_5
+133++ 1035 2A 88 09             ld      hl, (x86_reg_flags)
+134++ 1038 11 02 03             ld      de, #0302
+135++ 103B B7                   or      a
+136++ 103C ED 52                sbc     hl, de
+137++ 103E C2 06 12             jp      nz, x86_real_test_fail_5
+138++ 1041
+139++ 1041 CD CB 11             call    x86_real_clear_vector
+140++ 1044 DA 0A 12             jp      c, x86_real_test_fail_6
+141++ 1047
+142++ 1047 21 02 1A             ld      hl, #1A02
+143++ 104A 22 7E 03             ld      (saved_x86_ax), hl
+144++ 104D AF                   xor     a
+145++ 104E 32 04 0D             ld      (x86_exit_status), a
+146++ 1051 B7                   or      a
+147++ 1052 C9                   ret
+148++ 1053
+149++ 1053              ; IN: HL=source in firmware, DE=physical x86 destination, BC=length.
+150++ 1053              x86_real_copy_image:
+151++ 1053 22 1B 12             ld      (x86_real_copy_source), hl
+152++ 1056 ED 53 1D 12          ld      (x86_real_copy_dest), de
+153++ 105A ED 43 1F 12          ld      (x86_real_copy_count), bc
+154++ 105E              x86_real_copy_loop:
+155++ 105E ED 4B 1F 12          ld      bc, (x86_real_copy_count)
+156++ 1062 78                   ld      a, b
+157++ 1063 B1                   or      c
+158++ 1064 C8                   ret     z
+159++ 1065 2A 1B 12             ld      hl, (x86_real_copy_source)
+160++ 1068 7E                   ld      a, (hl)
+161++ 1069 32 D9 05             ld      (x86_mem_value), a
+162++ 106C 2A 1D 12             ld      hl, (x86_real_copy_dest)
+163++ 106F 22 D6 05             ld      (x86_mem_addr), hl
+164++ 1072 AF                   xor     a
+165++ 1073 32 D8 05             ld      (x86_mem_addr+2), a
+166++ 1076 CD BE 03             call    x86_mem_write8
+167++ 1079 D8                   ret     c
+168++ 107A 2A 1B 12             ld      hl, (x86_real_copy_source)
+169++ 107D 23                   inc     hl
+170++ 107E 22 1B 12             ld      (x86_real_copy_source), hl
+171++ 1081 2A 1D 12             ld      hl, (x86_real_copy_dest)
+172++ 1084 23                   inc     hl
+173++ 1085 22 1D 12             ld      (x86_real_copy_dest), hl
+174++ 1088 2A 1F 12             ld      hl, (x86_real_copy_count)
+175++ 108B 2B                   dec     hl
+176++ 108C 22 1F 12             ld      (x86_real_copy_count), hl
+177++ 108F 18 CD                jr      x86_real_copy_loop
+178++ 1091
+179++ 1091              ; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
+180++ 1091              ; OUT A=byte; guest IP advances only after a successful memory read.
+181++ 1091              x86_real_fetch8:
+182++ 1091 3A 26 12             ld      a, (x86_real_bounds_enable)
+183++ 1094 B7                   or      a
+184++ 1095 28 26                jr      z, .fetch_unbounded
+185++ 1097 2A 80 09             ld      hl, (x86_reg_cs)
+186++ 109A 7C                   ld      a, h
+187++ 109B B5                   or      l
+188++ 109C C2 DB 10             jp      nz, x86_real_fetch_out_of_range
+189++ 109F 2A 86 09             ld      hl, (x86_reg_ip)
+190++ 10A2 11 02 50             ld      de, #5002
+191++ 10A5 B7                   or      a
+192++ 10A6 ED 52                sbc     hl, de
+193++ 10A8 DA DB 10             jp      c, x86_real_fetch_out_of_range
+194++ 10AB 2A 27 12             ld      hl, (x86_real_task_end)
+195++ 10AE ED 5B 86 09          ld      de, (x86_reg_ip)
+196++ 10B2 B7                   or      a
+197++ 10B3 ED 52                sbc     hl, de
+198++ 10B5 DA DB 10             jp      c, x86_real_fetch_out_of_range
+199++ 10B8 7C                   ld      a, h
+200++ 10B9 B5                   or      l
+201++ 10BA CA DB 10             jp      z, x86_real_fetch_out_of_range
+202++ 10BD              .fetch_unbounded:
+203++ 10BD 2A 86 09             ld      hl, (x86_reg_ip)
+204++ 10C0 22 E0 05             ld      (x86_mem_offset_work), hl
+205++ 10C3 2A 80 09             ld      hl, (x86_reg_cs)
+206++ 10C6 22 DC 05             ld      (x86_mem_segment), hl
+207++ 10C9 CD 43 04             call    x86_mem_calc_phys
+208++ 10CC CD B7 03             call    x86_mem_read8
+209++ 10CF D8                   ret     c
+210++ 10D0 F5                   push    af
+211++ 10D1 2A 86 09             ld      hl, (x86_reg_ip)
+212++ 10D4 23                   inc     hl
+213++ 10D5 22 86 09             ld      (x86_reg_ip), hl
+214++ 10D8 F1                   pop     af
+215++ 10D9 B7                   or      a
+216++ 10DA C9                   ret
+217++ 10DB
+218++ 10DB              x86_real_fetch_out_of_range:
+219++ 10DB 3E 04                ld      a, 4
+220++ 10DD 32 04 0D             ld      (x86_exit_status), a
+221++ 10E0 37                   scf
+222++ 10E1 C9                   ret
+223++ 10E2
+224++ 10E2              x86_real_execute:
+225++ 10E2 21 FF FF             ld      hl, X86_REAL_STEP_LIMIT
+226++ 10E5 22 19 12             ld      (x86_real_steps), hl
+227++ 10E8              x86_real_next:
+228++ 10E8 2A 19 12             ld      hl, (x86_real_steps)
+229++ 10EB 7C                   ld      a, h
+230++ 10EC B5                   or      l
+231++ 10ED CA C4 11             jp      z, x86_real_budget_fail
+232++ 10F0 2B                   dec     hl
+233++ 10F1 22 19 12             ld      (x86_real_steps), hl
+234++ 10F4
+235++ 10F4 CD 91 10             call    x86_real_fetch8
+236++ 10F7 D8                   ret     c
+237++ 10F8
+238++ 10F8 FE 90                cp      #90
+239++ 10FA CA 31 11             jp      z, x86_real_nop
+240++ 10FD FE 40                cp      #40
+241++ 10FF CA 34 11             jp      z, x86_real_inc_ax
+242++ 1102 FE B0                cp      #B0
+243++ 1104 DA 0C 11             jp      c, .not_mov_r8
+244++ 1107 FE B8                cp      #B8
+245++ 1109 DA 68 11             jp      c, x86_real_mov_r8_imm8
+246++ 110C              .not_mov_r8:
+247++ 110C FE B8                cp      #B8
+248++ 110E DA 16 11             jp      c, .not_mov_r16
+249++ 1111 FE C0                cp      #C0
+250++ 1113 DA 3E 11             jp      c, x86_real_mov_r16_imm16
+251++ 1116              .not_mov_r16:
+252++ 1116 FE F4                cp      #F4
+253++ 1118 CA BE 11             jp      z, x86_real_hlt
+254++ 111B FE CD                cp      #CD
+255++ 111D CA 90 11             jp      z, x86_real_int_imm8
+256++ 1120 FE CC                cp      #CC
+257++ 1122 CA AE 11             jp      z, x86_real_int3
+258++ 1125 FE CF                cp      #CF
+259++ 1127 CA B7 11             jp      z, x86_real_iret
+260++ 112A
+261++ 112A 3E 02                ld      a, 2
+262++ 112C 32 04 0D             ld      (x86_exit_status), a
+263++ 112F 37                   scf
+264++ 1130 C9                   ret
+265++ 1131
+266++ 1131              x86_real_nop:
+267++ 1131 C3 E8 10             jp      x86_real_next
+268++ 1134
+269++ 1134              x86_real_inc_ax:
+270++ 1134 2A 6E 09             ld      hl, (x86_reg_ax)
+271++ 1137 23                   inc     hl
+272++ 1138 22 6E 09             ld      (x86_reg_ax), hl
+273++ 113B C3 E8 10             jp      x86_real_next
+274++ 113E
+275++ 113E              ; B8-BF — MOV r16,imm16 (AX,CX,DX,BX,SP,BP,SI,DI).
+276++ 113E              ; The eight word registers are contiguous in x86_modrm.asm in opcode order.
+277++ 113E              x86_real_mov_r16_imm16:
+278++ 113E 32 24 12             ld      (x86_real_opcode), a
+279++ 1141 CD 91 10             call    x86_real_fetch8
+280++ 1144 D8                   ret     c
+281++ 1145 32 21 12             ld      (x86_real_imm_low), a
+282++ 1148 CD 91 10             call    x86_real_fetch8
+283++ 114B D8                   ret     c
+284++ 114C 32 22 12             ld      (x86_real_imm_high), a
+285++ 114F
+286++ 114F 3A 24 12             ld      a, (x86_real_opcode)
+287++ 1152 D6 B8                sub     #B8
+288++ 1154 87                   add     a, a
+289++ 1155 5F                   ld      e, a
+290++ 1156 16 00                ld      d, 0
+291++ 1158 21 6E 09             ld      hl, x86_reg_ax
+292++ 115B 19                   add     hl, de
+293++ 115C 3A 21 12             ld      a, (x86_real_imm_low)
+294++ 115F 77                   ld      (hl), a
+295++ 1160 23                   inc     hl
+296++ 1161 3A 22 12             ld      a, (x86_real_imm_high)
+297++ 1164 77                   ld      (hl), a
+298++ 1165 C3 E8 10             jp      x86_real_next
+299++ 1168
+300++ 1168              ; B0-B7 — MOV r8,imm8 (AL,CL,DL,BL,AH,CH,DH,BH).
+301++ 1168              x86_real_mov_r8_imm8:
+302++ 1168 32 24 12             ld      (x86_real_opcode), a
+303++ 116B CD 91 10             call    x86_real_fetch8
+304++ 116E D8                   ret     c
+305++ 116F 32 25 12             ld      (x86_real_imm_byte), a
+306++ 1172 3A 24 12             ld      a, (x86_real_opcode)
+307++ 1175 D6 B0                sub     #B0
+308++ 1177 FE 04                cp      4
+309++ 1179 38 06                jr      c, .low_byte_register
+310++ 117B D6 04                sub     4
+311++ 117D 87                   add     a, a
+312++ 117E 3C                   inc     a
+313++ 117F 18 01                jr      .register_offset_ready
+314++ 1181              .low_byte_register:
+315++ 1181 87                   add     a, a
+316++ 1182              .register_offset_ready:
+317++ 1182 5F                   ld      e, a
+318++ 1183 16 00                ld      d, 0
+319++ 1185 21 6E 09             ld      hl, x86_reg_ax
+320++ 1188 19                   add     hl, de
+321++ 1189 3A 25 12             ld      a, (x86_real_imm_byte)
+322++ 118C 77                   ld      (hl), a
+323++ 118D C3 E8 10             jp      x86_real_next
+324++ 1190
+325++ 1190              x86_real_int_imm8:
+326++ 1190 CD 91 10             call    x86_real_fetch8
+327++ 1193 D8                   ret     c
+328++ 1194 32 23 12             ld      (x86_real_int_vector), a
+329++ 1197 CD 05 0D             call    x86_int_enter
+330++ 119A D8                   ret     c
+331++ 119B 3A 23 12             ld      a, (x86_real_int_vector)
+332++ 119E FE 10                cp      #10
+333++ 11A0 C2 E8 10             jp      nz, x86_real_next
+334++ 11A3 CD 48 12             call    bios_int10_dispatch
+335++ 11A6 D8                   ret     c
+336++ 11A7 CD 60 0D             call    x86_iret_return
+337++ 11AA D8                   ret     c
+338++ 11AB C3 E8 10             jp      x86_real_next
+339++ 11AE
+340++ 11AE              x86_real_int3:
+341++ 11AE 3E 03                ld      a, 3
+342++ 11B0 CD 05 0D             call    x86_int_enter
+343++ 11B3 D8                   ret     c
+344++ 11B4 C3 E8 10             jp      x86_real_next
+345++ 11B7
+346++ 11B7              x86_real_iret:
+347++ 11B7 CD 60 0D             call    x86_iret_return
+348++ 11BA D8                   ret     c
+349++ 11BB C3 E8 10             jp      x86_real_next
+350++ 11BE
+351++ 11BE              x86_real_hlt:
+352++ 11BE AF                   xor     a
+353++ 11BF 32 04 0D             ld      (x86_exit_status), a
+354++ 11C2 B7                   or      a
+355++ 11C3 C9                   ret
+356++ 11C4
+357++ 11C4              x86_real_budget_fail:
+358++ 11C4 3E 01                ld      a, 1
+359++ 11C6 32 04 0D             ld      (x86_exit_status), a
+360++ 11C9 37                   scf
+361++ 11CA C9                   ret
+362++ 11CB
+363++ 11CB              x86_real_clear_vector:
+364++ 11CB 21 00 00             ld      hl, 0
+365++ 11CE 22 DC 05             ld      (x86_mem_segment), hl
+366++ 11D1 21 80 00             ld      hl, #0080
+367++ 11D4 22 DE 05             ld      (x86_mem_offset), hl
+368++ 11D7 21 00 00             ld      hl, 0
+369++ 11DA 22 E2 05             ld      (x86_mem_word_value), hl
+370++ 11DD CD C1 04             call    x86_mem_write16
+371++ 11E0 D8                   ret     c
+372++ 11E1 21 00 00             ld      hl, 0
+373++ 11E4 22 DC 05             ld      (x86_mem_segment), hl
+374++ 11E7 21 82 00             ld      hl, #0082
+375++ 11EA 22 DE 05             ld      (x86_mem_offset), hl
+376++ 11ED 21 00 00             ld      hl, 0
+377++ 11F0 22 E2 05             ld      (x86_mem_word_value), hl
+378++ 11F3 C3 C1 04             jp      x86_mem_write16
+379++ 11F6
+380++ 11F6              x86_real_test_fail_1:
+381++ 11F6 3E 01                ld      a, 1
+382++ 11F8 18 12                jr      x86_real_test_fail
+383++ 11FA              x86_real_test_fail_2:
+384++ 11FA 3E 02                ld      a, 2
+385++ 11FC 18 0E                jr      x86_real_test_fail
+386++ 11FE              x86_real_test_fail_3:
+387++ 11FE 3E 03                ld      a, 3
+388++ 1200 18 0A                jr      x86_real_test_fail
+389++ 1202              x86_real_test_fail_4:
+390++ 1202 3E 04                ld      a, 4
+391++ 1204 18 06                jr      x86_real_test_fail
+392++ 1206              x86_real_test_fail_5:
+393++ 1206 3E 05                ld      a, 5
+394++ 1208 18 02                jr      x86_real_test_fail
+395++ 120A              x86_real_test_fail_6:
+396++ 120A 3E 06                ld      a, 6
+397++ 120C              x86_real_test_fail:
+398++ 120C 6F                   ld      l, a
+399++ 120D 26 1B                ld      h, #1B
+400++ 120F 22 7E 03             ld      (saved_x86_ax), hl
+401++ 1212 3E 09                ld      a, 9
+402++ 1214 32 04 0D             ld      (x86_exit_status), a
+403++ 1217 37                   scf
+404++ 1218 C9                   ret
+405++ 1219
+406++ 1219 00 00        x86_real_steps:       dw 0
+407++ 121B 00 00        x86_real_copy_source: dw 0
+408++ 121D 00 00        x86_real_copy_dest:   dw 0
+409++ 121F 00 00        x86_real_copy_count:  dw 0
+410++ 1221 00           x86_real_imm_low:    db 0
+411++ 1222 00           x86_real_imm_high:   db 0
+412++ 1223 00           x86_real_int_vector: db 0
+413++ 1224 00           x86_real_opcode: db 0
+414++ 1225 00           x86_real_imm_byte: db 0
+415++ 1226 00           x86_real_bounds_enable: db 0
+416++ 1227 00 00        x86_real_task_end: dw 0
+417++ 1229
+418++ 1229              x86_guest_main_image:
+419++ 1229 B8 00 00             db #B8,#00,#00             ; MOV AX,0000
+420++ 122C B9 34 12             db #B9,#34,#12             ; MOV CX,1234
+421++ 122F BA 56 78             db #BA,#56,#78             ; MOV DX,7856
+422++ 1232 BB 9A BC             db #BB,#9A,#BC             ; MOV BX,BC9A
+423++ 1235 BC 00 01             db #BC,#00,#01             ; MOV SP,0100 (preserve test stack)
+424++ 1238 BD DE AD             db #BD,#DE,#AD             ; MOV BP,ADDE
+425++ 123B BE EF BE             db #BE,#EF,#BE             ; MOV SI,BEEF
+426++ 123E BF 0D F0             db #BF,#0D,#F0             ; MOV DI,F00D
+427++ 1241 CD 20 F4             db #CD,#20,#F4             ; INT 20h / HLT
+428++ 1244              x86_guest_main_image_end:
+429++ 1244              x86_guest_handler_image:
+430++ 1244 B8 34 12 CF          db #B8,#34,#12,#CF
+431++ 1248              x86_guest_handler_image_end:
+432++ 1248
 # file closed: x86_real_mode.asm
-468+  1207                      INCLUDE "bios/bios_video.asm"
+468+  1248                      INCLUDE "bios/bios_video.asm"
 # file opened: bios_video.asm
-  1++ 1207              ; =========================================================================
-  2++ 1207              ; PROJECT 124 — BIOS INT 10h text services, Stage 3A
-  3++ 1207              ;
-  4++ 1207              ; Project text-console profile: 42 columns x 12 rows, 6x8 glyphs.
-  5++ 1207              ; Implemented functions:
-  6++ 1207              ;   AH=00h set mode 03h (project 42x12 text profile)
-  7++ 1207              ;   AH=0Fh get mode (AL=03h, AH=42, BH=0)
-  8++ 1207              ;   AH=02h set cursor (BH=0, DH=row, DL=column)
-  9++ 1207              ;   AH=03h get cursor (DH=row, DL=column)
- 10++ 1207              ;   AH=0Eh teletype output (AL=character, BH=0)
- 11++ 1207              ;
- 12++ 1207              ; INT 10h enters through the normal IVT/stack frame. The BIOS service itself
- 13++ 1207              ; is a firmware trap, then returns through the normal IRET primitive.
- 14++ 1207              ; Host stream protocol over DBIT/GSDAT:
- 15++ 1207              ;   nonzero byte = teletype character
- 16++ 1207              ;   00 00        = clear the lower debug console
- 17++ 1207              ;   00 01 row col= set lower debug console cursor
- 18++ 1207              ; =========================================================================
- 19++ 1207
- 20++ 1207              BIOS_VIDEO_COLUMNS EQU 42
- 21++ 1207              BIOS_VIDEO_ROWS    EQU 12
- 22++ 1207              BIOS_VIDEO_MODE    EQU #03
- 23++ 1207
- 24++ 1207              bios_int10_dispatch:
- 25++ 1207 2A 6E 09             ld      hl, (x86_reg_ax)
- 26++ 120A 7C                   ld      a, h
- 27++ 120B FE 00                cp      #00
- 28++ 120D CA 51 12             jp      z, bios_int10_set_mode
- 29++ 1210 FE 0F                cp      #0F
- 30++ 1212 CA B0 12             jp      z, bios_int10_get_mode
- 31++ 1215 FE 02                cp      #02
- 32++ 1217 CA BC 12             jp      z, bios_int10_set_cursor
- 33++ 121A FE 03                cp      #03
- 34++ 121C CA F6 12             jp      z, bios_int10_get_cursor
- 35++ 121F FE 0E                cp      #0E
- 36++ 1221 CA 10 13             jp      z, bios_int10_teletype
- 37++ 1224 B7                   or      a
- 38++ 1225 C9                   ret
- 39++ 1226
- 40++ 1226              ; Install IVT[10h] -> 0000:5200 (firmware service trap).
- 41++ 1226              bios_int10_install_vector:
- 42++ 1226 21 00 00             ld      hl, 0
- 43++ 1229 22 DC 05             ld      (x86_mem_segment), hl
- 44++ 122C 21 40 00             ld      hl, #0040
- 45++ 122F 22 DE 05             ld      (x86_mem_offset), hl
- 46++ 1232 21 00 52             ld      hl, #5200
- 47++ 1235 22 E2 05             ld      (x86_mem_word_value), hl
- 48++ 1238 CD C1 04             call    x86_mem_write16
- 49++ 123B D8                   ret     c
- 50++ 123C 21 00 00             ld      hl, 0
- 51++ 123F 22 DC 05             ld      (x86_mem_segment), hl
- 52++ 1242 21 42 00             ld      hl, #0042
- 53++ 1245 22 DE 05             ld      (x86_mem_offset), hl
- 54++ 1248 21 00 00             ld      hl, 0
- 55++ 124B 22 E2 05             ld      (x86_mem_word_value), hl
- 56++ 124E C3 C1 04             jp      x86_mem_write16
- 57++ 1251
- 58++ 1251              ; AH=00h — only mode 03h is supported by this project console.
- 59++ 1251              bios_int10_set_mode:
- 60++ 1251 7D                   ld      a, l
- 61++ 1252 FE 03                cp      BIOS_VIDEO_MODE
- 62++ 1254 28 02                jr      z, .mode_valid
- 63++ 1256 B7                   or      a
- 64++ 1257 C9                   ret
- 65++ 1258              .mode_valid:
- 66++ 1258 21 49 04             ld      hl, #0449
- 67++ 125B 3E 03                ld      a, BIOS_VIDEO_MODE
- 68++ 125D CD 94 13             call    bios_video_write_byte
- 69++ 1260 D8                   ret     c
- 70++ 1261 21 4A 04             ld      hl, #044A
- 71++ 1264 3E 2A                ld      a, BIOS_VIDEO_COLUMNS
- 72++ 1266 CD 94 13             call    bios_video_write_byte
- 73++ 1269 D8                   ret     c
- 74++ 126A 21 4C 04             ld      hl, #044C
- 75++ 126D 3E F0                ld      a, #F0
- 76++ 126F CD 94 13             call    bios_video_write_byte
- 77++ 1272 D8                   ret     c
- 78++ 1273 21 4D 04             ld      hl, #044D
- 79++ 1276 3E 03                ld      a, #03
- 80++ 1278 CD 94 13             call    bios_video_write_byte
- 81++ 127B D8                   ret     c
- 82++ 127C 21 62 04             ld      hl, #0462
- 83++ 127F AF                   xor     a
- 84++ 1280 CD 94 13             call    bios_video_write_byte
- 85++ 1283 D8                   ret     c
- 86++ 1284 21 84 04             ld      hl, #0484
- 87++ 1287 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
- 88++ 1289 CD 94 13             call    bios_video_write_byte
- 89++ 128C D8                   ret     c
- 90++ 128D 21 85 04             ld      hl, #0485
- 91++ 1290 3E 08                ld      a, 8
- 92++ 1292 CD 94 13             call    bios_video_write_byte
- 93++ 1295 D8                   ret     c
- 94++ 1296
- 95++ 1296 AF                   xor     a
- 96++ 1297 32 A9 14             ld      (bios_video_col), a
- 97++ 129A 32 A8 14             ld      (bios_video_row), a
- 98++ 129D 21 50 04             ld      hl, #0450
- 99++ 12A0 11 00 00             ld      de, 0
-100++ 12A3 CD A7 13             call    bios_video_write_word
-101++ 12A6 D8                   ret     c
-102++ 12A7
-103++ 12A7                      ; Host control frame: 00 00 = clear the 6x8 debug console.
-104++ 12A7 AF                   xor     a
-105++ 12A8 CD 4F 03             call    neo_send_data_byte
-106++ 12AB D8                   ret     c
-107++ 12AC AF                   xor     a
-108++ 12AD C3 4F 03             jp      neo_send_data_byte
-109++ 12B0
-110++ 12B0              ; AH=0Fh — return current project text mode, width and active page.
-111++ 12B0              bios_int10_get_mode:
-112++ 12B0 21 03 2A             ld      hl, #2A03
-113++ 12B3 22 6E 09             ld      (x86_reg_ax), hl
-114++ 12B6 AF                   xor     a
-115++ 12B7 32 75 09             ld      (x86_reg_bx+1), a
-116++ 12BA B7                   or      a
-117++ 12BB C9                   ret
-118++ 12BC
-119++ 12BC              ; AH=02h — set cursor. This implementation exposes page zero only.
-120++ 12BC              bios_int10_set_cursor:
-121++ 12BC 3A 75 09             ld      a, (x86_reg_bx+1)
-122++ 12BF B7                   or      a
-123++ 12C0 C0                   ret     nz
-124++ 12C1 2A 72 09             ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
-125++ 12C4 7C                   ld      a, h
-126++ 12C5 FE 0C                cp      BIOS_VIDEO_ROWS
-127++ 12C7 38 02                jr      c, .row_valid
-128++ 12C9 B7                   or      a
-129++ 12CA C9                   ret
-130++ 12CB              .row_valid:
-131++ 12CB 7D                   ld      a, l
-132++ 12CC FE 2A                cp      BIOS_VIDEO_COLUMNS
-133++ 12CE 38 02                jr      c, .col_valid
-134++ 12D0 B7                   or      a
-135++ 12D1 C9                   ret
-136++ 12D2              .col_valid:
-137++ 12D2 7C                   ld      a, h
-138++ 12D3 32 A8 14             ld      (bios_video_row), a
-139++ 12D6 7D                   ld      a, l
-140++ 12D7 32 A9 14             ld      (bios_video_col), a
-141++ 12DA CD 7A 13             call    bios_video_store_cursor
-142++ 12DD D8                   ret     c
-143++ 12DE
-144++ 12DE                      ; Host control frame: 00 01 row col.
-145++ 12DE AF                   xor     a
-146++ 12DF CD 4F 03             call    neo_send_data_byte
-147++ 12E2 D8                   ret     c
-148++ 12E3 3E 01                ld      a, 1
-149++ 12E5 CD 4F 03             call    neo_send_data_byte
-150++ 12E8 D8                   ret     c
-151++ 12E9 3A A8 14             ld      a, (bios_video_row)
-152++ 12EC CD 4F 03             call    neo_send_data_byte
-153++ 12EF D8                   ret     c
-154++ 12F0 3A A9 14             ld      a, (bios_video_col)
-155++ 12F3 C3 4F 03             jp      neo_send_data_byte
-156++ 12F6
-157++ 12F6              ; AH=03h — read page-zero cursor into DH:DL.
-158++ 12F6              bios_int10_get_cursor:
-159++ 12F6 3A 75 09             ld      a, (x86_reg_bx+1)
-160++ 12F9 B7                   or      a
-161++ 12FA C0                   ret     nz
-162++ 12FB 21 50 04             ld      hl, #0450
-163++ 12FE 22 DE 05             ld      (x86_mem_offset), hl
-164++ 1301 21 00 00             ld      hl, 0
-165++ 1304 22 DC 05             ld      (x86_mem_segment), hl
-166++ 1307 CD A1 04             call    x86_mem_read16
-167++ 130A D8                   ret     c
-168++ 130B 22 72 09             ld      (x86_reg_dx), hl
-169++ 130E B7                   or      a
-170++ 130F C9                   ret
-171++ 1310
-172++ 1310              ; AH=0Eh — teletype output. Every byte is streamed to the host.
-173++ 1310              bios_int10_teletype:
-174++ 1310 3A 75 09             ld      a, (x86_reg_bx+1)
-175++ 1313 B7                   or      a
-176++ 1314 C0                   ret     nz
-177++ 1315 3A 6E 09             ld      a, (x86_reg_ax)
-178++ 1318 32 AA 14             ld      (bios_video_char), a
-179++ 131B B7                   or      a
-180++ 131C C8                   ret     z                       ; NUL is reserved for stream control frames.
-181++ 131D FE 80                cp      128
-182++ 131F 38 05                jr      c, .teletype_ascii
-183++ 1321 3E 3F                ld      a, '?'
-184++ 1323 32 AA 14             ld      (bios_video_char), a
-185++ 1326              .teletype_ascii:
-186++ 1326 3A AA 14             ld      a, (bios_video_char)
-187++ 1329 CD 4F 03             call    neo_send_data_byte
-188++ 132C D8                   ret     c
-189++ 132D
-190++ 132D 3A AA 14             ld      a, (bios_video_char)
-191++ 1330 FE 0D                cp      13
-192++ 1332 28 21                jr      z, .carriage_return
-193++ 1334 FE 0A                cp      10
-194++ 1336 28 2F                jr      z, .line_feed
-195++ 1338 FE 08                cp      8
-196++ 133A 28 1F                jr      z, .backspace
-197++ 133C FE 07                cp      7
-198++ 133E 28 38                jr      z, .cursor_done
-199++ 1340 FE 20                cp      32
-200++ 1342 38 34                jr      c, .cursor_done
-201++ 1344
-202++ 1344 3A A9 14             ld      a, (bios_video_col)
-203++ 1347 3C                   inc     a
-204++ 1348 32 A9 14             ld      (bios_video_col), a
-205++ 134B FE 2A                cp      BIOS_VIDEO_COLUMNS
-206++ 134D 38 25                jr      c, .cursor_store
-207++ 134F AF                   xor     a
-208++ 1350 32 A9 14             ld      (bios_video_col), a
-209++ 1353 18 12                jr      .line_feed
-210++ 1355              .carriage_return:
-211++ 1355 AF                   xor     a
-212++ 1356 32 A9 14             ld      (bios_video_col), a
-213++ 1359 18 19                jr      .cursor_store
-214++ 135B              .backspace:
-215++ 135B 3A A9 14             ld      a, (bios_video_col)
-216++ 135E B7                   or      a
-217++ 135F 28 17                jr      z, .cursor_done
-218++ 1361 3D                   dec     a
-219++ 1362 32 A9 14             ld      (bios_video_col), a
-220++ 1365 18 0D                jr      .cursor_store
-221++ 1367              .line_feed:
-222++ 1367 3A A8 14             ld      a, (bios_video_row)
-223++ 136A 3C                   inc     a
-224++ 136B FE 0C                cp      BIOS_VIDEO_ROWS
-225++ 136D 38 02                jr      c, .line_store
-226++ 136F 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
-227++ 1371              .line_store:
-228++ 1371 32 A8 14             ld      (bios_video_row), a
-229++ 1374              .cursor_store:
-230++ 1374 CD 7A 13             call    bios_video_store_cursor
-231++ 1377 C9                   ret
-232++ 1378              .cursor_done:
-233++ 1378 B7                   or      a
-234++ 1379 C9                   ret
-235++ 137A
-236++ 137A              ; Store project cursor word at BDA 00450h: low=column, high=row.
-237++ 137A              bios_video_store_cursor:
-238++ 137A 21 50 04             ld      hl, #0450
-239++ 137D 22 DE 05             ld      (x86_mem_offset), hl
-240++ 1380 21 00 00             ld      hl, 0
-241++ 1383 22 DC 05             ld      (x86_mem_segment), hl
-242++ 1386 3A A9 14             ld      a, (bios_video_col)
-243++ 1389 6F                   ld      l, a
-244++ 138A 3A A8 14             ld      a, (bios_video_row)
-245++ 138D 67                   ld      h, a
-246++ 138E 22 E2 05             ld      (x86_mem_word_value), hl
-247++ 1391 C3 C1 04             jp      x86_mem_write16
-248++ 1394
-249++ 1394              ; IN: HL=physical address, A=value.
-250++ 1394              bios_video_write_byte:
-251++ 1394 32 AB 14             ld      (bios_video_write_value), a
-252++ 1397 22 D6 05             ld      (x86_mem_addr), hl
-253++ 139A AF                   xor     a
-254++ 139B 32 D8 05             ld      (x86_mem_addr+2), a
-255++ 139E 3A AB 14             ld      a, (bios_video_write_value)
-256++ 13A1 32 D9 05             ld      (x86_mem_value), a
-257++ 13A4 C3 BE 03             jp      x86_mem_write8
-258++ 13A7
-259++ 13A7              ; IN: HL=physical address, DE=value.
-260++ 13A7              bios_video_write_word:
-261++ 13A7 22 DE 05             ld      (x86_mem_offset), hl
-262++ 13AA 21 00 00             ld      hl, 0
-263++ 13AD 22 DC 05             ld      (x86_mem_segment), hl
-264++ 13B0 EB                   ex      de, hl
-265++ 13B1 22 E2 05             ld      (x86_mem_word_value), hl
-266++ 13B4 C3 C1 04             jp      x86_mem_write16
-267++ 13B7
-268++ 13B7              ; -------------------------------------------------------------------------
-269++ 13B7              ; Stage 3A executable test. Exercises all five INT 10h services, cursor
-270++ 13B7              ; round-trip, 42-column wrap, CR/LF, and the streamed host console path.
-271++ 13B7              ; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
-272++ 13B7              ; -------------------------------------------------------------------------
-273++ 13B7              bios_int10_video_test:
-274++ 13B7 AF                   xor     a
-275++ 13B8 32 FA 11             ld      (x86_real_bounds_enable), a
-276++ 13BB CD 89 03             call    x86_mem_init
-277++ 13BE 21 AC 14             ld      hl, x86_bios_video_test_image
-278++ 13C1 11 02 50             ld      de, #5002
-279++ 13C4 01 99 01             ld      bc, x86_bios_video_test_image_end - x86_bios_video_test_image
-280++ 13C7 CD 0B 10             call    x86_real_copy_image
-281++ 13CA DA 81 14             jp      c, bios_video_test_fail_1
-282++ 13CD
-283++ 13CD                      ; Verify POST installed IVT[10h] -> 0000:5200.
-284++ 13CD 21 00 00             ld      hl, 0
-285++ 13D0 22 DC 05             ld      (x86_mem_segment), hl
-286++ 13D3 21 40 00             ld      hl, #0040
-287++ 13D6 22 DE 05             ld      (x86_mem_offset), hl
-288++ 13D9 CD A1 04             call    x86_mem_read16
-289++ 13DC DA 85 14             jp      c, bios_video_test_fail_2
-290++ 13DF 11 00 52             ld      de, #5200
-291++ 13E2 B7                   or      a
-292++ 13E3 ED 52                sbc     hl, de
-293++ 13E5 C2 85 14             jp      nz, bios_video_test_fail_2
-294++ 13E8
-295++ 13E8 21 00 00             ld      hl, 0
-296++ 13EB 22 DC 05             ld      (x86_mem_segment), hl
-297++ 13EE 21 42 00             ld      hl, #0042
-298++ 13F1 22 DE 05             ld      (x86_mem_offset), hl
-299++ 13F4 CD A1 04             call    x86_mem_read16
-300++ 13F7 DA 85 14             jp      c, bios_video_test_fail_2
-301++ 13FA 11 00 00             ld      de, 0
-302++ 13FD B7                   or      a
-303++ 13FE ED 52                sbc     hl, de
-304++ 1400 C2 85 14             jp      nz, bios_video_test_fail_2
-305++ 1403
-306++ 1403                      ; Initialize guest registers and real-mode stack.
-307++ 1403 21 00 00             ld      hl, 0
-308++ 1406 22 6E 09             ld      (x86_reg_ax), hl
-309++ 1409 22 74 09             ld      (x86_reg_bx), hl
-310++ 140C 22 70 09             ld      (x86_reg_cx), hl
-311++ 140F 22 72 09             ld      (x86_reg_dx), hl
-312++ 1412 22 78 09             ld      (x86_reg_bp), hl
-313++ 1415 22 7A 09             ld      (x86_reg_si), hl
-314++ 1418 22 7C 09             ld      (x86_reg_di), hl
-315++ 141B 22 7E 09             ld      (x86_reg_es), hl
-316++ 141E 22 84 09             ld      (x86_reg_ds), hl
-317++ 1421 22 80 09             ld      (x86_reg_cs), hl
-318++ 1424 21 02 50             ld      hl, #5002
-319++ 1427 22 86 09             ld      (x86_reg_ip), hl
-320++ 142A 21 00 70             ld      hl, #7000
-321++ 142D 22 82 09             ld      (x86_reg_ss), hl
-322++ 1430 21 00 01             ld      hl, #0100
-323++ 1433 22 76 09             ld      (x86_reg_sp), hl
-324++ 1436 21 02 02             ld      hl, #0202
-325++ 1439 22 88 09             ld      (x86_reg_flags), hl
-326++ 143C
-327++ 143C CD 9A 10             call    x86_real_execute
-328++ 143F DA 89 14             jp      c, bios_video_test_fail_3
-329++ 1442
-330++ 1442 2A 6E 09             ld      hl, (x86_reg_ax)
-331++ 1445 11 03 2A             ld      de, #2A03
-332++ 1448 B7                   or      a
-333++ 1449 ED 52                sbc     hl, de
-334++ 144B C2 8D 14             jp      nz, bios_video_test_fail_4
-335++ 144E 2A 72 09             ld      hl, (x86_reg_dx)
-336++ 1451 11 0F 02             ld      de, #020F
-337++ 1454 B7                   or      a
-338++ 1455 ED 52                sbc     hl, de
-339++ 1457 C2 91 14             jp      nz, bios_video_test_fail_5
-340++ 145A
-341++ 145A 21 50 04             ld      hl, #0450
-342++ 145D 22 DE 05             ld      (x86_mem_offset), hl
-343++ 1460 21 00 00             ld      hl, 0
-344++ 1463 22 DC 05             ld      (x86_mem_segment), hl
-345++ 1466 CD A1 04             call    x86_mem_read16
-346++ 1469 DA 95 14             jp      c, bios_video_test_fail_6
-347++ 146C 11 0F 02             ld      de, #020F
-348++ 146F B7                   or      a
-349++ 1470 ED 52                sbc     hl, de
-350++ 1472 C2 95 14             jp      nz, bios_video_test_fail_6
-351++ 1475
-352++ 1475 21 10 1A             ld      hl, #1A10
-353++ 1478 22 7E 03             ld      (saved_x86_ax), hl
-354++ 147B AF                   xor     a
-355++ 147C 32 04 0D             ld      (x86_exit_status), a
-356++ 147F B7                   or      a
-357++ 1480 C9                   ret
-358++ 1481
-359++ 1481              bios_video_test_fail_1:
-360++ 1481 3E 01                ld      a, 1
-361++ 1483 18 16                jr      bios_video_test_fail
-362++ 1485              bios_video_test_fail_2:
-363++ 1485 3E 02                ld      a, 2
-364++ 1487 18 12                jr      bios_video_test_fail
-365++ 1489              bios_video_test_fail_3:
-366++ 1489 3E 03                ld      a, 3
-367++ 148B 18 0E                jr      bios_video_test_fail
-368++ 148D              bios_video_test_fail_4:
-369++ 148D 3E 04                ld      a, 4
-370++ 148F 18 0A                jr      bios_video_test_fail
-371++ 1491              bios_video_test_fail_5:
-372++ 1491 3E 05                ld      a, 5
-373++ 1493 18 06                jr      bios_video_test_fail
-374++ 1495              bios_video_test_fail_6:
-375++ 1495 3E 06                ld      a, 6
-376++ 1497 18 02                jr      bios_video_test_fail
-377++ 1499              bios_video_test_fail_7:
-378++ 1499 3E 07                ld      a, 7
-379++ 149B              bios_video_test_fail:
-380++ 149B 6F                   ld      l, a
-381++ 149C 26 1C                ld      h, #1C
-382++ 149E 22 7E 03             ld      (saved_x86_ax), hl
-383++ 14A1 3E 0A                ld      a, 10
-384++ 14A3 32 04 0D             ld      (x86_exit_status), a
-385++ 14A6 37                   scf
-386++ 14A7 C9                   ret
-387++ 14A8
-388++ 14A8 00           bios_video_row: db 0
-389++ 14A9 00           bios_video_col: db 0
-390++ 14AA 00           bios_video_char: db 0
-391++ 14AB 00           bios_video_write_value: db 0
-392++ 14AC
-393++ 14AC              ; Guest program is assembled as a byte stream at physical 0000:5002.
-394++ 14AC              x86_bios_video_test_image:
-395++ 14AC                      ; AH=00h set mode 03h.
-396++ 14AC B8 03 00 CD          db #B8,#03,#00,#CD,#10
-396++ 14B0 10
-397++ 14B1                      ; AH=02h set cursor to row 1, column 5; teletype X there.
-398++ 14B1 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
-398++ 14B5 00 00 BA 05
-398++ 14B9 01 CD 10
-399++ 14BC B4 0E B0 58          db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
-399++ 14C0 CD 10
-400++ 14C2                      ; AH=02h reset cursor to row 0, column 0 before the wrap test.
-401++ 14C2 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
-401++ 14C6 00 00 BA 00
-401++ 14CA 00 CD 10
-402++ 14CD                      ; 43 printable characters: the 43rd must wrap to row 1, column 1.
-403++ 14CD                      REPT 43
-404++ 14CD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14D1 CD 10       >
-404++ 14D3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14D7 CD 10       >
-404++ 14D9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14DD CD 10       >
-404++ 14DF B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14E3 CD 10       >
-404++ 14E5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14E9 CD 10       >
-404++ 14EB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14EF CD 10       >
-404++ 14F1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14F5 CD 10       >
-404++ 14F7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 14FB CD 10       >
-404++ 14FD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1501 CD 10       >
-404++ 1503 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1507 CD 10       >
-404++ 1509 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 150D CD 10       >
-404++ 150F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1513 CD 10       >
-404++ 1515 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1519 CD 10       >
-404++ 151B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 151F CD 10       >
-404++ 1521 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1525 CD 10       >
-404++ 1527 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 152B CD 10       >
-404++ 152D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1531 CD 10       >
-404++ 1533 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1537 CD 10       >
-404++ 1539 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 153D CD 10       >
-404++ 153F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1543 CD 10       >
-404++ 1545 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1549 CD 10       >
-404++ 154B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 154F CD 10       >
-404++ 1551 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1555 CD 10       >
-404++ 1557 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 155B CD 10       >
-404++ 155D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1561 CD 10       >
-404++ 1563 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1567 CD 10       >
-404++ 1569 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 156D CD 10       >
-404++ 156F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1573 CD 10       >
-404++ 1575 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1579 CD 10       >
-404++ 157B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 157F CD 10       >
-404++ 1581 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1585 CD 10       >
-404++ 1587 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 158B CD 10       >
-404++ 158D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1591 CD 10       >
-404++ 1593 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 1597 CD 10       >
-404++ 1599 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 159D CD 10       >
-404++ 159F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15A3 CD 10       >
-404++ 15A5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15A9 CD 10       >
-404++ 15AB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15AF CD 10       >
-404++ 15B1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15B5 CD 10       >
-404++ 15B7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15BB CD 10       >
-404++ 15BD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15C1 CD 10       >
-404++ 15C3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15C7 CD 10       >
-404++ 15C9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
-404++ 15CD CD 10       >
-405++ 15CF                      ENDR
-406++ 15CF                      ; CR then LF; output a 15-character marker on row 2.
-407++ 15CF B4 0E B0 0D          db #B4,#0E,#B0,#0D,#CD,#10
-407++ 15D3 CD 10
-408++ 15D5 B4 0E B0 0A          db #B4,#0E,#B0,#0A,#CD,#10
-408++ 15D9 CD 10
-409++ 15DB B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
-409++ 15DF CD 10
-410++ 15E1 B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
-410++ 15E5 CD 10
-411++ 15E7 B4 0E B0 32          db #B4,#0E,#B0,#32,#CD,#10 ; 2
-411++ 15EB CD 10
-412++ 15ED B4 0E B0 34          db #B4,#0E,#B0,#34,#CD,#10 ; 4
-412++ 15F1 CD 10
-413++ 15F3 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
-413++ 15F7 CD 10
-414++ 15F9 B4 0E B0 49          db #B4,#0E,#B0,#49,#CD,#10 ; I
-414++ 15FD CD 10
-415++ 15FF B4 0E B0 4E          db #B4,#0E,#B0,#4E,#CD,#10 ; N
-415++ 1603 CD 10
-416++ 1605 B4 0E B0 54          db #B4,#0E,#B0,#54,#CD,#10 ; T
-416++ 1609 CD 10
-417++ 160B B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
-417++ 160F CD 10
-418++ 1611 B4 0E B0 30          db #B4,#0E,#B0,#30,#CD,#10 ; 0
-418++ 1615 CD 10
-419++ 1617 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
-419++ 161B CD 10
-420++ 161D B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
-420++ 1621 CD 10
-421++ 1623 B4 0E B0 41          db #B4,#0E,#B0,#41,#CD,#10 ; A
-421++ 1627 CD 10
-422++ 1629 B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
-422++ 162D CD 10
-423++ 162F B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
-423++ 1633 CD 10
-424++ 1635                      ; AH=03h get cursor, then AH=0Fh get mode/columns.
-425++ 1635 B4 03 B0 00          db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
-425++ 1639 BB 00 00 CD
-425++ 163D 10
-426++ 163E B4 0F B0 00          db #B4,#0F,#B0,#00,#CD,#10
-426++ 1642 CD 10
-427++ 1644 F4                   db #F4
-428++ 1645              x86_bios_video_test_image_end:
-429++ 1645
+  1++ 1248              ; =========================================================================
+  2++ 1248              ; PROJECT 124 — BIOS INT 10h text services, Stage 3A
+  3++ 1248              ;
+  4++ 1248              ; Project text-console profile: 42 columns x 12 rows, 6x8 glyphs.
+  5++ 1248              ; Implemented functions:
+  6++ 1248              ;   AH=00h set mode 03h (project 42x12 text profile)
+  7++ 1248              ;   AH=0Fh get mode (AL=03h, AH=42, BH=0)
+  8++ 1248              ;   AH=02h set cursor (BH=0, DH=row, DL=column)
+  9++ 1248              ;   AH=03h get cursor (DH=row, DL=column)
+ 10++ 1248              ;   AH=0Eh teletype output (AL=character, BH=0)
+ 11++ 1248              ;
+ 12++ 1248              ; INT 10h enters through the normal IVT/stack frame. The BIOS service itself
+ 13++ 1248              ; is a firmware trap, then returns through the normal IRET primitive.
+ 14++ 1248              ; Host stream protocol over DBIT/GSDAT:
+ 15++ 1248              ;   nonzero byte = teletype character
+ 16++ 1248              ;   00 00        = clear the lower debug console
+ 17++ 1248              ;   00 01 row col= set lower debug console cursor
+ 18++ 1248              ; =========================================================================
+ 19++ 1248
+ 20++ 1248              BIOS_VIDEO_COLUMNS EQU 42
+ 21++ 1248              BIOS_VIDEO_ROWS    EQU 12
+ 22++ 1248              BIOS_VIDEO_MODE    EQU #03
+ 23++ 1248
+ 24++ 1248              bios_int10_dispatch:
+ 25++ 1248 2A 6E 09             ld      hl, (x86_reg_ax)
+ 26++ 124B 7C                   ld      a, h
+ 27++ 124C FE 00                cp      #00
+ 28++ 124E CA 92 12             jp      z, bios_int10_set_mode
+ 29++ 1251 FE 0F                cp      #0F
+ 30++ 1253 CA F1 12             jp      z, bios_int10_get_mode
+ 31++ 1256 FE 02                cp      #02
+ 32++ 1258 CA FD 12             jp      z, bios_int10_set_cursor
+ 33++ 125B FE 03                cp      #03
+ 34++ 125D CA 37 13             jp      z, bios_int10_get_cursor
+ 35++ 1260 FE 0E                cp      #0E
+ 36++ 1262 CA 51 13             jp      z, bios_int10_teletype
+ 37++ 1265 B7                   or      a
+ 38++ 1266 C9                   ret
+ 39++ 1267
+ 40++ 1267              ; Install IVT[10h] -> 0000:5200 (firmware service trap).
+ 41++ 1267              bios_int10_install_vector:
+ 42++ 1267 21 00 00             ld      hl, 0
+ 43++ 126A 22 DC 05             ld      (x86_mem_segment), hl
+ 44++ 126D 21 40 00             ld      hl, #0040
+ 45++ 1270 22 DE 05             ld      (x86_mem_offset), hl
+ 46++ 1273 21 00 52             ld      hl, #5200
+ 47++ 1276 22 E2 05             ld      (x86_mem_word_value), hl
+ 48++ 1279 CD C1 04             call    x86_mem_write16
+ 49++ 127C D8                   ret     c
+ 50++ 127D 21 00 00             ld      hl, 0
+ 51++ 1280 22 DC 05             ld      (x86_mem_segment), hl
+ 52++ 1283 21 42 00             ld      hl, #0042
+ 53++ 1286 22 DE 05             ld      (x86_mem_offset), hl
+ 54++ 1289 21 00 00             ld      hl, 0
+ 55++ 128C 22 E2 05             ld      (x86_mem_word_value), hl
+ 56++ 128F C3 C1 04             jp      x86_mem_write16
+ 57++ 1292
+ 58++ 1292              ; AH=00h — only mode 03h is supported by this project console.
+ 59++ 1292              bios_int10_set_mode:
+ 60++ 1292 7D                   ld      a, l
+ 61++ 1293 FE 03                cp      BIOS_VIDEO_MODE
+ 62++ 1295 28 02                jr      z, .mode_valid
+ 63++ 1297 B7                   or      a
+ 64++ 1298 C9                   ret
+ 65++ 1299              .mode_valid:
+ 66++ 1299 21 49 04             ld      hl, #0449
+ 67++ 129C 3E 03                ld      a, BIOS_VIDEO_MODE
+ 68++ 129E CD D5 13             call    bios_video_write_byte
+ 69++ 12A1 D8                   ret     c
+ 70++ 12A2 21 4A 04             ld      hl, #044A
+ 71++ 12A5 3E 2A                ld      a, BIOS_VIDEO_COLUMNS
+ 72++ 12A7 CD D5 13             call    bios_video_write_byte
+ 73++ 12AA D8                   ret     c
+ 74++ 12AB 21 4C 04             ld      hl, #044C
+ 75++ 12AE 3E F0                ld      a, #F0
+ 76++ 12B0 CD D5 13             call    bios_video_write_byte
+ 77++ 12B3 D8                   ret     c
+ 78++ 12B4 21 4D 04             ld      hl, #044D
+ 79++ 12B7 3E 03                ld      a, #03
+ 80++ 12B9 CD D5 13             call    bios_video_write_byte
+ 81++ 12BC D8                   ret     c
+ 82++ 12BD 21 62 04             ld      hl, #0462
+ 83++ 12C0 AF                   xor     a
+ 84++ 12C1 CD D5 13             call    bios_video_write_byte
+ 85++ 12C4 D8                   ret     c
+ 86++ 12C5 21 84 04             ld      hl, #0484
+ 87++ 12C8 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
+ 88++ 12CA CD D5 13             call    bios_video_write_byte
+ 89++ 12CD D8                   ret     c
+ 90++ 12CE 21 85 04             ld      hl, #0485
+ 91++ 12D1 3E 08                ld      a, 8
+ 92++ 12D3 CD D5 13             call    bios_video_write_byte
+ 93++ 12D6 D8                   ret     c
+ 94++ 12D7
+ 95++ 12D7 AF                   xor     a
+ 96++ 12D8 32 EA 14             ld      (bios_video_col), a
+ 97++ 12DB 32 E9 14             ld      (bios_video_row), a
+ 98++ 12DE 21 50 04             ld      hl, #0450
+ 99++ 12E1 11 00 00             ld      de, 0
+100++ 12E4 CD E8 13             call    bios_video_write_word
+101++ 12E7 D8                   ret     c
+102++ 12E8
+103++ 12E8                      ; Host control frame: 00 00 = clear the 6x8 debug console.
+104++ 12E8 AF                   xor     a
+105++ 12E9 CD 4F 03             call    neo_send_data_byte
+106++ 12EC D8                   ret     c
+107++ 12ED AF                   xor     a
+108++ 12EE C3 4F 03             jp      neo_send_data_byte
+109++ 12F1
+110++ 12F1              ; AH=0Fh — return current project text mode, width and active page.
+111++ 12F1              bios_int10_get_mode:
+112++ 12F1 21 03 2A             ld      hl, #2A03
+113++ 12F4 22 6E 09             ld      (x86_reg_ax), hl
+114++ 12F7 AF                   xor     a
+115++ 12F8 32 75 09             ld      (x86_reg_bx+1), a
+116++ 12FB B7                   or      a
+117++ 12FC C9                   ret
+118++ 12FD
+119++ 12FD              ; AH=02h — set cursor. This implementation exposes page zero only.
+120++ 12FD              bios_int10_set_cursor:
+121++ 12FD 3A 75 09             ld      a, (x86_reg_bx+1)
+122++ 1300 B7                   or      a
+123++ 1301 C0                   ret     nz
+124++ 1302 2A 72 09             ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
+125++ 1305 7C                   ld      a, h
+126++ 1306 FE 0C                cp      BIOS_VIDEO_ROWS
+127++ 1308 38 02                jr      c, .row_valid
+128++ 130A B7                   or      a
+129++ 130B C9                   ret
+130++ 130C              .row_valid:
+131++ 130C 7D                   ld      a, l
+132++ 130D FE 2A                cp      BIOS_VIDEO_COLUMNS
+133++ 130F 38 02                jr      c, .col_valid
+134++ 1311 B7                   or      a
+135++ 1312 C9                   ret
+136++ 1313              .col_valid:
+137++ 1313 7C                   ld      a, h
+138++ 1314 32 E9 14             ld      (bios_video_row), a
+139++ 1317 7D                   ld      a, l
+140++ 1318 32 EA 14             ld      (bios_video_col), a
+141++ 131B CD BB 13             call    bios_video_store_cursor
+142++ 131E D8                   ret     c
+143++ 131F
+144++ 131F                      ; Host control frame: 00 01 row col.
+145++ 131F AF                   xor     a
+146++ 1320 CD 4F 03             call    neo_send_data_byte
+147++ 1323 D8                   ret     c
+148++ 1324 3E 01                ld      a, 1
+149++ 1326 CD 4F 03             call    neo_send_data_byte
+150++ 1329 D8                   ret     c
+151++ 132A 3A E9 14             ld      a, (bios_video_row)
+152++ 132D CD 4F 03             call    neo_send_data_byte
+153++ 1330 D8                   ret     c
+154++ 1331 3A EA 14             ld      a, (bios_video_col)
+155++ 1334 C3 4F 03             jp      neo_send_data_byte
+156++ 1337
+157++ 1337              ; AH=03h — read page-zero cursor into DH:DL.
+158++ 1337              bios_int10_get_cursor:
+159++ 1337 3A 75 09             ld      a, (x86_reg_bx+1)
+160++ 133A B7                   or      a
+161++ 133B C0                   ret     nz
+162++ 133C 21 50 04             ld      hl, #0450
+163++ 133F 22 DE 05             ld      (x86_mem_offset), hl
+164++ 1342 21 00 00             ld      hl, 0
+165++ 1345 22 DC 05             ld      (x86_mem_segment), hl
+166++ 1348 CD A1 04             call    x86_mem_read16
+167++ 134B D8                   ret     c
+168++ 134C 22 72 09             ld      (x86_reg_dx), hl
+169++ 134F B7                   or      a
+170++ 1350 C9                   ret
+171++ 1351
+172++ 1351              ; AH=0Eh — teletype output. Every byte is streamed to the host.
+173++ 1351              bios_int10_teletype:
+174++ 1351 3A 75 09             ld      a, (x86_reg_bx+1)
+175++ 1354 B7                   or      a
+176++ 1355 C0                   ret     nz
+177++ 1356 3A 6E 09             ld      a, (x86_reg_ax)
+178++ 1359 32 EB 14             ld      (bios_video_char), a
+179++ 135C B7                   or      a
+180++ 135D C8                   ret     z                       ; NUL is reserved for stream control frames.
+181++ 135E FE 80                cp      128
+182++ 1360 38 05                jr      c, .teletype_ascii
+183++ 1362 3E 3F                ld      a, '?'
+184++ 1364 32 EB 14             ld      (bios_video_char), a
+185++ 1367              .teletype_ascii:
+186++ 1367 3A EB 14             ld      a, (bios_video_char)
+187++ 136A CD 4F 03             call    neo_send_data_byte
+188++ 136D D8                   ret     c
+189++ 136E
+190++ 136E 3A EB 14             ld      a, (bios_video_char)
+191++ 1371 FE 0D                cp      13
+192++ 1373 28 21                jr      z, .carriage_return
+193++ 1375 FE 0A                cp      10
+194++ 1377 28 2F                jr      z, .line_feed
+195++ 1379 FE 08                cp      8
+196++ 137B 28 1F                jr      z, .backspace
+197++ 137D FE 07                cp      7
+198++ 137F 28 38                jr      z, .cursor_done
+199++ 1381 FE 20                cp      32
+200++ 1383 38 34                jr      c, .cursor_done
+201++ 1385
+202++ 1385 3A EA 14             ld      a, (bios_video_col)
+203++ 1388 3C                   inc     a
+204++ 1389 32 EA 14             ld      (bios_video_col), a
+205++ 138C FE 2A                cp      BIOS_VIDEO_COLUMNS
+206++ 138E 38 25                jr      c, .cursor_store
+207++ 1390 AF                   xor     a
+208++ 1391 32 EA 14             ld      (bios_video_col), a
+209++ 1394 18 12                jr      .line_feed
+210++ 1396              .carriage_return:
+211++ 1396 AF                   xor     a
+212++ 1397 32 EA 14             ld      (bios_video_col), a
+213++ 139A 18 19                jr      .cursor_store
+214++ 139C              .backspace:
+215++ 139C 3A EA 14             ld      a, (bios_video_col)
+216++ 139F B7                   or      a
+217++ 13A0 28 17                jr      z, .cursor_done
+218++ 13A2 3D                   dec     a
+219++ 13A3 32 EA 14             ld      (bios_video_col), a
+220++ 13A6 18 0D                jr      .cursor_store
+221++ 13A8              .line_feed:
+222++ 13A8 3A E9 14             ld      a, (bios_video_row)
+223++ 13AB 3C                   inc     a
+224++ 13AC FE 0C                cp      BIOS_VIDEO_ROWS
+225++ 13AE 38 02                jr      c, .line_store
+226++ 13B0 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
+227++ 13B2              .line_store:
+228++ 13B2 32 E9 14             ld      (bios_video_row), a
+229++ 13B5              .cursor_store:
+230++ 13B5 CD BB 13             call    bios_video_store_cursor
+231++ 13B8 C9                   ret
+232++ 13B9              .cursor_done:
+233++ 13B9 B7                   or      a
+234++ 13BA C9                   ret
+235++ 13BB
+236++ 13BB              ; Store project cursor word at BDA 00450h: low=column, high=row.
+237++ 13BB              bios_video_store_cursor:
+238++ 13BB 21 50 04             ld      hl, #0450
+239++ 13BE 22 DE 05             ld      (x86_mem_offset), hl
+240++ 13C1 21 00 00             ld      hl, 0
+241++ 13C4 22 DC 05             ld      (x86_mem_segment), hl
+242++ 13C7 3A EA 14             ld      a, (bios_video_col)
+243++ 13CA 6F                   ld      l, a
+244++ 13CB 3A E9 14             ld      a, (bios_video_row)
+245++ 13CE 67                   ld      h, a
+246++ 13CF 22 E2 05             ld      (x86_mem_word_value), hl
+247++ 13D2 C3 C1 04             jp      x86_mem_write16
+248++ 13D5
+249++ 13D5              ; IN: HL=physical address, A=value.
+250++ 13D5              bios_video_write_byte:
+251++ 13D5 32 EC 14             ld      (bios_video_write_value), a
+252++ 13D8 22 D6 05             ld      (x86_mem_addr), hl
+253++ 13DB AF                   xor     a
+254++ 13DC 32 D8 05             ld      (x86_mem_addr+2), a
+255++ 13DF 3A EC 14             ld      a, (bios_video_write_value)
+256++ 13E2 32 D9 05             ld      (x86_mem_value), a
+257++ 13E5 C3 BE 03             jp      x86_mem_write8
+258++ 13E8
+259++ 13E8              ; IN: HL=physical address, DE=value.
+260++ 13E8              bios_video_write_word:
+261++ 13E8 22 DE 05             ld      (x86_mem_offset), hl
+262++ 13EB 21 00 00             ld      hl, 0
+263++ 13EE 22 DC 05             ld      (x86_mem_segment), hl
+264++ 13F1 EB                   ex      de, hl
+265++ 13F2 22 E2 05             ld      (x86_mem_word_value), hl
+266++ 13F5 C3 C1 04             jp      x86_mem_write16
+267++ 13F8
+268++ 13F8              ; -------------------------------------------------------------------------
+269++ 13F8              ; Stage 3A executable test. Exercises all five INT 10h services, cursor
+270++ 13F8              ; round-trip, 42-column wrap, CR/LF, and the streamed host console path.
+271++ 13F8              ; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
+272++ 13F8              ; -------------------------------------------------------------------------
+273++ 13F8              bios_int10_video_test:
+274++ 13F8 AF                   xor     a
+275++ 13F9 32 26 12             ld      (x86_real_bounds_enable), a
+276++ 13FC CD 89 03             call    x86_mem_init
+277++ 13FF 21 ED 14             ld      hl, x86_bios_video_test_image
+278++ 1402 11 02 50             ld      de, #5002
+279++ 1405 01 99 01             ld      bc, x86_bios_video_test_image_end - x86_bios_video_test_image
+280++ 1408 CD 53 10             call    x86_real_copy_image
+281++ 140B DA C2 14             jp      c, bios_video_test_fail_1
+282++ 140E
+283++ 140E                      ; Verify POST installed IVT[10h] -> 0000:5200.
+284++ 140E 21 00 00             ld      hl, 0
+285++ 1411 22 DC 05             ld      (x86_mem_segment), hl
+286++ 1414 21 40 00             ld      hl, #0040
+287++ 1417 22 DE 05             ld      (x86_mem_offset), hl
+288++ 141A CD A1 04             call    x86_mem_read16
+289++ 141D DA C6 14             jp      c, bios_video_test_fail_2
+290++ 1420 11 00 52             ld      de, #5200
+291++ 1423 B7                   or      a
+292++ 1424 ED 52                sbc     hl, de
+293++ 1426 C2 C6 14             jp      nz, bios_video_test_fail_2
+294++ 1429
+295++ 1429 21 00 00             ld      hl, 0
+296++ 142C 22 DC 05             ld      (x86_mem_segment), hl
+297++ 142F 21 42 00             ld      hl, #0042
+298++ 1432 22 DE 05             ld      (x86_mem_offset), hl
+299++ 1435 CD A1 04             call    x86_mem_read16
+300++ 1438 DA C6 14             jp      c, bios_video_test_fail_2
+301++ 143B 11 00 00             ld      de, 0
+302++ 143E B7                   or      a
+303++ 143F ED 52                sbc     hl, de
+304++ 1441 C2 C6 14             jp      nz, bios_video_test_fail_2
+305++ 1444
+306++ 1444                      ; Initialize guest registers and real-mode stack.
+307++ 1444 21 00 00             ld      hl, 0
+308++ 1447 22 6E 09             ld      (x86_reg_ax), hl
+309++ 144A 22 74 09             ld      (x86_reg_bx), hl
+310++ 144D 22 70 09             ld      (x86_reg_cx), hl
+311++ 1450 22 72 09             ld      (x86_reg_dx), hl
+312++ 1453 22 78 09             ld      (x86_reg_bp), hl
+313++ 1456 22 7A 09             ld      (x86_reg_si), hl
+314++ 1459 22 7C 09             ld      (x86_reg_di), hl
+315++ 145C 22 7E 09             ld      (x86_reg_es), hl
+316++ 145F 22 84 09             ld      (x86_reg_ds), hl
+317++ 1462 22 80 09             ld      (x86_reg_cs), hl
+318++ 1465 21 02 50             ld      hl, #5002
+319++ 1468 22 86 09             ld      (x86_reg_ip), hl
+320++ 146B 21 00 70             ld      hl, #7000
+321++ 146E 22 82 09             ld      (x86_reg_ss), hl
+322++ 1471 21 00 01             ld      hl, #0100
+323++ 1474 22 76 09             ld      (x86_reg_sp), hl
+324++ 1477 21 02 02             ld      hl, #0202
+325++ 147A 22 88 09             ld      (x86_reg_flags), hl
+326++ 147D
+327++ 147D CD E2 10             call    x86_real_execute
+328++ 1480 DA CA 14             jp      c, bios_video_test_fail_3
+329++ 1483
+330++ 1483 2A 6E 09             ld      hl, (x86_reg_ax)
+331++ 1486 11 03 2A             ld      de, #2A03
+332++ 1489 B7                   or      a
+333++ 148A ED 52                sbc     hl, de
+334++ 148C C2 CE 14             jp      nz, bios_video_test_fail_4
+335++ 148F 2A 72 09             ld      hl, (x86_reg_dx)
+336++ 1492 11 0F 02             ld      de, #020F
+337++ 1495 B7                   or      a
+338++ 1496 ED 52                sbc     hl, de
+339++ 1498 C2 D2 14             jp      nz, bios_video_test_fail_5
+340++ 149B
+341++ 149B 21 50 04             ld      hl, #0450
+342++ 149E 22 DE 05             ld      (x86_mem_offset), hl
+343++ 14A1 21 00 00             ld      hl, 0
+344++ 14A4 22 DC 05             ld      (x86_mem_segment), hl
+345++ 14A7 CD A1 04             call    x86_mem_read16
+346++ 14AA DA D6 14             jp      c, bios_video_test_fail_6
+347++ 14AD 11 0F 02             ld      de, #020F
+348++ 14B0 B7                   or      a
+349++ 14B1 ED 52                sbc     hl, de
+350++ 14B3 C2 D6 14             jp      nz, bios_video_test_fail_6
+351++ 14B6
+352++ 14B6 21 10 1A             ld      hl, #1A10
+353++ 14B9 22 7E 03             ld      (saved_x86_ax), hl
+354++ 14BC AF                   xor     a
+355++ 14BD 32 04 0D             ld      (x86_exit_status), a
+356++ 14C0 B7                   or      a
+357++ 14C1 C9                   ret
+358++ 14C2
+359++ 14C2              bios_video_test_fail_1:
+360++ 14C2 3E 01                ld      a, 1
+361++ 14C4 18 16                jr      bios_video_test_fail
+362++ 14C6              bios_video_test_fail_2:
+363++ 14C6 3E 02                ld      a, 2
+364++ 14C8 18 12                jr      bios_video_test_fail
+365++ 14CA              bios_video_test_fail_3:
+366++ 14CA 3E 03                ld      a, 3
+367++ 14CC 18 0E                jr      bios_video_test_fail
+368++ 14CE              bios_video_test_fail_4:
+369++ 14CE 3E 04                ld      a, 4
+370++ 14D0 18 0A                jr      bios_video_test_fail
+371++ 14D2              bios_video_test_fail_5:
+372++ 14D2 3E 05                ld      a, 5
+373++ 14D4 18 06                jr      bios_video_test_fail
+374++ 14D6              bios_video_test_fail_6:
+375++ 14D6 3E 06                ld      a, 6
+376++ 14D8 18 02                jr      bios_video_test_fail
+377++ 14DA              bios_video_test_fail_7:
+378++ 14DA 3E 07                ld      a, 7
+379++ 14DC              bios_video_test_fail:
+380++ 14DC 6F                   ld      l, a
+381++ 14DD 26 1C                ld      h, #1C
+382++ 14DF 22 7E 03             ld      (saved_x86_ax), hl
+383++ 14E2 3E 0A                ld      a, 10
+384++ 14E4 32 04 0D             ld      (x86_exit_status), a
+385++ 14E7 37                   scf
+386++ 14E8 C9                   ret
+387++ 14E9
+388++ 14E9 00           bios_video_row: db 0
+389++ 14EA 00           bios_video_col: db 0
+390++ 14EB 00           bios_video_char: db 0
+391++ 14EC 00           bios_video_write_value: db 0
+392++ 14ED
+393++ 14ED              ; Guest program is assembled as a byte stream at physical 0000:5002.
+394++ 14ED              x86_bios_video_test_image:
+395++ 14ED                      ; AH=00h set mode 03h.
+396++ 14ED B8 03 00 CD          db #B8,#03,#00,#CD,#10
+396++ 14F1 10
+397++ 14F2                      ; AH=02h set cursor to row 1, column 5; teletype X there.
+398++ 14F2 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
+398++ 14F6 00 00 BA 05
+398++ 14FA 01 CD 10
+399++ 14FD B4 0E B0 58          db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
+399++ 1501 CD 10
+400++ 1503                      ; AH=02h reset cursor to row 0, column 0 before the wrap test.
+401++ 1503 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
+401++ 1507 00 00 BA 00
+401++ 150B 00 CD 10
+402++ 150E                      ; 43 printable characters: the 43rd must wrap to row 1, column 1.
+403++ 150E                      REPT 43
+404++ 150E B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1512 CD 10       >
+404++ 1514 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1518 CD 10       >
+404++ 151A B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 151E CD 10       >
+404++ 1520 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1524 CD 10       >
+404++ 1526 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 152A CD 10       >
+404++ 152C B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1530 CD 10       >
+404++ 1532 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1536 CD 10       >
+404++ 1538 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 153C CD 10       >
+404++ 153E B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1542 CD 10       >
+404++ 1544 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1548 CD 10       >
+404++ 154A B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 154E CD 10       >
+404++ 1550 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1554 CD 10       >
+404++ 1556 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 155A CD 10       >
+404++ 155C B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1560 CD 10       >
+404++ 1562 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1566 CD 10       >
+404++ 1568 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 156C CD 10       >
+404++ 156E B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1572 CD 10       >
+404++ 1574 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1578 CD 10       >
+404++ 157A B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 157E CD 10       >
+404++ 1580 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1584 CD 10       >
+404++ 1586 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 158A CD 10       >
+404++ 158C B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1590 CD 10       >
+404++ 1592 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1596 CD 10       >
+404++ 1598 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 159C CD 10       >
+404++ 159E B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15A2 CD 10       >
+404++ 15A4 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15A8 CD 10       >
+404++ 15AA B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15AE CD 10       >
+404++ 15B0 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15B4 CD 10       >
+404++ 15B6 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15BA CD 10       >
+404++ 15BC B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15C0 CD 10       >
+404++ 15C2 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15C6 CD 10       >
+404++ 15C8 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15CC CD 10       >
+404++ 15CE B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15D2 CD 10       >
+404++ 15D4 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15D8 CD 10       >
+404++ 15DA B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15DE CD 10       >
+404++ 15E0 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15E4 CD 10       >
+404++ 15E6 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15EA CD 10       >
+404++ 15EC B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15F0 CD 10       >
+404++ 15F2 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15F6 CD 10       >
+404++ 15F8 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 15FC CD 10       >
+404++ 15FE B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1602 CD 10       >
+404++ 1604 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 1608 CD 10       >
+404++ 160A B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+404++ 160E CD 10       >
+405++ 1610                      ENDR
+406++ 1610                      ; CR then LF; output a 15-character marker on row 2.
+407++ 1610 B4 0E B0 0D          db #B4,#0E,#B0,#0D,#CD,#10
+407++ 1614 CD 10
+408++ 1616 B4 0E B0 0A          db #B4,#0E,#B0,#0A,#CD,#10
+408++ 161A CD 10
+409++ 161C B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
+409++ 1620 CD 10
+410++ 1622 B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
+410++ 1626 CD 10
+411++ 1628 B4 0E B0 32          db #B4,#0E,#B0,#32,#CD,#10 ; 2
+411++ 162C CD 10
+412++ 162E B4 0E B0 34          db #B4,#0E,#B0,#34,#CD,#10 ; 4
+412++ 1632 CD 10
+413++ 1634 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
+413++ 1638 CD 10
+414++ 163A B4 0E B0 49          db #B4,#0E,#B0,#49,#CD,#10 ; I
+414++ 163E CD 10
+415++ 1640 B4 0E B0 4E          db #B4,#0E,#B0,#4E,#CD,#10 ; N
+415++ 1644 CD 10
+416++ 1646 B4 0E B0 54          db #B4,#0E,#B0,#54,#CD,#10 ; T
+416++ 164A CD 10
+417++ 164C B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
+417++ 1650 CD 10
+418++ 1652 B4 0E B0 30          db #B4,#0E,#B0,#30,#CD,#10 ; 0
+418++ 1656 CD 10
+419++ 1658 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
+419++ 165C CD 10
+420++ 165E B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
+420++ 1662 CD 10
+421++ 1664 B4 0E B0 41          db #B4,#0E,#B0,#41,#CD,#10 ; A
+421++ 1668 CD 10
+422++ 166A B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
+422++ 166E CD 10
+423++ 1670 B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
+423++ 1674 CD 10
+424++ 1676                      ; AH=03h get cursor, then AH=0Fh get mode/columns.
+425++ 1676 B4 03 B0 00          db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
+425++ 167A BB 00 00 CD
+425++ 167E 10
+426++ 167F B4 0F B0 00          db #B4,#0F,#B0,#00,#CD,#10
+426++ 1683 CD 10
+427++ 1685 F4                   db #F4
+428++ 1686              x86_bios_video_test_image_end:
+429++ 1686
 # file closed: bios_video.asm
-469+  1645
-470+  1645                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
-471+  1645                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
-472+  1645
-473+  1645              neogs_firmware_end:
-474+  1645
+469+  1686
+470+  1686                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+471+  1686                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
+472+  1686
+473+  1686              neogs_firmware_end:
+474+  1686
 # file closed: main.asm
- 10   1645
- 11   1645              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
- 12   1645              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
- 13   1645                      ASSERT neogs_firmware_end <= $3000
- 14   1645                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
- 15   1645                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
- 16   1645
- 17   1645              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
- 18   1645                      ORG     $4000
+ 10   1686
+ 11   1686              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
+ 12   1686              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
+ 13   1686                      ASSERT neogs_firmware_end <= $3000
+ 14   1686                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+ 15   1686                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+ 16   1686
+ 17   1686              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+ 18   1686                      ORG     $4000
  19   4000                      INCLUDE "bootstrap.asm"
 # file opened: bootstrap.asm
   1+  4000              ; =========================================================================

@@ -30,11 +30,12 @@ Host command: `08h`. Expected result: status 0 / AX=`1A01h`.
 
 `x86_real_mode.asm` adds a separate CS:IP fetch/execute path and executes
 a guest INT 20h handler through the real-mode memory backend. The limited
-instruction set at this stage includes NOP, INC AX, MOV AX,imm16, HLT,
-INT imm8, INT 3 and IRET.
+instruction set at this stage includes NOP, INC AX, MOV r8,imm8, MOV
+r16,imm16 (all eight general registers), HLT, INT imm8, INT 3 and IRET.
 
 The self-test runs the guest caller at `0000:5002` and handler at
-`0000:5100`, checks AX=`1234h`, IRET return IP=`5008h`, FLAGS and SP.
+`0000:5100`. It verifies all eight `MOV r16,imm16` destinations, then checks
+AX=`1234h`, IRET return IP=`501Dh`, FLAGS and SP restoration.
 Host command: `09h`. Expected result: status 0 / AX=`1A02h`.
 
 ## Stage 3A: BIOS INT 10h text services
@@ -90,9 +91,9 @@ memory backend at `0000:5002`. Instruction fetches are bounded to the loaded
 payload and the current task entry uses CS=0.
 
 The legacy linear interpreter remains available for the transport/edge-case
-diagnostics. The real-mode executor currently supports NOP, INC AX, MOV AX/BX/DX,imm16,
-MOV r8,imm8 (including the standard AH/AL BIOS calling convention), HLT,
-INT imm8, INT 3 and IRET. It is not a complete 8086 emulator.
+diagnostics. The real-mode executor currently supports NOP, INC AX, MOV r16,imm16 for
+AX/CX/DX/BX/SP/BP/SI/DI, MOV r8,imm8 (including the standard AH/AL BIOS
+calling convention), HLT, INT imm8, INT 3 and IRET. It is not a complete 8086 emulator.
 
 ## Memory map and limitations
 
