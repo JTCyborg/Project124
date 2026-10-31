@@ -264,77 +264,35 @@ gs_boot_send_command_long:
 gs_boot_send_command_result:
         ld      (neo_fw_command_byte), a
 
-        ; Preload the one-byte argument required by COM30.
-        ld      a, 0
+        ; COM30 expects a one-byte host argument. Per GS protocol this
+        ; argument must be placed in GSDAT BEFORE the command is issued.
+        ; The command argument/result exchange is not DBIT-framed.
+        xor     a
         out     (GSDAT), a
 
-        ; Issue command #30.
+        ; Issue #30 after the argument is ready.
         ld      a, (neo_fw_command_byte)
         out     (GSCOM), a
 
-        ; Wait until ROM has accepted the command.
+        ; COM30 writes the allocated module number to ZXDATWR and then
+        ; consumes the preloaded argument before clearing CBIT. Wait for
+        ; command completion, then read the retained result directly.
         ld      bc, FW_BYTE_TIMEOUT
-.result_wait_command_start:
+.result_wait_command_done:
         in      a, (GSSTAT)
         ld      (neo_fw_last_status), a
         bit     B_CBIT, a
-        jr      nz, .result_wait_argument_consumed
+        jr      z, .result_read_data
         dec     bc
         ld      a, b
         or      c
-        jr      nz, .result_wait_command_start
-        scf
-        ret
-
-        ; Wait for ROM to consume the preloaded host argument.
-.result_wait_argument_consumed:
-        ld      bc, FW_BYTE_TIMEOUT
-.result_wait_data_clear:
-        in      a, (GSSTAT)
-        ld      (neo_fw_last_status), a
-        bit     B_DBIT, a
-        jr      z, .result_wait_module_number
-        dec     bc
-        ld      a, b
-        or      c
-        jr      nz, .result_wait_data_clear
-        scf
-        ret
-
-        ; ROM writes the module number after consuming the argument.
-.result_wait_module_number:
-        ld      bc, FW_BYTE_TIMEOUT
-.result_wait_result:
-        in      a, (GSSTAT)
-        ld      (neo_fw_last_status), a
-        bit     B_DBIT, a
-        jr      nz, .result_read_data
-        dec     bc
-        ld      a, b
-        or      c
-        jr      nz, .result_wait_result
+        jr      nz, .result_wait_command_done
         scf
         ret
 
 .result_read_data:
         in      a, (GSDAT)
         ld      (neo_fw_result_byte), a
-        push    af
-        ld      bc, FW_BYTE_TIMEOUT
-.result_wait_command_done:
-        in      a, (GSSTAT)
-        ld      (neo_fw_last_status), a
-        bit     B_CBIT, a
-        jr      z, .result_command_done
-        dec     bc
-        ld      a, b
-        or      c
-        jr      nz, .result_wait_command_done
-        pop     af
-        scf
-        ret
-.result_command_done:
-        pop     af
         or      a
         ret
 
