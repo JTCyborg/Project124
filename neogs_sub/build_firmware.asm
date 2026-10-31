@@ -3,7 +3,7 @@
 ;   sjasmplus neogs_sub/build_firmware.asm
 ;
 ; neogs_code.bin       custom firmware, loaded at logical RAM address $0000
-; neogs_bootstrap.bin  tiny GS105a module, loaded by ROM at $5B00
+; neogs_bootstrap.bin  executable Z80 bootstrap, loaded by #14 at $4000
 ; =========================================================================
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
@@ -14,10 +14,10 @@
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 
-; Stock GS105a safely hosts a small resident module in $5B00-$5FFF.
-        ORG     $5B00
+; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+        ORG     $4000
         INCLUDE "bootstrap.asm"
-        ASSERT neogs_bootstrap_start = $5B00
-        ASSERT neogs_bootstrap_end <= $6000
+        ASSERT neogs_bootstrap_start = $4000
+        ASSERT neogs_bootstrap_end <= $7FFF
         SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
         SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
