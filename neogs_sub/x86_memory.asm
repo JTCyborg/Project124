@@ -193,9 +193,11 @@ x86_mem_calc_phys:
         ld      b, a
         ld      a, (x86_mem_offset_work+1)
         add     a, b
-        ld      b, a
+        ld      d, a                 ; preserve sum while retaining carry flag
         ld      a, (x86_mem_carry)
-        add     a, b
+        ld      b, a
+        ld      a, d
+        adc     a, b                 ; include byte-0 carry
         ld      (x86_mem_addr+1), a
         ld      a, 0
         adc     a, 0
