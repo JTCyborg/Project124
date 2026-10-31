@@ -40,7 +40,8 @@ BIOS_DebugConsole_Clear::
         ld      a, (bios_dbg_clear_y)
         ld      c, 0
         call    bios_dbg_calc_addr
-        ld      de, hl
+        push    hl
+        pop     de
         inc     de
         ld      (hl), 0
         ld      bc, 31
