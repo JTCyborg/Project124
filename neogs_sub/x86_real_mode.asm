@@ -2,7 +2,7 @@
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This first executable slice runs guest instructions through CS:IP and the
-; physical-memory backend. Supported: NOP, INC AX, MOV AX,imm16, HLT,
+; physical-memory backend. Supported: NOP, INC AX, MOV r8/r16,imm, HLT,
 ; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -209,6 +209,11 @@ x86_real_next:
         jp      z, x86_real_nop
         cp      #40
         jp      z, x86_real_inc_ax
+        cp      #B0
+        jp      c, .not_mov_r8
+        cp      #B8
+        jp      c, x86_real_mov_r8_imm8
+.not_mov_r8:
         cp      #B8
         jp      z, x86_real_mov_ax_imm16
         cp      #BA
@@ -248,6 +253,31 @@ x86_real_mov_ax_imm16:
         ld      a, (x86_real_imm_low)
         ld      l, a
         ld      (x86_reg_ax), hl
+        jp      x86_real_next
+
+; B0-B7 — MOV r8,imm8 (AL,CL,DL,BL,AH,CH,DH,BH).
+x86_real_mov_r8_imm8:
+        ld      (x86_real_opcode), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_byte), a
+        ld      a, (x86_real_opcode)
+        sub     #B0
+        cp      4
+        jr      c, .low_byte_register
+        sub     4
+        add     a, a
+        inc     a
+        jr      .register_offset_ready
+.low_byte_register:
+        add     a, a
+.register_offset_ready:
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      a, (x86_real_imm_byte)
+        ld      (hl), a
         jp      x86_real_next
 
 x86_real_int_imm8:
@@ -361,6 +391,8 @@ x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
 x86_real_imm_low:    db 0
 x86_real_int_vector: db 0
+x86_real_opcode: db 0
+x86_real_imm_byte: db 0
 x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 
