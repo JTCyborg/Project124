@@ -189,18 +189,26 @@ x86_mem_calc_phys:
         rlca
         or      b
 
-        ; Add offset high and carry from byte 0.
+        ; Add offset high to byte-1 base, then add byte-0 carry.
+        ; The two carry-outs are mutually exclusive for byte addition.
         ld      b, a
         ld      a, (x86_mem_offset_work+1)
         add     a, b
-        ld      d, a                 ; preserve sum while retaining carry flag
-        ld      a, (x86_mem_carry)
-        ld      b, a
+        ld      d, a
+        ld      a, 0
+        adc     a, 0
+        ld      (x86_mem_carry1), a   ; carry from base + offset high
+
         ld      a, d
-        adc     a, b                 ; include byte-0 carry
+        ld      b, a
+        ld      a, (x86_mem_carry)
+        add     a, b
         ld      (x86_mem_addr+1), a
         ld      a, 0
         adc     a, 0
+        ld      b, a
+        ld      a, (x86_mem_carry1)
+        or      b
         ld      (x86_mem_carry), a
 
         ; Byte 2 is the high segment nibble plus byte-1 carry.
@@ -405,3 +413,4 @@ x86_mem_offset: dw 0
 x86_mem_offset_work: dw 0
 x86_mem_word_value: dw 0
 x86_mem_carry: db 0
+x86_mem_carry1: db 0
