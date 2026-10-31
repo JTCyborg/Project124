@@ -36,6 +36,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/x86_interpreter.asm",
                     "neogs_sub/x86_memory.asm",
                     "neogs_sub/bios/bios_core.asm",
+                    "neogs_sub/bios/bios_video.asm",
                     "neogs_sub/x86_interrupt.asm",
                     "neogs_sub/x86_real_mode.asm",
                     "neogs_sub/build_firmware.asm"
