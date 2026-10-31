@@ -38,8 +38,7 @@ x86_mov_ax_imm16:
 ; F4 — HLT: successful end of task
 x86_hlt:
         ld      (saved_z80_ax), hl
-        ld      hl, neo_debug_msg_x86_hlt
-        call    neo_debug_puts
+        call    x86_sys_log_hlt
         xor     a
         ld      (x86_exit_status), a
         ret
@@ -47,8 +46,7 @@ x86_hlt:
 ; Unsupported instruction: stop rather than executing arbitrary memory.
 x86_unsupported:
         ld      (saved_z80_ax), hl
-        ld      hl, neo_debug_msg_x86_unsupported
-        call    neo_debug_puts
+        call    x86_sys_log_unsupported
         ld      a, 2
         ld      (x86_exit_status), a
         ret
@@ -56,7 +54,6 @@ x86_unsupported:
 x86_ip_out_of_range:
         ld      a, 4
         ld      (x86_exit_status), a
-        ld      hl, neo_debug_msg_x86_bounds
-        call    neo_debug_puts
+        call    x86_sys_log_bounds
         ld      hl, (saved_z80_ax)
         ret
