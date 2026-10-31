@@ -34,11 +34,22 @@ BIOS_DebugConsole_Clear::
         push    bc
         push    de
         push    hl
-        ld      hl, #4C00
-        ld      de, #4C01
+        ld      a, 96
+        ld      (bios_dbg_clear_y), a
+.clear_scanline:
+        ld      a, (bios_dbg_clear_y)
+        ld      c, 0
+        call    bios_dbg_calc_addr
+        ld      de, hl
+        inc     de
         ld      (hl), 0
-        ld      bc, 3071
+        ld      bc, 31
         ldir
+        ld      a, (bios_dbg_clear_y)
+        inc     a
+        ld      (bios_dbg_clear_y), a
+        cp      192
+        jr      c, .clear_scanline
         ld      hl, #5980
         ld      de, #5981
         ld      (hl), #44
@@ -61,14 +72,11 @@ BIOS_DebugConsole_Clear::
 BIOS_DebugConsole_SetCursor::
         cp      BIOS_DEBUG_ROWS
         ret     nc
+        ld      (bios_dbg_row), a
         ld      a, c
         cp      BIOS_DEBUG_COLUMNS
         ret     nc
-        ld      a, c
         ld      (bios_dbg_col), a
-        ld      a, (bios_dbg_row)
-        ; Row is supplied in A on entry; it was compared above.
-        ; Reload the caller's row from the temporary saved byte.
         ret
 
 ; IN: A=one output byte from the NeoGS stream.
@@ -152,22 +160,17 @@ BIOS_DebugConsole_PrintChar::
         ld      a, (bios_dbg_bitpos)
         ld      c, a
         ld      a, #80
-        or      a
-.mask_shift:
-        ld      a, (bios_dbg_mask)
-        ; The mask is recomputed below from the bit position.
-        ld      a, #80
-        ld      c, (bios_dbg_bitpos)
 .mask_loop:
+        ld      d, a
         ld      a, c
         or      a
+        ld      a, d
         jr      z, .mask_ready
-        ld      a, (bios_dbg_mask)
         srl     a
-        ld      (bios_dbg_mask), a
         dec     c
         jr      .mask_loop
 .mask_ready:
+        ld      (bios_dbg_mask), a
         ld      a, (bios_dbg_bits)
         and     #20
         jr      z, .pixel_clear
@@ -281,3 +284,4 @@ bios_dbg_bitpos:    db 0
 bios_dbg_bits:      db 0
 bios_dbg_mask:      db 0
 bios_dbg_font_ptr:  dw 0
+bios_dbg_clear_y:   db 0
