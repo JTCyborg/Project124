@@ -40,6 +40,11 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/x86_system.asm",
                     "neogs_sub/x86_memory.asm",
                     "tests/TEST.ASM",
+                    "tests/README.md",
+                    "tests/suites/decoder.asm",
+                    "tests/suites/registers.asm",
+                    "tests/suites/arithmetic.asm",
+                    "tests/suites/control_flow.asm",
                     "neogs_sub/build_firmware.asm"
                 }
 
