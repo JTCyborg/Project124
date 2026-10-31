@@ -143,6 +143,24 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_bios_post_pass
 
         ; -------------------------------------------------------------
+        ; Stage 2A: 8086 real-mode INT/IRET frame and stack test.
+        ; This validates IVT lookup, FLAGS/CS/IP push order, IF/TF clearing,
+        ; IRET restoration, and SP balance. Guest handler execution is Stage 2B.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_int_test_start
+        call    neogs_int_test_and_get_result
+        jp      c, .int_test_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .int_test_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #1A01
+        or      a
+        sbc     hl, de
+        jp      nz, .int_test_fail
+        MACRO_EF_STRING P124_msg_int_test_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -352,6 +370,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.int_test_transport_fail:
+        MACRO_EF_STRING P124_msg_int_test_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.int_test_fail:
+        MACRO_EF_STRING P124_msg_int_test_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -513,6 +549,14 @@ neogs_bios_post_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run the 8086 interrupt entry/return architectural self-test.
+neogs_int_test_and_get_result:
+        ld      a, CMD_INT_TEST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -561,6 +605,10 @@ P124_msg_bios_post_start: DEFB "[BIOS] Stage 1: initialize IVT and BIOS Data Are
 P124_msg_bios_post_pass: DEFB "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
 P124_msg_bios_post_transport_fail: DEFB "[BIOS] FAIL: POST command/result timeout.", 13, 0
 P124_msg_bios_post_fail: DEFB "[BIOS] FAIL: POST status/detail = ", 0
+P124_msg_int_test_start: DEFB "[INT] Stage 2A: checking IVT lookup and 8086 interrupt stack frame...", 13, 0
+P124_msg_int_test_pass: DEFB "[INT] PASS: FLAGS/CS/IP frame, IF/TF clear, IRET restore and SP balance.", 13, 0
+P124_msg_int_test_transport_fail: DEFB "[INT] FAIL: interrupt test command/result timeout.", 13, 0
+P124_msg_int_test_fail: DEFB "[INT] FAIL: status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
