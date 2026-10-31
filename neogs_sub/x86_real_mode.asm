@@ -121,7 +121,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_ip)
-        ld      de, #5025
+        ld      de, #501F
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -341,7 +341,9 @@ x86_real_update_incdec_flags:
         ld      hl, (x86_real_result)
         ld      a, l
         and     a
-        jp      po, .no_pf
+        jp      pe, .set_pf
+        jr      .no_pf
+.set_pf:
         ld      hl, x86_real_new_flags
         set     2, (hl)
 .no_pf:
@@ -390,8 +392,6 @@ x86_real_update_incdec_flags:
         or      a
         jr      nz, .no_of
         jr      .set_of
-.no_of_check_dec:
-        jr      .no_of
 .set_of:
         ld      hl, x86_real_new_flags
         inc     hl
