@@ -240,6 +240,61 @@ execute_neogs_x86:
         ld      (x86_exit_status), a
         ret
 
+; Execute the loaded DMA task as bounded guest code at 0000:5002.
+; The DMA frame is copied into the x86 physical-memory backend before execution.
+execute_neogs_x86_real:
+        call    x86_mem_init
+        ld      hl, (X86_DMA_HEADER_ADDR)
+        ld      de, X86_RAM_RUN_ADDR
+        add     hl, de
+        ld      (x86_real_task_end), hl
+
+        ld      hl, X86_RAM_RUN_ADDR
+        ld      de, #5002
+        ld      bc, (X86_DMA_HEADER_ADDR)
+        call    x86_real_copy_image
+        jp      c, .real_copy_failed
+
+        ; Reset the guest register file to a deterministic real-mode entry.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      (x86_reg_es), hl
+        ld      (x86_reg_ds), hl
+        ld      (x86_reg_cs), hl
+        ld      hl, #5002
+        ld      (x86_reg_ip), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+
+        ld      a, 1
+        ld      (x86_real_bounds_enable), a
+        call    x86_real_execute
+        push    af
+        ld      hl, (x86_reg_ax)
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_real_bounds_enable), a
+        pop     af
+        ret
+
+.real_copy_failed:
+        ld      hl, #1D01
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
+        ret
+
 ; -------------------------------------------------------------------------
 ; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
 ; Result is returned through the existing CMD_GET_STATUS frame.
