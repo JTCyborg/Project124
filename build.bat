@@ -47,7 +47,7 @@ echo [SUCCESS] TEST.BIN создан: %TEST_SIZE% bytes.
 rem =========================================================================
 rem STEP 1 — NeoGS firmware and first-stage bootstrap
 rem =========================================================================
-echo [BUILD] 1/3: Сборка прошивки NeoGS и Bootstrap...
+echo [BUILD] 1/4: Сборка прошивки NeoGS и Bootstrap...
 
 tools\sjasmplus.exe --dirbol ^
     -I neogs_sub -I shared ^
@@ -80,7 +80,7 @@ if not exist "disk_A.trd" goto BUILD_ZX_FAILED
 rem =========================================================================
 rem STEP 3 — Verify TR-DOS directory entry, length, sectors and file bytes
 rem =========================================================================
-echo [BUILD] 3/3: Проверка neoprog.C внутри disk_A.trd...
+echo [BUILD] 3/4: Проверка файлов прошивки и тестов в disk_A.trd...
 
 if not exist "tools\verify_neoprog_trd.ps1" goto BUILD_VERIFY_FAILED
 
