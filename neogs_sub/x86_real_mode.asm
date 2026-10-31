@@ -14,9 +14,11 @@
 ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
 ; =========================================================================
 
-X86_REAL_STEP_LIMIT EQU 256
+X86_REAL_STEP_LIMIT EQU #FFFF
 
 x86_real_mode_test:
+        xor     a
+        ld      (x86_real_bounds_enable), a
         call    x86_mem_init
 
         ; Copy main guest program to physical 0000:5002.
@@ -147,6 +149,27 @@ x86_real_copy_loop:
 ; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
 ; OUT A=byte; guest IP advances only after a successful memory read.
 x86_real_fetch8:
+        ld      a, (x86_real_bounds_enable)
+        or      a
+        jr      z, .fetch_unbounded
+        ld      hl, (x86_reg_cs)
+        ld      a, h
+        or      l
+        jp      nz, x86_real_fetch_out_of_range
+        ld      hl, (x86_reg_ip)
+        ld      de, #5002
+        or      a
+        sbc     hl, de
+        jp      c, x86_real_fetch_out_of_range
+        ld      hl, (x86_real_task_end)
+        ld      de, (x86_reg_ip)
+        or      a
+        sbc     hl, de
+        jp      c, x86_real_fetch_out_of_range
+        ld      a, h
+        or      l
+        jp      z, x86_real_fetch_out_of_range
+.fetch_unbounded:
         ld      hl, (x86_reg_ip)
         ld      (x86_mem_offset_work), hl
         ld      hl, (x86_reg_cs)
@@ -160,6 +183,12 @@ x86_real_fetch8:
         ld      (x86_reg_ip), hl
         pop     af
         or      a
+        ret
+
+x86_real_fetch_out_of_range:
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
         ret
 
 x86_real_execute:
@@ -332,6 +361,8 @@ x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
 x86_real_imm_low:    db 0
 x86_real_int_vector: db 0
+x86_real_bounds_enable: db 0
+x86_real_task_end: dw 0
 
 x86_guest_main_image:
         db #B8,#00,#00,#CD,#20,#F4
