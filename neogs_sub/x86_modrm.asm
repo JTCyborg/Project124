@@ -19,6 +19,13 @@ x86_decode_modrm16:
         ld      (x86_modrm_mod), a
 
         ld      a, (x86_modrm_byte)
+        and     #38
+        srl     a
+        srl     a
+        srl     a
+        ld      (x86_modrm_reg), a
+
+        ld      a, (x86_modrm_byte)
         and     7
         ld      (x86_modrm_rm), a
 
@@ -208,6 +215,7 @@ x86_reg_flags: dw 0
 x86_modrm_byte: db 0
 x86_modrm_mod: db 0
 x86_modrm_rm: db 0
+x86_modrm_reg: db 0
 x86_ea_is_reg: db 0
 x86_ea_reg: db 0
 x86_ea_offset: dw 0
