@@ -27,6 +27,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "zx_main/driver_cmos.asm",
                     "zx_main/log_debug.asm",
                     "zx_main/display.asm",
+                    "zx_main/bios_console.asm",
                     "zx_main/ui_engine.asm",
                     "zx_main/ui_panels.asm",
                     "zx_main/file_utils.asm",
@@ -177,6 +178,7 @@ START_APPLICATION:
         MACRO_EF_HEX16  hl
         MACRO_EF_CHAR   13
         MACRO_EF_STRING msg_stage4
+        call    BIOS_DebugConsole_Init
 
         ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
         ld      hl, task_filename
@@ -236,6 +238,7 @@ msg_stage2_bootstrap:
         
         INCLUDE "display.asm"       ; Модуль низкоуровневого вывода знакомест
         INCLUDE "ui_engine.asm"     ; Модуль прошивки шрифтов и скроллера
+        INCLUDE "bios_console.asm"  ; 42-column 6x8 BIOS debug console
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
