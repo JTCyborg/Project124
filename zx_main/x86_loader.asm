@@ -350,8 +350,8 @@ P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
 P124_msg_ipc_edge_start:     defb "[IPC TEST] Running 5 interpreter edge cases through DMA.", 13, 0
 P124_msg_ipc_edge_pass:      defb "[IPC TEST] PASS: 5 interpreter edge cases; DMA/IPC stable.", 13, 0
 P124_msg_ipc_edge_fail:      defb "[IPC TEST] FAIL: interpreter edge-case or repeated DMA test.", 13, 0
-P124_msg_memtest_start:      defb "[MEM] Testing 64 x 16 KiB NeoGS pages for x86 RAM...", 13, 0
-P124_msg_memtest_pass:       defb "[MEM] PASS: all 64 x86 RAM pages verified.", 13, 0
+P124_msg_memtest_start:      defb "[MEM] Testing 64 x 16 KiB page mappings at both boundaries...", 13, 0
+P124_msg_memtest_pass:       defb "[MEM] PASS: 64 page mappings and 128 boundary bytes verified.", 13, 0
 P124_msg_memtest_fail:       defb "[MEM] FAIL: status / phase:page = ", 0
 P124_msg_memtest_transport_fail: defb "[MEM] FAIL: NeoGS memory-test command/result timeout.", 13, 0
 P124_msg_diag_all_pass:      defb "[DIAG] PASS: all NeoGS firmware diagnostics returned verified results.", 13, 0
