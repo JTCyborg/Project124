@@ -243,66 +243,6 @@ BIOS_DebugConsole_PrintChar::
         pop     af
         ret
 
-; Scroll test: output 30 consecutive rows, each containing 42 copies
-; of one printable character. The console's normal end-of-line wrap drives
-; scrolling after row 12; the final visible screen should contain rows 19-30.
-BIOS_DebugConsole_TestPattern::
-        call    BIOS_DebugConsole_Clear
-        xor     a
-        ld      (bios_dbg_test_row), a
-        ld      a, 'A'
-        ld      (bios_dbg_test_char), a
-
-.test_row:
-        xor     a
-        ld      (bios_dbg_test_col), a
-        ld      (bios_dbg_no_wrap), a
-        ld      b, BIOS_DEBUG_COLUMNS
-
-.test_char:
-        ; Suppress only the final wrap, leaving all 12 completed rows visible.
-        ld      a, (bios_dbg_test_row)
-        cp      29
-        jr      nz, .emit_char
-        ld      a, (bios_dbg_test_col)
-        cp      BIOS_DEBUG_COLUMNS - 1
-        jr      nz, .emit_char
-        ld      a, 1
-        ld      (bios_dbg_no_wrap), a
-.emit_char:
-        ld      a, (bios_dbg_test_char)
-        ; Preserve B: it is the 42-character loop counter.
-        push    bc
-        ld      bc, #00EF
-        out     (c), a
-        pop     bc
-        call    BIOS_DebugConsole_PrintChar
-        ld      a, (bios_dbg_test_col)
-        inc     a
-        ld      (bios_dbg_test_col), a
-        djnz    .test_char
-
-        ; The console has auto-wrapped after character 42. Add CR/LF only
-        ; to the emulator log so each test row is readable there as well.
-        ld      a, 13
-        out     (#EF), a
-        ld      a, 10
-        out     (#EF), a
-
-        ld      a, (bios_dbg_test_row)
-        inc     a
-        ld      (bios_dbg_test_row), a
-        cp      30
-        jr      nc, .test_done
-        ld      a, (bios_dbg_test_char)
-        inc     a
-        ld      (bios_dbg_test_char), a
-        jr      .test_row
-.test_done:
-        xor     a
-        ld      (bios_dbg_no_wrap), a
-        ret
-
 ; IN: HL=16-bit value. Render four hexadecimal digits in the 6x8 console.
 BIOS_DebugConsole_PrintHex16::
         push    af
@@ -381,6 +321,3 @@ bios_dbg_mask:      db 0
 bios_dbg_font_ptr:  dw 0
 bios_dbg_clear_y:   db 0
 bios_dbg_no_wrap:   db 0
-bios_dbg_test_row:  db 0
-bios_dbg_test_col:  db 0
-bios_dbg_test_char: db 0
