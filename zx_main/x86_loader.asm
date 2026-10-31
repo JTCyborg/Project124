@@ -336,7 +336,7 @@ EXECUTE_X86_FILE_STAGE::
         ; -------------------------------------------------------------
         ; Stage 5D: execute and fetch framed result.
         ; -------------------------------------------------------------
-        call    neogs_run_and_get_result
+        call    neogs_run_x86_real_and_get_result
         jp      c, .result_timeout
 
         MACRO_EF_STRING P124_msg_x86_result_ready
@@ -607,6 +607,14 @@ neogs_send_dma_block:
 ; A5 signature, status, AX low, AX high.
 neogs_run_and_get_result:
         ld      a, CMD_RUN_X86
+        out     (GSCOM), a
+        call    neogs_wait_run_done_with_console
+        ret     c
+        jp      neogs_get_result_frame
+
+; Execute the actual TR-DOS task with the CS:IP real-mode core.
+neogs_run_x86_real_and_get_result:
+        ld      a, CMD_RUN_X86_REAL
         out     (GSCOM), a
         call    neogs_wait_run_done_with_console
         ret     c
