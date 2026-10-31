@@ -114,24 +114,40 @@ bios_post:
         call    bios_write_byte
         jp      c, bios_post_fail_6
 
-        ; Read-back: IVT boundary bytes and selected BDA profile fields.
-        ld      hl, #0000
-        call    bios_read_byte
+        ; Read back every IVT byte, then verify the published BDA profile.
+        call    bios_verify_ivt
         jp      c, bios_post_fail_7
-        or      a
-        jp      nz, bios_post_fail_7
-        ld      hl, #03FF
-        call    bios_read_byte
-        jp      c, bios_post_fail_7
-        or      a
-        jp      nz, bios_post_fail_7
 
+        ld      hl, #0410
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #0411
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
         ld      hl, #0413
         ld      a, #80
         call    bios_expect_byte
         jp      c, bios_post_fail_8
         ld      hl, #0414
         ld      a, #02
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #041A
+        ld      a, #1E
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #041B
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #041C
+        ld      a, #1E
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #041D
+        xor     a
         call    bios_expect_byte
         jp      c, bios_post_fail_8
         ld      hl, #0449
@@ -142,8 +158,32 @@ bios_post:
         ld      a, BIOS_TEXT_COLUMNS
         call    bios_expect_byte
         jp      c, bios_post_fail_8
+        ld      hl, #044B
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #044C
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #044D
+        ld      a, #10
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #0462
+        xor     a
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
         ld      hl, #0484
         ld      a, BIOS_TEXT_ROWS - 1
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #0485
+        ld      a, #10
+        call    bios_expect_byte
+        jp      c, bios_post_fail_8
+        ld      hl, #0486
+        xor     a
         call    bios_expect_byte
         jp      c, bios_post_fail_8
 
@@ -180,6 +220,36 @@ bios_clear_ivt_bda:
         or      l
         jr      nz, .bios_clear_loop
         or      a
+        ret
+
+; Verify all 1024 bytes of the IVT are zero.
+bios_verify_ivt:
+        ld      hl, BIOS_IVT_BASE
+        ld      (bios_verify_address), hl
+        ld      hl, BIOS_IVT_SIZE
+        ld      (bios_verify_remaining), hl
+.bios_verify_loop:
+        ld      hl, (bios_verify_address)
+        ld      (x86_mem_addr), hl
+        xor     a
+        ld      (x86_mem_addr+2), a
+        call    x86_mem_read8
+        ret     c
+        or      a
+        jr      nz, .bios_verify_failed
+        ld      hl, (bios_verify_address)
+        inc     hl
+        ld      (bios_verify_address), hl
+        ld      hl, (bios_verify_remaining)
+        dec     hl
+        ld      (bios_verify_remaining), hl
+        ld      a, h
+        or      l
+        jr      nz, .bios_verify_loop
+        or      a
+        ret
+.bios_verify_failed:
+        scf
         ret
 
 ; IN: HL=16-bit physical address, A=value. Carry on memory error.
@@ -246,4 +316,9 @@ bios_post_fail:
 
 bios_clear_address:   dw 0
 bios_clear_remaining: dw 0
+bios_verify_address:  dw 0
+bios_verify_remaining:dw 0
 bios_work_value:      db 0
+
+        ASSERT BIOS_IVT_BASE + BIOS_IVT_SIZE = BIOS_BDA_BASE
+        ASSERT BIOS_BDA_BASE + BIOS_BDA_SIZE = BIOS_LOW_MEMORY_END
