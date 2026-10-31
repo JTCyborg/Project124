@@ -276,8 +276,11 @@ BIOS_DebugConsole_TestPattern::
         ld      (bios_dbg_no_wrap), a
 .emit_char:
         ld      a, (bios_dbg_test_char)
+        ; Preserve B: it is the 42-character loop counter.
+        push    bc
         ld      bc, #00EF
         out     (c), a
+        pop     bc
         call    BIOS_DebugConsole_PrintChar
         xor     a
         ld      (bios_dbg_no_wrap), a
