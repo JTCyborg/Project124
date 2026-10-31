@@ -414,7 +414,8 @@ neo_tx_byte:       db 0
 neo_dma_error:     db 0
 neo_debug_length:  db 0
 neo_debug_remaining: db 0
-neo_debug_buffer:  ds 255, 0
+neo_debug_buffer:
+        BLOCK   255, 0
 neo_startup_message:
         db "[NEOGS] STARTUP OK: LOADED FIRMWARE EXECUTION STARTED.", 13, 0
 neo_debug_msg_x86_started: db "[NEOGS] X86 PAYLOAD EXECUTION STARTED.", 13, 0
