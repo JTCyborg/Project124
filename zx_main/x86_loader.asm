@@ -161,6 +161,23 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_test_pass
 
         ; -------------------------------------------------------------
+        ; Stage 2B: execute a guest INT 20h handler through CS:IP, then IRET.
+        ; The guest handler changes AX and returns to the caller's HLT.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_int_guest_start
+        call    neogs_int_guest_test_and_get_result
+        jp      c, .int_guest_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .int_guest_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #1A02
+        or      a
+        sbc     hl, de
+        jp      nz, .int_guest_fail
+        MACRO_EF_STRING P124_msg_int_guest_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -388,6 +405,24 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.int_guest_transport_fail:
+        MACRO_EF_STRING P124_msg_int_guest_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.int_guest_fail:
+        MACRO_EF_STRING P124_msg_int_guest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -557,6 +592,14 @@ neogs_int_test_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run a real guest INT/IRET handler test and fetch the result frame.
+neogs_int_guest_test_and_get_result:
+        ld      a, CMD_INT_GUEST_TEST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -609,6 +652,10 @@ P124_msg_int_test_start: DEFB "[INT] Stage 2A: checking IVT lookup and 8086 inte
 P124_msg_int_test_pass: DEFB "[INT] PASS: FLAGS/CS/IP frame, IF/TF clear, IRET restore and SP balance.", 13, 0
 P124_msg_int_test_transport_fail: DEFB "[INT] FAIL: interrupt test command/result timeout.", 13, 0
 P124_msg_int_test_fail: DEFB "[INT] FAIL: status/detail = ", 0
+P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler and IRET...", 13, 0
+P124_msg_int_guest_pass: DEFB "[INT] PASS: guest handler executed through CS:IP; IRET returned to caller.", 13, 0
+P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
+P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
