@@ -354,8 +354,11 @@ EXECUTE_X86_FILE_STAGE::
         jp      nz, .interpreter_error
 
         ld      hl, (P124_X86_RESULT_AX)
-        call    Util_PrintHex16Screen
-        call    LOG_CloseActiveLine
+        call    BIOS_DebugConsole_PrintHex16
+        ld      a, 13
+        call    BIOS_DebugConsole_PrintChar
+        ld      a, 10
+        call    BIOS_DebugConsole_PrintChar
         or      a
         jp      .loader_restore_stack
 
