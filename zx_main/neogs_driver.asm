@@ -172,9 +172,12 @@ upload_firmware::
         jr      .firmware_stream_loop
 
 .firmware_stream_done:
-        ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+        ; Phase 9: the firmware's FIRST output is its startup text. Forward
+        ; each received byte to the host debug port #EF, then receive ACK #A2.
         ld      a, 9
         ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_startup_text
+        jp      c, .upload_failed
         call    gs_boot_receive_data_byte
         jp      c, .upload_failed
         cp      NGS_FIRMWARE_READY_ACK
@@ -328,6 +331,17 @@ neogs_load_trdos_file::
         ld      (neo_trdos_error), a
         scf
         ret
+
+; Receive the NUL-terminated startup message sent by the newly started
+; NeoGS firmware before its #A2 ready ACK. Every character is mirrored to #EF.
+gs_boot_receive_startup_text:
+.startup_rx_loop:
+        call    gs_boot_receive_data_byte
+        ret     c
+        or      a
+        ret     z
+        out     (#EF), a
+        jr      .startup_rx_loop
 
 ; -------------------------------------------------------------------------
 ; Standard GS105a ROM transport primitives.
@@ -548,7 +562,30 @@ neogs_wait_data_byte::
         or      a
         ret
 
+; Drain the NeoGS-local debug queue and mirror its bytes to the host #EF port.
+; Response: one-byte length followed by that many characters, then CBIT clear.
+neogs_drain_debug::
+        ld      a, CMD_DEBUG_DRAIN
+        out     (GSCOM), a
+        call    neogs_wait_data_byte
+        ret     c
+        ld      (neo_debug_rx_remaining), a
+.debug_rx_loop:
+        ld      a, (neo_debug_rx_remaining)
+        or      a
+        jr      z, .debug_rx_done
+        call    neogs_wait_data_byte
+        ret     c
+        out     (#EF), a
+        ld      a, (neo_debug_rx_remaining)
+        dec     a
+        ld      (neo_debug_rx_remaining), a
+        jr      .debug_rx_loop
+.debug_rx_done:
+        jp      neogs_wait_command_done
+
 ; Stage 2 diagnostics consumed by zx_main/main.asm.
+neo_debug_rx_remaining: db 0
 neo_fw_source:          dw 0
 neo_fw_length:          dw 0
 neo_fw_bootstrap_address: dw #4000
