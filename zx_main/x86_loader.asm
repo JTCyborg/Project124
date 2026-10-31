@@ -517,7 +517,7 @@ neogs_get_result_frame:
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
 P124_msg_memtest_start: DEFB "[MEM] Testing x86 RAM pages and 8086 word/segment addressing...", 13, 0
 P124_msg_memtest_pass:  DEFB "[MEM] PASS: 64 pages + word access + segment/offset wrap verified.", 13, 0
-P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / phase:page = ", 0
+P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
         defb    #B8, #AA, #BB, #40, #90, #F4
