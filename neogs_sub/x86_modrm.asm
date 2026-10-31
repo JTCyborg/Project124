@@ -184,9 +184,12 @@ x86_modrm_fetch_disp16:
         cp      2
         jp      c, x86_modrm_truncated
 .enough:
-        ld      l, (bc)
+        ; Z80 supports (BC) indirect addressing only through A.
+        ld      a, (bc)
+        ld      l, a
         inc     bc
-        ld      h, (bc)
+        ld      a, (bc)
+        ld      h, a
         inc     bc
         or      a
         ret
