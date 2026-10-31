@@ -2,82 +2,109 @@
 
 ## Stage 1: low-memory foundation and POST
 
-Implemented in `bios_core.asm`, called by the NeoGS command `CMD_BIOS_POST`
-after the physical x86 RAM mapping test.
+Implemented in `bios_core.asm`, called by `CMD_BIOS_POST` after the physical
+x86 RAM mapping test.
 
-### Current behavior
+POST initializes the 1 MiB real-mode memory backend, clears IVT/BDA, publishes
+the initial 640 KiB / 80x25 text-mode profile, verifies the IVT and selected
+BDA fields, then installs IVT vector 10h as a firmware service trap at
+`0000:5200`. The POST result remains status 0 / AX=`B105h`.
 
-1. Enables the existing 1 MiB x86 physical-memory mapping.
-2. Clears physical addresses `00000h..004FFh`:
-   - `00000h..003FFh`: 256-entry Interrupt Vector Table (IVT).
-   - `00400h..004FFh`: BIOS Data Area (BDA).
-3. Publishes the initial BDA profile:
-   - conventional memory: 640 KiB at BDA `0413h`;
-   - keyboard buffer head/tail: `001Eh`;
-   - video mode: `03h`;
-   - text columns: 80;
-   - text page size: 4096 bytes;
-   - active page: 0;
-   - text rows: 25;
-   - character height: 16.
-4. Reads back all 1024 IVT bytes and the published BDA profile fields.
-5. Returns the normal P124 result frame with status 0 and AX signature `B105h`
-   on success. POST errors use status 7 and AX `B1xxh`.
+The 80x25 values are the initial POST profile. When a guest calls INT 10h,
+AH=00h, AL=03h, Stage 3A changes the active project console profile to 42x12.
 
-The host starts this POST through the existing command/data protocol. The
-DMA/IPC transfer implementation and the external X86T test container are not
-changed by this stage.
+## Stage 2A: real-mode interrupt frame
 
-## Explicit limitations
+`x86_interrupt.asm` implements the architectural INT/IRET frame:
 
-Stage 1 is a memory-layout foundation, not a bootable IBM PC BIOS yet:
+- `x86_int_enter` reads the IVT entry, pushes FLAGS, CS, then IP, clears IF
+  and TF, and loads the target CS:IP.
+- `x86_iret_return` restores IP, CS and FLAGS from SS:SP.
+- The self-test installs a temporary vector 20h, checks the exact frame,
+  verifies IF/TF clearing and full register/stack restoration, then removes
+  the temporary vector.
 
-- IVT is cleared but service vectors are not installed.
-- No executable BIOS ROM is mapped at `F0000h..FFFFFh`.
-- ROM write protection is not implemented.
-- x86 `INT` / `IRET` execution semantics are not implemented by this stage.
-- INT 10h, 13h, 16h and 1Ah services are not yet available.
-- Video, keyboard, disk and RTC device backends are not yet exposed through
-  guest-visible BIOS calls.
+Host command: `08h`. Expected result: status 0 / AX=`1A01h`.
 
-These are deliberate boundaries. The next stage must first implement and
-test the 8086 interrupt entry/return path and the guest stack semantics. Only
-then should IVT entries point to BIOS service handlers.
+## Stage 2B: guest handler execution
 
-## Memory map proposal
+`x86_real_mode.asm` adds a separate CS:IP fetch/execute path and executes
+a guest INT 20h handler through the real-mode memory backend. The limited
+instruction set at this stage includes NOP, INC AX, MOV AX,imm16, HLT,
+INT imm8, INT 3 and IRET.
 
-| Physical range | Purpose | Stage 1 status |
+The self-test runs the guest caller at `0000:5002` and handler at
+`0000:5100`, checks AX=`1234h`, IRET return IP=`5008h`, FLAGS and SP.
+Host command: `09h`. Expected result: status 0 / AX=`1A02h`.
+
+## Stage 3A: BIOS INT 10h text services
+
+Implemented in `bios_video.asm`. The guest executes INT 10h through the
+normal IVT lookup and interrupt stack frame. The service itself is a firmware
+trap; it returns through the normal IRET primitive. This is not an executable
+IBM PC BIOS ROM.
+
+Supported functions:
+
+| AH | Function | Project behavior |
 |---|---|---|
-| `00000h..003FFh` | IVT | Cleared / reserved |
-| `00400h..004FFh` | BDA | Initialized / selected fields verified |
-| `00500h..9FFFFh` | Conventional RAM profile | Reserved by map; allocator not implemented |
-| `A0000h..BFFFFh` | Video memory | Reserved only |
-| `C0000h..EFFFFh` | Option ROM / device window | Reserved only |
-| `F0000h..FFFFFh` | P124 BIOS ROM | Reserved only |
+| `00h` | Set video mode | Supports AL=`03h`; selects the project 42x12 console and clears it |
+| `0Fh` | Get video mode | Returns AL=`03h`, AH=42 columns, BH=0 |
+| `02h` | Set cursor | Page zero only; DH=row 0..11, DL=column 0..41 |
+| `03h` | Get cursor | Returns DH=row, DL=column for page zero |
+| `0Eh` | Teletype output | Sends AL through the host stream; supports printable ASCII, CR, LF, BS and BEL |
 
-The physical memory backend still maps the complete 1 MiB as RAM. The table
-above is the guest-visible layout contract being established; it is not yet
-hardware-enforced memory protection or ROM shadowing.
+The project console intentionally differs from standard IBM mode 03h geometry:
+it uses 42 columns x 12 rows, 6x8 glyphs, and the existing lower Spectrum
+debug window. The BDA mode/column/page/row/character-height fields are updated
+to match this project profile when AH=00h, AL=03h is called.
 
+### Host display and emulator log
 
-## Interrupt engine — Stage 2A
+The NeoGS firmware sends teletype bytes over the existing DBIT/GSDAT channel
+while the Spectrum host polls the channel. Each nonzero character is sent to
+printer/debug port `#EF` and drawn in the existing lower debug window.
 
-The sibling module `neogs_sub/x86_interrupt.asm` implements the real-mode
-interrupt frame primitives independently of the legacy opcode fetch loop:
+The new `zx_main/bios_console.asm` renderer uses `font68.bin` (768 bytes,
+96 glyphs x 8 scanlines). Six pixels are packed per character, giving exactly
+42 columns across 252 of the Spectrum's 256 horizontal pixels. The console
+has 12 rows and uses the existing lower-window scroll path. The existing
+32-column Commander renderer is not replaced.
 
-- `x86_int_enter` reads the four-byte IVT entry, pushes FLAGS, CS, then IP
-  (so the final stack top is IP), clears IF and TF, and loads the target CS:IP.
-- `x86_iret_return` restores IP, CS, and FLAGS from SS:SP and advances SP by
-  six bytes.
-- `x86_int_self_test` installs a temporary vector 20h, checks the exact
-  frame bytes and live register state, executes the IRET primitive, checks
-  full restoration, and clears the temporary vector.
+Stream control frames are:
 
-The host runs this test with command 08h after BIOS Stage 1 POST. Expected
-result is status 0 / AX=1A01h and the host log line begins `[INT] PASS`.
+- `00 00`: clear the lower debug console;
+- `00 01 row col`: set the lower debug-console cursor;
+- any nonzero byte: teletype character.
 
-**Scope boundary:** Stage 2A validates the interrupt frame engine, not guest
-instruction dispatch. The current minimal interpreter still does not decode
-CDh (INT imm8), CCh (INT 3), or CFh (IRET), and this test does not execute a
-guest handler. Stage 2B must integrate those opcodes with a segmented x86
-instruction-fetch path before BIOS vectors or INT services are installed.
+Host command `0Ah` runs the Stage 3A guest self-test. It exercises all five
+INT 10h functions, cursor round-trip, 43-character wrap, CR/LF, and the live
+stream-to-port-`#EF` / 6x8-screen path. Expected result: status 0 /
+AX=`1A10h`, DX=`020Fh`, BDA cursor=`020Fh`.
+
+## Real-mode TR-DOS task execution
+
+Host command `0Bh` executes the loaded TR-DOS payload through the CS:IP
+executor. The payload is copied from the DMA window into the x86 physical
+memory backend at `0000:5002`. Instruction fetches are bounded to the loaded
+payload and the current task entry uses CS=0.
+
+The legacy linear interpreter remains available for the transport/edge-case
+diagnostics. The real-mode executor currently supports only a small instruction
+subset; it is not a complete 8086 emulator.
+
+## Memory map and limitations
+
+| Physical range | Purpose | Status |
+|---|---|---|
+| `00000h..003FFh` | IVT | Cleared at POST; vector 10h installed |
+| `00400h..004FFh` | BDA | Initial profile verified; INT 10h updates text fields |
+| `00500h..9FFFFh` | Conventional RAM | Memory backend available; allocator not implemented |
+| `A0000h..BFFFFh` | Video memory | Reserved; not used by the project console |
+| `C0000h..EFFFFh` | Option ROM/device window | Reserved only |
+| `F0000h..FFFFFh` | P124 BIOS ROM | Reserved; no executable ROM mapped |
+
+The physical memory backend still maps the complete 1 MiB as RAM. There is no
+ROM write protection, no complete IBM PC BIOS ROM, and no full 8086 execution.
+INT 13h, INT 16h and INT 1Ah are not implemented. The current video backend
+supports only the listed INT 10h functions and page zero.
