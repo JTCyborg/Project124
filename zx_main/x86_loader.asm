@@ -233,6 +233,8 @@ neogs_run_and_get_result:
         out     (GSCOM), a
         call    neogs_wait_command_done_long
         ret     c
+        call    neogs_drain_debug
+        ret     c
         jp      neogs_get_result_frame
 
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
@@ -240,6 +242,8 @@ neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
         out     (GSCOM), a
         call    neogs_wait_command_done_long
+        ret     c
+        call    neogs_drain_debug
         ret     c
 
 neogs_get_result_frame:
