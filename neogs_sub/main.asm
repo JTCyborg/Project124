@@ -229,12 +229,14 @@ execute_neogs_x86:
 
         ld      hl, (saved_z80_ax)
         ld      (saved_x86_ax), hl
+        ld      (x86_last_ip), bc
         ret
 
 .invalid_x86_length:
         ld      hl, #FFFF
         ld      (saved_z80_ax), hl
         ld      (saved_x86_ax), hl
+        ld      (x86_last_ip), hl
         ld      a, 4
         ld      (x86_exit_status), a
         ret
@@ -244,6 +246,8 @@ execute_neogs_x86:
 ; Result is returned through the existing CMD_GET_STATUS frame.
 ; -------------------------------------------------------------------------
 command_mem_test:
+        ld      hl, 0
+        ld      (x86_last_ip), hl
         ld      hl, neo_debug_msg_memtest_started
         call    neo_debug_puts
         call    x86_mem_test
@@ -292,9 +296,8 @@ command_debug_drain:
         jp      main_loop
 
 ; -------------------------------------------------------------------------
-; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
-;   A5 signature, exit status, AX low, AX high.
-; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
+; CMD_GET_STATUS — structured frame:
+;   A5 signature, exit status, AX low/high, x86 IP low/high.
 ; -------------------------------------------------------------------------
 command_get_status:
         ld      a, NGS_RESULT_SIGNATURE
@@ -306,6 +309,15 @@ command_get_status:
         jr      c, .status_tx_failed
 
         ld      hl, (saved_x86_ax)
+        ld      a, l
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      a, h
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      hl, (x86_last_ip)
         ld      a, l
         call    neo_send_data_byte
         jr      c, .status_tx_failed
@@ -424,6 +436,7 @@ neo_debug_msg_memtest_pass: db "[NEOGS] MEMORY TEST PASS.", 13, 0
 neo_debug_msg_memtest_fail: db "[NEOGS] MEMORY TEST FAIL.", 13, 0
 saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
+x86_last_ip:       dw 0
 
 ; This code is copied to $4000 during startup. Its OUT changes the ROM map,
 ; but the following JP is still fetched from RAM because PC remains in $4000.
