@@ -182,7 +182,7 @@ START_APPLICATION:
         MACRO_EF_STRING msg_stage4
         call    BIOS_DebugConsole_Init
 
-        ; Full-screen 42x12 glyph test through the active 6x8 console renderer.
+        ; 30-row scroll test through the active 6x8 console renderer.
         MACRO_EF_STRING msg_bios_glyph_test
         call    BIOS_DebugConsole_TestPattern
 
@@ -215,7 +215,7 @@ START_APPLICATION:
         jr      .x86_stage_failed_halt
 
 msg_bios_glyph_test:
-        DEFB "[BIOS] 42x12 GLYPH TEST: rows A-L, 42 columns each.", 13, 0
+        DEFB "[BIOS] SCROLL TEST: 30 rows x 42 chars (A-^).", 13, 0
 
 msg_stage5_fail:
         DEFB "[CORE] ERROR: x86 task pipeline failed; startup halted.", 13, 0
