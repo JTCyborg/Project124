@@ -235,7 +235,7 @@ PrintDiskDirectory.empty_slot: EQU 0x0000812C
 PrintDiskDirectory.invalid_slot: EQU 0x0000811F
 PrintDiskDirectory.loop_slots: EQU 0x0000804A
 PrintDiskDirectory.print_name: EQU 0x00008089
-ProgramEnd: EQU 0x000092CC
+ProgramEnd: EQU 0x000092D3
 RANDOMIZE: EQU 0x000000F9
 READ_CURRENT_TIME: EQU 0x00006595
 READ_CURRENT_TIME.wait_rtc: EQU 0x0000659C
@@ -329,7 +329,7 @@ neo_fw_rom_ram_mid: EQU 0x00006863
 neo_fw_source: EQU 0x0000685A
 neo_fw_timeout_phase: EQU 0x0000686C
 neo_fw_tx_byte: EQU 0x00006866
-neogs_binary_end: EQU 0x000092CC
+neogs_binary_end: EQU 0x000092D3
 neogs_binary_start: EQU 0x00008284
 neogs_bios_post_and_get_result: EQU 0x00006D80
 neogs_bootstrap_end: EQU 0x00008284

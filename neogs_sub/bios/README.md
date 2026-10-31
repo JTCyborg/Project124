@@ -35,14 +35,14 @@ Stage 1 is a memory-layout foundation, not a bootable IBM PC BIOS yet:
 - IVT is cleared but service vectors are not installed.
 - No executable BIOS ROM is mapped at `F0000h..FFFFFh`.
 - ROM write protection is not implemented.
-- BIOS service vectors and BIOS calls are not installed by Stage 1.
+- x86 `INT` / `IRET` execution semantics are not implemented by this stage.
 - INT 10h, 13h, 16h and 1Ah services are not yet available.
 - Video, keyboard, disk and RTC device backends are not yet exposed through
   guest-visible BIOS calls.
 
-These are deliberate boundaries. Stage 2A/2B below add and test the interrupt
-entry/return path; BIOS service vectors remain deferred until a broader guest
-instruction set and device interfaces are ready.
+These are deliberate boundaries. The next stage must first implement and
+test the 8086 interrupt entry/return path and the guest stack semantics. Only
+then should IVT entries point to BIOS service handlers.
 
 ## Memory map proposal
 
@@ -76,46 +76,8 @@ interrupt frame primitives independently of the legacy opcode fetch loop:
 The host runs this test with command 08h after BIOS Stage 1 POST. Expected
 result is status 0 / AX=1A01h and the host log line begins `[INT] PASS`.
 
-**Scope boundary:** Stage 2A validates the frame primitives, not guest
-instruction dispatch. The legacy four-opcode DMA interpreter remains unchanged
-and still does not decode CDh, CCh or CFh. Stage 2B below adds a separate,
-small CS:IP execution slice for those instructions.
-
-
-## Guest interrupt execution — Stage 2B
-
-The new `neogs_sub/x86_real_mode.asm` module adds a separate real-mode
-instruction-fetch path using the architectural `CS:IP` registers and the
-existing 20-bit physical-memory backend. Its deliberately limited instruction
-set is:
-
-- `90` NOP
-- `40` INC AX
-- `B8 iw` MOV AX, immediate word
-- `F4` HLT
-- `CD ib` INT immediate vector
-- `CC` INT 3
-- `CF` IRET
-
-The Stage 2B self-test copies a guest caller to physical address `0000:5002`
-and a guest handler to `0000:5100`, installs IVT vector 20h, and executes:
-
-```asm
-mov ax, 0000h
-int 20h
-hlt
-
-handler:
-mov ax, 1234h
-iret
-```
-
-It checks that the handler actually executes, AX becomes `1234h`, control
-returns to the caller's HLT at IP `5008h`, FLAGS are restored to `0302h`,
-and SP returns to `0100h`. The temporary IVT entry is cleared afterward.
-The host invokes this with command `09h`; expected result is status 0 /
-AX=`1A02h`.
-
-This is an executable integration test, not full 8086 compatibility. The
-instruction set, flag side effects, exception behavior, prefix handling,
-general register operations and BIOS service routines remain incomplete.
+**Scope boundary:** Stage 2A validates the interrupt frame engine, not guest
+instruction dispatch. The current minimal interpreter still does not decode
+CDh (INT imm8), CCh (INT 3), or CFh (IRET), and this test does not execute a
+guest handler. Stage 2B must integrate those opcodes with a segmented x86
+instruction-fetch path before BIOS vectors or INT services are installed.

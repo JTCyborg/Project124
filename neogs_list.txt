@@ -2157,18 +2157,18 @@
  20++ 0E29 CD C2 02             call    x86_mem_init
  21++ 0E2C
  22++ 0E2C                      ; Copy main guest program to physical 0000:5002.
- 23++ 0E2C 21 3E 10             ld      hl, x86_guest_main_image
+ 23++ 0E2C 21 45 10             ld      hl, x86_guest_main_image
  24++ 0E2F 11 02 50             ld      de, #5002
  25++ 0E32 01 06 00             ld      bc, x86_guest_main_image_end - x86_guest_main_image
  26++ 0E35 CD 07 0F             call    x86_real_copy_image
- 27++ 0E38 DA 13 10             jp      c, x86_real_test_fail_1
+ 27++ 0E38 DA 19 10             jp      c, x86_real_test_fail_1
  28++ 0E3B
  29++ 0E3B                      ; Copy interrupt handler to physical 0000:5100.
- 30++ 0E3B 21 44 10             ld      hl, x86_guest_handler_image
+ 30++ 0E3B 21 4B 10             ld      hl, x86_guest_handler_image
  31++ 0E3E 11 00 51             ld      de, #5100
  32++ 0E41 01 04 00             ld      bc, x86_guest_handler_image_end - x86_guest_handler_image
  33++ 0E44 CD 07 0F             call    x86_real_copy_image
- 34++ 0E47 DA 13 10             jp      c, x86_real_test_fail_1
+ 34++ 0E47 DA 19 10             jp      c, x86_real_test_fail_1
  35++ 0E4A
  36++ 0E4A                      ; Install IVT[20h] = 0000:5100.
  37++ 0E4A 21 00 00             ld      hl, 0
@@ -2178,7 +2178,7 @@
  41++ 0E56 21 00 51             ld      hl, #5100
  42++ 0E59 22 1B 05             ld      (x86_mem_word_value), hl
  43++ 0E5C CD FA 03             call    x86_mem_write16
- 44++ 0E5F DA 17 10             jp      c, x86_real_test_fail_2
+ 44++ 0E5F DA 1D 10             jp      c, x86_real_test_fail_2
  45++ 0E62 21 00 00             ld      hl, 0
  46++ 0E65 22 15 05             ld      (x86_mem_segment), hl
  47++ 0E68 21 82 00             ld      hl, #0082
@@ -2186,7 +2186,7 @@
  49++ 0E6E 21 00 00             ld      hl, 0
  50++ 0E71 22 1B 05             ld      (x86_mem_word_value), hl
  51++ 0E74 CD FA 03             call    x86_mem_write16
- 52++ 0E77 DA 17 10             jp      c, x86_real_test_fail_2
+ 52++ 0E77 DA 1D 10             jp      c, x86_real_test_fail_2
  53++ 0E7A
  54++ 0E7A                      ; Initialize guest architectural state.
  55++ 0E7A 21 00 00             ld      hl, 0
@@ -2210,39 +2210,39 @@
  73++ 0EB0 22 BB 08             ld      (x86_reg_flags), hl
  74++ 0EB3
  75++ 0EB3 CD 63 0F             call    x86_real_execute
- 76++ 0EB6 DA 1B 10             jp      c, x86_real_test_fail_3
+ 76++ 0EB6 DA 21 10             jp      c, x86_real_test_fail_3
  77++ 0EB9
  78++ 0EB9                      ; Handler's MOV AX,1234 must execute before guest IRET returns to HLT.
  79++ 0EB9 2A A1 08             ld      hl, (x86_reg_ax)
  80++ 0EBC 11 34 12             ld      de, #1234
  81++ 0EBF B7                   or      a
  82++ 0EC0 ED 52                sbc     hl, de
- 83++ 0EC2 C2 1F 10             jp      nz, x86_real_test_fail_4
+ 83++ 0EC2 C2 25 10             jp      nz, x86_real_test_fail_4
  84++ 0EC5
  85++ 0EC5                      ; Verify original control-flow context and stack were restored.
  86++ 0EC5 2A B3 08             ld      hl, (x86_reg_cs)
  87++ 0EC8 11 00 00             ld      de, 0
  88++ 0ECB B7                   or      a
  89++ 0ECC ED 52                sbc     hl, de
- 90++ 0ECE C2 23 10             jp      nz, x86_real_test_fail_5
+ 90++ 0ECE C2 29 10             jp      nz, x86_real_test_fail_5
  91++ 0ED1 2A B9 08             ld      hl, (x86_reg_ip)
  92++ 0ED4 11 08 50             ld      de, #5008
  93++ 0ED7 B7                   or      a
  94++ 0ED8 ED 52                sbc     hl, de
- 95++ 0EDA C2 23 10             jp      nz, x86_real_test_fail_5
+ 95++ 0EDA C2 29 10             jp      nz, x86_real_test_fail_5
  96++ 0EDD 2A A9 08             ld      hl, (x86_reg_sp)
  97++ 0EE0 11 00 01             ld      de, #0100
  98++ 0EE3 B7                   or      a
  99++ 0EE4 ED 52                sbc     hl, de
-100++ 0EE6 C2 23 10             jp      nz, x86_real_test_fail_5
+100++ 0EE6 C2 29 10             jp      nz, x86_real_test_fail_5
 101++ 0EE9 2A BB 08             ld      hl, (x86_reg_flags)
 102++ 0EEC 11 02 03             ld      de, #0302
 103++ 0EEF B7                   or      a
 104++ 0EF0 ED 52                sbc     hl, de
-105++ 0EF2 C2 23 10             jp      nz, x86_real_test_fail_5
+105++ 0EF2 C2 29 10             jp      nz, x86_real_test_fail_5
 106++ 0EF5
-107++ 0EF5 CD E8 0F             call    x86_real_clear_vector
-108++ 0EF8 DA 27 10             jp      c, x86_real_test_fail_6
+107++ 0EF5 CD EE 0F             call    x86_real_clear_vector
+108++ 0EF8 DA 2D 10             jp      c, x86_real_test_fail_6
 109++ 0EFB
 110++ 0EFB 21 02 1A             ld      hl, #1A02
 111++ 0EFE 22 B7 02             ld      (saved_x86_ax), hl
@@ -2253,32 +2253,32 @@
 116++ 0F07
 117++ 0F07              ; IN: HL=source in firmware, DE=physical x86 destination, BC=length.
 118++ 0F07              x86_real_copy_image:
-119++ 0F07 22 38 10             ld      (x86_real_copy_source), hl
-120++ 0F0A ED 53 3A 10          ld      (x86_real_copy_dest), de
-121++ 0F0E ED 43 3C 10          ld      (x86_real_copy_count), bc
+119++ 0F07 22 3E 10             ld      (x86_real_copy_source), hl
+120++ 0F0A ED 53 40 10          ld      (x86_real_copy_dest), de
+121++ 0F0E ED 43 42 10          ld      (x86_real_copy_count), bc
 122++ 0F12              x86_real_copy_loop:
-123++ 0F12 ED 4B 3C 10          ld      bc, (x86_real_copy_count)
+123++ 0F12 ED 4B 42 10          ld      bc, (x86_real_copy_count)
 124++ 0F16 78                   ld      a, b
 125++ 0F17 B1                   or      c
 126++ 0F18 C8                   ret     z
-127++ 0F19 2A 38 10             ld      hl, (x86_real_copy_source)
+127++ 0F19 2A 3E 10             ld      hl, (x86_real_copy_source)
 128++ 0F1C 7E                   ld      a, (hl)
 129++ 0F1D 32 12 05             ld      (x86_mem_value), a
-130++ 0F20 2A 3A 10             ld      hl, (x86_real_copy_dest)
+130++ 0F20 2A 40 10             ld      hl, (x86_real_copy_dest)
 131++ 0F23 22 0F 05             ld      (x86_mem_addr), hl
 132++ 0F26 AF                   xor     a
 133++ 0F27 32 11 05             ld      (x86_mem_addr+2), a
 134++ 0F2A CD F7 02             call    x86_mem_write8
 135++ 0F2D D8                   ret     c
-136++ 0F2E 2A 38 10             ld      hl, (x86_real_copy_source)
+136++ 0F2E 2A 3E 10             ld      hl, (x86_real_copy_source)
 137++ 0F31 23                   inc     hl
-138++ 0F32 22 38 10             ld      (x86_real_copy_source), hl
-139++ 0F35 2A 3A 10             ld      hl, (x86_real_copy_dest)
+138++ 0F32 22 3E 10             ld      (x86_real_copy_source), hl
+139++ 0F35 2A 40 10             ld      hl, (x86_real_copy_dest)
 140++ 0F38 23                   inc     hl
-141++ 0F39 22 3A 10             ld      (x86_real_copy_dest), hl
-142++ 0F3C 2A 3C 10             ld      hl, (x86_real_copy_count)
+141++ 0F39 22 40 10             ld      (x86_real_copy_dest), hl
+142++ 0F3C 2A 42 10             ld      hl, (x86_real_copy_count)
 143++ 0F3F 2B                   dec     hl
-144++ 0F40 22 3C 10             ld      (x86_real_copy_count), hl
+144++ 0F40 22 42 10             ld      (x86_real_copy_count), hl
 145++ 0F43 18 CD                jr      x86_real_copy_loop
 146++ 0F45
 147++ 0F45              ; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
@@ -2301,14 +2301,14 @@
 164++ 0F63
 165++ 0F63              x86_real_execute:
 166++ 0F63 21 20 00             ld      hl, X86_REAL_STEP_LIMIT
-167++ 0F66 22 36 10             ld      (x86_real_steps), hl
+167++ 0F66 22 3C 10             ld      (x86_real_steps), hl
 168++ 0F69              x86_real_next:
-169++ 0F69 2A 36 10             ld      hl, (x86_real_steps)
+169++ 0F69 2A 3C 10             ld      hl, (x86_real_steps)
 170++ 0F6C 7C                   ld      a, h
 171++ 0F6D B5                   or      l
-172++ 0F6E CA E1 0F             jp      z, x86_real_budget_fail
+172++ 0F6E CA E7 0F             jp      z, x86_real_budget_fail
 173++ 0F71 2B                   dec     hl
-174++ 0F72 22 36 10             ld      (x86_real_steps), hl
+174++ 0F72 22 3C 10             ld      (x86_real_steps), hl
 175++ 0F75
 176++ 0F75 CD 45 0F             call    x86_real_fetch8
 177++ 0F78 D8                   ret     c
@@ -2320,13 +2320,13 @@
 183++ 0F83 FE B8                cp      #B8
 184++ 0F85 CA B0 0F             jp      z, x86_real_mov_ax_imm16
 185++ 0F88 FE F4                cp      #F4
-186++ 0F8A CA DB 0F             jp      z, x86_real_hlt
+186++ 0F8A CA E1 0F             jp      z, x86_real_hlt
 187++ 0F8D FE CD                cp      #CD
-188++ 0F8F CA C0 0F             jp      z, x86_real_int_imm8
+188++ 0F8F CA C6 0F             jp      z, x86_real_int_imm8
 189++ 0F92 FE CC                cp      #CC
-190++ 0F94 CA CB 0F             jp      z, x86_real_int3
+190++ 0F94 CA D1 0F             jp      z, x86_real_int3
 191++ 0F97 FE CF                cp      #CF
-192++ 0F99 CA D4 0F             jp      z, x86_real_iret
+192++ 0F99 CA DA 0F             jp      z, x86_real_iret
 193++ 0F9C
 194++ 0F9C 3E 02                ld      a, 2
 195++ 0F9E 32 04 0C             ld      (x86_exit_status), a
@@ -2345,116 +2345,119 @@
 208++ 0FB0              x86_real_mov_ax_imm16:
 209++ 0FB0 CD 45 0F             call    x86_real_fetch8
 210++ 0FB3 D8                   ret     c
-211++ 0FB4 6F                   ld      l, a
-212++ 0FB5 CD 45 0F             call    x86_real_fetch8
-213++ 0FB8 D8                   ret     c
-214++ 0FB9 67                   ld      h, a
-215++ 0FBA 22 A1 08             ld      (x86_reg_ax), hl
-216++ 0FBD C3 69 0F             jp      x86_real_next
-217++ 0FC0
-218++ 0FC0              x86_real_int_imm8:
-219++ 0FC0 CD 45 0F             call    x86_real_fetch8
-220++ 0FC3 D8                   ret     c
-221++ 0FC4 CD 05 0C             call    x86_int_enter
-222++ 0FC7 D8                   ret     c
-223++ 0FC8 C3 69 0F             jp      x86_real_next
-224++ 0FCB
-225++ 0FCB              x86_real_int3:
-226++ 0FCB 3E 03                ld      a, 3
-227++ 0FCD CD 05 0C             call    x86_int_enter
-228++ 0FD0 D8                   ret     c
-229++ 0FD1 C3 69 0F             jp      x86_real_next
-230++ 0FD4
-231++ 0FD4              x86_real_iret:
-232++ 0FD4 CD 60 0C             call    x86_iret_return
-233++ 0FD7 D8                   ret     c
-234++ 0FD8 C3 69 0F             jp      x86_real_next
-235++ 0FDB
-236++ 0FDB              x86_real_hlt:
-237++ 0FDB AF                   xor     a
-238++ 0FDC 32 04 0C             ld      (x86_exit_status), a
-239++ 0FDF B7                   or      a
-240++ 0FE0 C9                   ret
-241++ 0FE1
-242++ 0FE1              x86_real_budget_fail:
-243++ 0FE1 3E 01                ld      a, 1
-244++ 0FE3 32 04 0C             ld      (x86_exit_status), a
-245++ 0FE6 37                   scf
-246++ 0FE7 C9                   ret
-247++ 0FE8
-248++ 0FE8              x86_real_clear_vector:
-249++ 0FE8 21 00 00             ld      hl, 0
-250++ 0FEB 22 15 05             ld      (x86_mem_segment), hl
-251++ 0FEE 21 80 00             ld      hl, #0080
-252++ 0FF1 22 17 05             ld      (x86_mem_offset), hl
-253++ 0FF4 21 00 00             ld      hl, 0
-254++ 0FF7 22 1B 05             ld      (x86_mem_word_value), hl
-255++ 0FFA CD FA 03             call    x86_mem_write16
-256++ 0FFD D8                   ret     c
-257++ 0FFE 21 00 00             ld      hl, 0
-258++ 1001 22 15 05             ld      (x86_mem_segment), hl
-259++ 1004 21 82 00             ld      hl, #0082
-260++ 1007 22 17 05             ld      (x86_mem_offset), hl
-261++ 100A 21 00 00             ld      hl, 0
-262++ 100D 22 1B 05             ld      (x86_mem_word_value), hl
-263++ 1010 C3 FA 03             jp      x86_mem_write16
-264++ 1013
-265++ 1013              x86_real_test_fail_1:
-266++ 1013 3E 01                ld      a, 1
-267++ 1015 18 12                jr      x86_real_test_fail
-268++ 1017              x86_real_test_fail_2:
-269++ 1017 3E 02                ld      a, 2
-270++ 1019 18 0E                jr      x86_real_test_fail
-271++ 101B              x86_real_test_fail_3:
-272++ 101B 3E 03                ld      a, 3
-273++ 101D 18 0A                jr      x86_real_test_fail
-274++ 101F              x86_real_test_fail_4:
-275++ 101F 3E 04                ld      a, 4
-276++ 1021 18 06                jr      x86_real_test_fail
-277++ 1023              x86_real_test_fail_5:
-278++ 1023 3E 05                ld      a, 5
-279++ 1025 18 02                jr      x86_real_test_fail
-280++ 1027              x86_real_test_fail_6:
-281++ 1027 3E 06                ld      a, 6
-282++ 1029              x86_real_test_fail:
-283++ 1029 6F                   ld      l, a
-284++ 102A 26 1B                ld      h, #1B
-285++ 102C 22 B7 02             ld      (saved_x86_ax), hl
-286++ 102F 3E 09                ld      a, 9
-287++ 1031 32 04 0C             ld      (x86_exit_status), a
-288++ 1034 37                   scf
-289++ 1035 C9                   ret
-290++ 1036
-291++ 1036 00 00        x86_real_steps:       dw 0
-292++ 1038 00 00        x86_real_copy_source: dw 0
-293++ 103A 00 00        x86_real_copy_dest:   dw 0
-294++ 103C 00 00        x86_real_copy_count:  dw 0
-295++ 103E
-296++ 103E              x86_guest_main_image:
-297++ 103E B8 00 00 CD          db #B8,#00,#00,#CD,#20,#F4
-297++ 1042 20 F4
-298++ 1044              x86_guest_main_image_end:
-299++ 1044              x86_guest_handler_image:
-300++ 1044 B8 34 12 CF          db #B8,#34,#12,#CF
-301++ 1048              x86_guest_handler_image_end:
-302++ 1048
+211++ 0FB4 32 44 10             ld      (x86_real_imm_low), a
+212++ 0FB7 CD 45 0F             call    x86_real_fetch8
+213++ 0FBA D8                   ret     c
+214++ 0FBB 67                   ld      h, a
+215++ 0FBC 3A 44 10             ld      a, (x86_real_imm_low)
+216++ 0FBF 6F                   ld      l, a
+217++ 0FC0 22 A1 08             ld      (x86_reg_ax), hl
+218++ 0FC3 C3 69 0F             jp      x86_real_next
+219++ 0FC6
+220++ 0FC6              x86_real_int_imm8:
+221++ 0FC6 CD 45 0F             call    x86_real_fetch8
+222++ 0FC9 D8                   ret     c
+223++ 0FCA CD 05 0C             call    x86_int_enter
+224++ 0FCD D8                   ret     c
+225++ 0FCE C3 69 0F             jp      x86_real_next
+226++ 0FD1
+227++ 0FD1              x86_real_int3:
+228++ 0FD1 3E 03                ld      a, 3
+229++ 0FD3 CD 05 0C             call    x86_int_enter
+230++ 0FD6 D8                   ret     c
+231++ 0FD7 C3 69 0F             jp      x86_real_next
+232++ 0FDA
+233++ 0FDA              x86_real_iret:
+234++ 0FDA CD 60 0C             call    x86_iret_return
+235++ 0FDD D8                   ret     c
+236++ 0FDE C3 69 0F             jp      x86_real_next
+237++ 0FE1
+238++ 0FE1              x86_real_hlt:
+239++ 0FE1 AF                   xor     a
+240++ 0FE2 32 04 0C             ld      (x86_exit_status), a
+241++ 0FE5 B7                   or      a
+242++ 0FE6 C9                   ret
+243++ 0FE7
+244++ 0FE7              x86_real_budget_fail:
+245++ 0FE7 3E 01                ld      a, 1
+246++ 0FE9 32 04 0C             ld      (x86_exit_status), a
+247++ 0FEC 37                   scf
+248++ 0FED C9                   ret
+249++ 0FEE
+250++ 0FEE              x86_real_clear_vector:
+251++ 0FEE 21 00 00             ld      hl, 0
+252++ 0FF1 22 15 05             ld      (x86_mem_segment), hl
+253++ 0FF4 21 80 00             ld      hl, #0080
+254++ 0FF7 22 17 05             ld      (x86_mem_offset), hl
+255++ 0FFA 21 00 00             ld      hl, 0
+256++ 0FFD 22 1B 05             ld      (x86_mem_word_value), hl
+257++ 1000 CD FA 03             call    x86_mem_write16
+258++ 1003 D8                   ret     c
+259++ 1004 21 00 00             ld      hl, 0
+260++ 1007 22 15 05             ld      (x86_mem_segment), hl
+261++ 100A 21 82 00             ld      hl, #0082
+262++ 100D 22 17 05             ld      (x86_mem_offset), hl
+263++ 1010 21 00 00             ld      hl, 0
+264++ 1013 22 1B 05             ld      (x86_mem_word_value), hl
+265++ 1016 C3 FA 03             jp      x86_mem_write16
+266++ 1019
+267++ 1019              x86_real_test_fail_1:
+268++ 1019 3E 01                ld      a, 1
+269++ 101B 18 12                jr      x86_real_test_fail
+270++ 101D              x86_real_test_fail_2:
+271++ 101D 3E 02                ld      a, 2
+272++ 101F 18 0E                jr      x86_real_test_fail
+273++ 1021              x86_real_test_fail_3:
+274++ 1021 3E 03                ld      a, 3
+275++ 1023 18 0A                jr      x86_real_test_fail
+276++ 1025              x86_real_test_fail_4:
+277++ 1025 3E 04                ld      a, 4
+278++ 1027 18 06                jr      x86_real_test_fail
+279++ 1029              x86_real_test_fail_5:
+280++ 1029 3E 05                ld      a, 5
+281++ 102B 18 02                jr      x86_real_test_fail
+282++ 102D              x86_real_test_fail_6:
+283++ 102D 3E 06                ld      a, 6
+284++ 102F              x86_real_test_fail:
+285++ 102F 6F                   ld      l, a
+286++ 1030 26 1B                ld      h, #1B
+287++ 1032 22 B7 02             ld      (saved_x86_ax), hl
+288++ 1035 3E 09                ld      a, 9
+289++ 1037 32 04 0C             ld      (x86_exit_status), a
+290++ 103A 37                   scf
+291++ 103B C9                   ret
+292++ 103C
+293++ 103C 00 00        x86_real_steps:       dw 0
+294++ 103E 00 00        x86_real_copy_source: dw 0
+295++ 1040 00 00        x86_real_copy_dest:   dw 0
+296++ 1042 00 00        x86_real_copy_count:  dw 0
+297++ 1044 00           x86_real_imm_low:    db 0
+298++ 1045
+299++ 1045              x86_guest_main_image:
+300++ 1045 B8 00 00 CD          db #B8,#00,#00,#CD,#20,#F4
+300++ 1049 20 F4
+301++ 104B              x86_guest_main_image_end:
+302++ 104B              x86_guest_handler_image:
+303++ 104B B8 34 12 CF          db #B8,#34,#12,#CF
+304++ 104F              x86_guest_handler_image_end:
+305++ 104F
 # file closed: x86_real_mode.asm
-363+  1048
-364+  1048                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
-365+  1048                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
-366+  1048
-367+  1048              neogs_firmware_end:
-368+  1048
+363+  104F
+364+  104F                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+365+  104F                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
+366+  104F
+367+  104F              neogs_firmware_end:
+368+  104F
 # file closed: main.asm
- 10   1048
- 11   1048              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
- 12   1048              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
- 13   1048                      ASSERT neogs_firmware_end <= $3000
- 14   1048                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
- 15   1048                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
- 16   1048
- 17   1048              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
- 18   1048                      ORG     $4000
+ 10   104F
+ 11   104F              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
+ 12   104F              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
+ 13   104F                      ASSERT neogs_firmware_end <= $3000
+ 14   104F                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+ 15   104F                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+ 16   104F
+ 17   104F              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+ 18   104F                      ORG     $4000
  19   4000                      INCLUDE "bootstrap.asm"
 # file opened: bootstrap.asm
   1+  4000              ; =========================================================================
