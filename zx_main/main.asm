@@ -108,9 +108,9 @@ START_APPLICATION:
         MACRO_EF_STRING msg_stage1
 
         ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
-        ; Сначала штатная GS105a ROM загружает малый модуль в $5B00;
-        ; модуль включает RAM-over-ROM, принимает образ в адрес $0000 и
-        ; передаёт управление новой прошивке.
+        ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
+        ; команда #13 запускает его, после чего он включает RAM-over-ROM,
+        ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
         ld      hl, neogs_binary_start
         ld      de, neogs_binary_end - neogs_binary_start
         call    upload_firmware
@@ -149,9 +149,7 @@ START_APPLICATION:
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
         MACRO_EF_STRING msg_stage2_handle
-        ld      a, (neo_fw_module_handle)
-        ld      l, a
-        ld      h, 0
+        ld      hl, (neo_fw_bootstrap_address)
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
         di
@@ -217,11 +215,11 @@ msg_stage2_initial:
 msg_stage2_status:
         DEFB "[FW] LAST GSSTAT #BB = ", 0
 msg_stage2_phase:
-        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#00,4=#30,5=#D1,6=STREAM,7=#D2,8=#31,9=LEN,10=FW,11=READY) = ", 0
+        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
 msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
 msg_stage2_handle:
-        DEFB "[FW] MODULE HANDLE = ", 0
+        DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
 
 ; =========================================================================
 ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
