@@ -85,6 +85,8 @@ main_loop:
         jp      z, command_get_status
         cp      CMD_MEM_TEST
         jp      z, command_mem_test
+        cp      CMD_BIOS_POST
+        jp      z, command_bios_post
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -240,6 +242,13 @@ command_mem_test:
         out     (CLRCBIT), a
         jp      main_loop
 
+; BIOS low-memory foundation POST.
+command_bios_post:
+        call    bios_post
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
 ; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
 ;   A5 signature, exit status, AX low, AX high.
@@ -328,6 +337,7 @@ rom_return_trampoline_code:
 rom_return_trampoline_end:
 
         INCLUDE "x86_memory.asm"
+        INCLUDE "bios/bios_core.asm"
         INCLUDE "x86_modrm.asm"
         INCLUDE "x86_interpreter.asm"
 
