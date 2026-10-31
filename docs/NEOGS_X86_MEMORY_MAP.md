@@ -52,21 +52,35 @@ Implemented in `neogs_sub/x86_memory.asm`:
 - `x86_mem_read8`: address in `x86_mem_addr[0..2]`; returns byte in A.
 - `x86_mem_write8`: address in `x86_mem_addr[0..2]`, value in
   `x86_mem_value`.
-- Invalid addresses above `FFFFFh` set carry.
-- `x86_mem_test`: destructive test of 64 pages. It writes unique patterns
-  to the first and last byte of each page, then verifies all 128 locations.
+- `x86_mem_calc_phys`: converts `x86_mem_segment: x86_mem_offset_work`
+  into a 20-bit physical address using
+  `((segment << 4) + offset) & FFFFFh`.
+- `x86_mem_read16`: input segment in `x86_mem_segment`, offset in
+  `x86_mem_offset`; returns little-endian word in HL.
+- `x86_mem_write16`: same address inputs; source word in
+  `x86_mem_word_value`.
+- Word accesses perform two byte cycles. The second byte uses
+  `(offset + 1) & FFFFh` in the same segment, matching 8086 offset wrap.
+- Byte access rejects physical addresses above `FFFFFh`; segment conversion
+  itself wraps to 20 bits, matching the original 8086 address bus.
+- `x86_mem_test`: destructive test of 64 pages plus three addressing cases:
+  a word crossing a 16 KiB page boundary, offset `FFFFh` wrapping to
+  `0000h` in the same segment, and physical address wrapping at 1 MiB.
 
 The self-test is exposed as private command `CMD_MEM_TEST = 05h`; the host
 reads its result through the existing `CMD_GET_STATUS` frame:
-- status 0, AX=0001h: all 64 pages passed;
-- status 5, AX=`phase:page`: failure (phase 1/2 = write first/last byte;
-  phase 3/4 = verify first/last byte).
+- status 0, AX=0001h: all page and addressing tests passed;
+- status 5, AX=`phase:page`: page test failure (phase 1/2 = write first/last
+  byte; phase 3/4 = verify first/last byte);
+- status 6, AX=`case:00`: word/segment test failure (case 5 = page-boundary
+  word, case 6 = 16-bit offset wrap, case 7 = 20-bit physical wrap).
 
 ## Important limitations
 
 - This is a 1 MiB x86 RAM backend, not yet a complete 4 MiB x86 memory model.
-- Byte access is implemented; word access and 16-bit offset wrap handling
-  must be built on top of it before memory-operand instructions are added.
+- Byte and word access plus segment:offset conversion are implemented and
+  covered by the memory self-test. They are not yet connected to the x86
+  instruction decoder or ModR/M effective-address calculation.
 - The window and register behavior is based on the NeoGS port definitions
   and the Unreal Speccy GS-Z80 implementation. The new test is intended to
   validate it in the user's emulator. It is not a substitute for a physical
