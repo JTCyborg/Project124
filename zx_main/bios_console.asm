@@ -243,9 +243,9 @@ BIOS_DebugConsole_PrintChar::
         pop     af
         ret
 
-; Full-screen renderer test: 12 rows, 42 identical glyphs per row.
-; Rows A-L are drawn through the same 6x8 PrintChar routine used by INT 10h.
-; The final glyph suppresses automatic wrap to prevent scrolling row A away.
+; Scroll test: output 30 consecutive rows, each containing 42 copies
+; of one printable character. The console's normal end-of-line wrap drives
+; scrolling after row 12; the final visible screen should contain rows 19-30.
 BIOS_DebugConsole_TestPattern::
         call    BIOS_DebugConsole_Clear
         xor     a
@@ -254,31 +254,12 @@ BIOS_DebugConsole_TestPattern::
         ld      (bios_dbg_test_char), a
 
 .test_row:
-        ld      a, (bios_dbg_test_row)
-        ld      c, 0
-        call    BIOS_DebugConsole_SetCursor
-        ld      a, (bios_dbg_test_row)
-        cp      BIOS_DEBUG_ROWS - 1
-        jr      nz, .row_started
         xor     a
         ld      (bios_dbg_test_col), a
-        ld      b, BIOS_DEBUG_COLUMNS
-        jr      .test_char
-.row_started:
-        xor     a
-        ld      (bios_dbg_test_col), a
+        ld      (bios_dbg_no_wrap), a
         ld      b, BIOS_DEBUG_COLUMNS
 
 .test_char:
-        ld      a, (bios_dbg_test_row)
-        cp      BIOS_DEBUG_ROWS - 1
-        jr      nz, .emit_char
-        ld      a, (bios_dbg_test_col)
-        cp      BIOS_DEBUG_COLUMNS - 1
-        jr      nz, .emit_char
-        ld      a, 1
-        ld      (bios_dbg_no_wrap), a
-.emit_char:
         ld      a, (bios_dbg_test_char)
         ; Preserve B: it is the 42-character loop counter.
         push    bc
@@ -286,32 +267,13 @@ BIOS_DebugConsole_TestPattern::
         out     (c), a
         pop     bc
         call    BIOS_DebugConsole_PrintChar
-        xor     a
-        ld      (bios_dbg_no_wrap), a
         ld      a, (bios_dbg_test_col)
         inc     a
         ld      (bios_dbg_test_col), a
-
-        ; Frame 1: capture the first three glyphs (AAA) on row 0.
-        ld      a, (bios_dbg_test_col)
-        cp      3
-        jr      nz, .check_full_row_frame
-        ld      a, 1
-        call    P124_DumpLowerScreen
-
-.check_full_row_frame:
-        ; Frame 2: capture the complete 42-character first row.
-        ld      a, (bios_dbg_test_col)
-        cp      BIOS_DEBUG_COLUMNS
-        jr      nz, .continue_test_row
-        ld      a, 2
-        call    P124_DumpLowerScreen
-
-.continue_test_row:
         djnz    .test_char
 
-        ; Add line endings to the emulator log only; the screen has already
-        ; advanced by the console's normal 42-column automatic wrap.
+        ; The console has auto-wrapped after character 42. Add CR/LF only
+        ; to the emulator log so each test row is readable there as well.
         ld      a, 13
         out     (#EF), a
         ld      a, 10
@@ -320,7 +282,7 @@ BIOS_DebugConsole_TestPattern::
         ld      a, (bios_dbg_test_row)
         inc     a
         ld      (bios_dbg_test_row), a
-        cp      BIOS_DEBUG_ROWS
+        cp      30
         jr      nc, .test_done
         ld      a, (bios_dbg_test_char)
         inc     a
