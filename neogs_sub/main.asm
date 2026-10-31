@@ -91,6 +91,8 @@ main_loop:
         jp      z, command_get_status
         cp      CMD_MEM_TEST
         jp      z, command_mem_test
+        cp      CMD_BIOS_POST
+        jp      z, command_bios_post
         cp      CMD_DEBUG_DRAIN
         jp      z, command_debug_drain
 
@@ -208,6 +210,13 @@ command_mem_test:
         ld      hl, neo_debug_msg_memtest_fail
         call    neo_debug_puts
 .memtest_done:
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; BIOS POST foundation. Uses the existing x86 RAM backend and result frame.
+command_bios_post:
+        call    bios_post
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -393,6 +402,7 @@ rom_return_trampoline_code:
 rom_return_trampoline_end:
 
         INCLUDE "x86_memory.asm"
+        INCLUDE "bios/bios_core.asm"
         INCLUDE "x86_system.asm"
         INCLUDE "x86_runtime.asm"
         INCLUDE "x86_interpreter.asm"
