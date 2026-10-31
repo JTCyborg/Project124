@@ -86,14 +86,25 @@ Init_Z80_System::
         ld      bc, #EFF7
         out     (C), a          ; Инициализация Pentagon-расширения
 
+        ; Raw startup marker: confirms Init_Z80_System reached its end.
+        ld      a, 'I'
+        out     (#EF), a
         jp      START_APPLICATION
 
 ; Подключение системы отладки и макросов порта #EF
         INCLUDE "debug_system.asm"
 
 START_APPLICATION:
+        ; Raw markers bypass timestamp/RTC code so an early hang is visible.
+        ld      a, 'C'
+        out     (#EF), a
+
         ; ЭТАП 1 — ЗАПУСК CMOS ЧАСОВ К512ВИ1
         call    CHECK_AND_INIT_CMOS
+        ld      a, 'D'
+        out     (#EF), a
+        ld      a, 'E'
+        out     (#EF), a
         MACRO_EF_STRING msg_stage1
 
         ; ЭТАП 2 — ДВУХСТУПЕНЧАТАЯ ЗАГРУЗКА ПРОШИВКИ NEOGS
