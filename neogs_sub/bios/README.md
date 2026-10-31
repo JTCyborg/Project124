@@ -20,7 +20,7 @@ after the physical x86 RAM mapping test.
    - active page: 0;
    - text rows: 25;
    - character height: 16.
-4. Reads back the IVT boundary bytes and selected BDA fields.
+4. Reads back all 1024 IVT bytes and the published BDA profile fields.
 5. Returns the normal P124 result frame with status 0 and AX signature `B105h`
    on success. POST errors use status 7 and AX `B1xxh`.
 
