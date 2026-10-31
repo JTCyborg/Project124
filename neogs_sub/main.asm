@@ -48,6 +48,7 @@ start_neoprogram:
         ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
+        call    x86_cpu_reset
         ld      (x86_exit_status), a
         ld      (neo_command), a
         ld      (neo_tx_byte), a
@@ -113,6 +114,7 @@ command_reset:
         ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
+        call    x86_cpu_reset
         ld      (x86_last_ip), a
         ld      (x86_last_ip+1), a
         out     (CLRCBIT), a
