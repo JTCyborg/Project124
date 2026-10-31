@@ -394,7 +394,10 @@ bios_video_write_value: db 0
 x86_bios_video_test_image:
         ; AH=00h set mode 03h.
         db #B8,#03,#00,#CD,#10
-        ; AH=02h set cursor to row 0, column 0.
+        ; AH=02h set cursor to row 1, column 5; teletype X there.
+        db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
+        db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
+        ; AH=02h reset cursor to row 0, column 0 before the wrap test.
         db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
         ; 43 printable characters: the 43rd must wrap to row 1, column 1.
         REPT 43
