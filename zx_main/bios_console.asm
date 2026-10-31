@@ -287,6 +287,23 @@ BIOS_DebugConsole_TestPattern::
         ld      a, (bios_dbg_test_col)
         inc     a
         ld      (bios_dbg_test_col), a
+
+        ; Frame 1: capture the first three glyphs (AAA) on row 0.
+        ld      a, (bios_dbg_test_col)
+        cp      3
+        jr      nz, .check_full_row_frame
+        ld      a, 1
+        call    P124_DumpLowerScreen
+
+.check_full_row_frame:
+        ; Frame 2: capture the complete 42-character first row.
+        ld      a, (bios_dbg_test_col)
+        cp      BIOS_DEBUG_COLUMNS
+        jr      nz, .continue_test_row
+        ld      a, 2
+        call    P124_DumpLowerScreen
+
+.continue_test_row:
         djnz    .test_char
 
         ; Add line endings to the emulator log only; the screen has already
