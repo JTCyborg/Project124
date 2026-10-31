@@ -87,6 +87,8 @@ CMD_MEM_TEST    EQU #05
 CMD_BIOS_POST   EQU #07
 CMD_INT_TEST    EQU #08
 CMD_INT_GUEST_TEST EQU #09
+CMD_BIOS_VIDEO_TEST EQU #0A
+CMD_RUN_X86_REAL EQU #0B
 
 ; Project 124 startup handshake bytes.
 NGS_BOOTSTRAP_READY_ACK EQU #A1
@@ -135,6 +137,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "zx_main/driver_cmos.asm",
                     "zx_main/log_debug.asm",
                     "zx_main/display.asm",
+                    "zx_main/bios_console.asm",
                     "zx_main/ui_engine.asm",
                     "zx_main/ui_panels.asm",
                     "zx_main/file_utils.asm",
@@ -143,6 +146,7 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/x86_interpreter.asm",
                     "neogs_sub/x86_memory.asm",
                     "neogs_sub/bios/bios_core.asm",
+                    "neogs_sub/bios/bios_video.asm",
                     "neogs_sub/x86_interrupt.asm",
                     "neogs_sub/x86_real_mode.asm",
                     "neogs_sub/build_firmware.asm"
@@ -285,6 +289,7 @@ START_APPLICATION:
         MACRO_EF_HEX16  hl
         MACRO_EF_CHAR   13
         MACRO_EF_STRING msg_stage4
+        call    BIOS_DebugConsole_Init
 
         ; ЭТАП 5 — АВТОМАТИЧЕСКИЙ ЛИНЕЙНЫЙ ПЕРЕХОД К ЗАГРУЗКЕ И IPC ТРАНСЛЯЦИИ ЗАДАЧИ
         ld      hl, task_filename
@@ -344,6 +349,7 @@ msg_stage2_bootstrap:
         
         INCLUDE "display.asm"       ; Модуль низкоуровневого вывода знакомест
         INCLUDE "ui_engine.asm"     ; Модуль прошивки шрифтов и скроллера
+        INCLUDE "bios_console.asm"  ; 42-column 6x8 BIOS debug console
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
@@ -1137,6 +1143,24 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_pass
 
         ; -------------------------------------------------------------
+        ; Stage 3A: guest INT 10h video BIOS services and live console stream.
+        ; The NeoGS sends each teletype byte over DBIT while this host drains
+        ; the stream to port #EF and the 42x12 6x8 debug window.
+        ; -------------------------------------------------------------
+        MACRO_EF_STRING P124_msg_bios_video_start
+        call    neogs_bios_video_test_and_get_result
+        jp      c, .bios_video_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .bios_video_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #1A10
+        or      a
+        sbc     hl, de
+        jp      nz, .bios_video_fail
+        MACRO_EF_STRING P124_msg_bios_video_pass
+
+        ; -------------------------------------------------------------
         ; Stage 5A: search TR-DOS directory entry.
         ; Name #5CDD..#5CE4, type #5CE5, per the working project path.
         ; -------------------------------------------------------------
@@ -1277,7 +1301,7 @@ EXECUTE_X86_FILE_STAGE::
         ; -------------------------------------------------------------
         ; Stage 5D: execute and fetch framed result.
         ; -------------------------------------------------------------
-        call    neogs_run_and_get_result
+        call    neogs_run_x86_real_and_get_result
         jp      c, .result_timeout
 
         MACRO_EF_STRING P124_msg_x86_result_ready
@@ -1295,8 +1319,11 @@ EXECUTE_X86_FILE_STAGE::
         jp      nz, .interpreter_error
 
         ld      hl, (P124_X86_RESULT_AX)
-        call    Util_PrintHex16Screen
-        call    LOG_CloseActiveLine
+        call    BIOS_DebugConsole_PrintHex16
+        ld      a, 13
+        call    BIOS_DebugConsole_PrintChar
+        ld      a, 10
+        call    BIOS_DebugConsole_PrintChar
         or      a
         jp      .loader_restore_stack
 
@@ -1371,6 +1398,24 @@ EXECUTE_X86_FILE_STAGE::
 
 .int_guest_fail:
         MACRO_EF_STRING P124_msg_int_guest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        jp      .loader_restore_stack
+
+.bios_video_transport_fail:
+        MACRO_EF_STRING P124_msg_bios_video_transport_fail
+        scf
+        jp      .loader_restore_stack
+
+.bios_video_fail:
+        MACRO_EF_STRING P124_msg_bios_video_fail
         ld      a, (P124_X86_RESULT_STATUS)
         ld      l, a
         ld      h, 0
@@ -1531,9 +1576,87 @@ neogs_send_dma_block:
 neogs_run_and_get_result:
         ld      a, CMD_RUN_X86
         out     (GSCOM), a
-        call    neogs_wait_command_done_long
+        call    neogs_wait_run_done_with_console
         ret     c
         jp      neogs_get_result_frame
+
+; Execute the actual TR-DOS task with the CS:IP real-mode core.
+neogs_run_x86_real_and_get_result:
+        ld      a, CMD_RUN_X86_REAL
+        out     (GSCOM), a
+        call    neogs_wait_run_done_with_console
+        ret     c
+        jp      neogs_get_result_frame
+
+; Stage 3A guest BIOS video test. Its output is drained while the NeoGS
+; command remains active; DBIT bytes are never confused with the result frame.
+neogs_bios_video_test_and_get_result:
+        ld      a, CMD_BIOS_VIDEO_TEST
+        out     (GSCOM), a
+        call    neogs_wait_run_done_with_console
+        ret     c
+        jp      neogs_get_result_frame
+
+; Wait for the RUN command while servicing the bidirectional data channel.
+; Stream protocol: nonzero=character, 00 00=clear, 00 01 row col=set cursor.
+; Each character is sent to emulator printer port #EF and rendered on screen.
+neogs_wait_run_done_with_console:
+        push    de
+        ld      d, #10
+.run_outer:
+        ld      hl, IPC_CMD_TIMEOUT
+.run_inner:
+        in      a, (GSSTAT)
+        bit     B_DBIT, a
+        jr      z, .no_stream_byte
+        in      a, (GSDAT)
+        or      a
+        jr      z, .stream_control
+        push    af
+        ld      bc, #00EF
+        out     (c), a
+        pop     af
+        call    BIOS_DebugConsole_PrintChar
+        jr      .run_inner
+
+.stream_control:
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        or      a
+        jr      z, .stream_clear
+        cp      1
+        jr      nz, .run_inner
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        ld      (P124_BIOS_STREAM_ROW), a
+        call    neogs_wait_data_byte
+        jr      c, .run_timeout
+        ld      c, a
+        ld      a, (P124_BIOS_STREAM_ROW)
+        call    BIOS_DebugConsole_SetCursor
+        jr      .run_inner
+
+.stream_clear:
+        call    BIOS_DebugConsole_Clear
+        jr      .run_inner
+
+.no_stream_byte:
+        bit     B_CBIT, a
+        jr      z, .run_done
+        dec     hl
+        ld      a, h
+        or      l
+        jr      nz, .run_inner
+        dec     d
+        jr      nz, .run_outer
+.run_timeout:
+        pop     de
+        scf
+        ret
+.run_done:
+        pop     de
+        or      a
+        ret
 
 ; Run the BIOS low-memory POST and fetch the existing four-byte result frame.
 neogs_bios_post_and_get_result:
@@ -1615,6 +1738,10 @@ P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler 
 P124_msg_int_guest_pass: DEFB "[INT] PASS: guest handler executed through CS:IP; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
+P124_msg_bios_video_start: DEFB "[BIOS] Stage 3A: guest INT 10h video services and 6x8 console...", 13, 0
+P124_msg_bios_video_pass: DEFB "[BIOS] PASS: INT 10h mode/cursor/teletype; 42-column stream rendered.", 13, 0
+P124_msg_bios_video_transport_fail: DEFB "[BIOS] FAIL: INT 10h video stream/result timeout.", 13, 0
+P124_msg_bios_video_fail: DEFB "[BIOS] FAIL: INT 10h status/detail = ", 0
 P124_msg_memtest_fail:  DEFB "[MEM] FAIL: status / detail = ", 0
 
 x86_diag_program:
@@ -1682,6 +1809,7 @@ P124_X86_RESULT_STATUS:    db 0
 P124_X86_RESULT_AX:        dw 0
 P124_DIAG_EXPECT_STATUS:    db 0
 P124_DIAG_EXPECT_AX:        dw 0
+P124_BIOS_STREAM_ROW:       db 0
 
 ; Strings
 P124_msg_dbg_stack_isolated: defb "[DBG] LOADER STACK AT #BFFF; TR-DOS BUFFER AT #C000.", 13, 0
@@ -2245,6 +2373,324 @@ DrawCommanderPanels::
 
 
 ; =========================================================================
+
+
+; =========================================================================
+; FILE: zx_main/bios_console.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — BIOS 6x8 debug console backend
+; Lower Spectrum window: 42 columns x 12 rows, 6 pixels x 8 scanlines.
+; Uses font68.bin (96 glyphs, 8 bytes per glyph). This renderer is separate
+; from Direct_PrintChar so existing 32-column Commander panels are unchanged.
+; =========================================================================
+
+BIOS_DEBUG_COLUMNS EQU 42
+BIOS_DEBUG_ROWS    EQU 12
+BIOS_DEBUG_TOP     EQU 12
+
+BIOS_DebugConsole_Init::
+        ld      a, (Console_Y)
+        sub     BIOS_DEBUG_TOP
+        jr      nc, .row_ok
+        xor     a
+.row_ok:
+        cp      BIOS_DEBUG_ROWS
+        jr      c, .row_valid
+        ld      a, BIOS_DEBUG_ROWS - 1
+.row_valid:
+        ld      (bios_dbg_row), a
+        ld      a, (Console_X)
+        cp      BIOS_DEBUG_COLUMNS
+        jr      c, .col_valid
+        xor     a
+.col_valid:
+        ld      (bios_dbg_col), a
+        ret
+
+; Clear only the lower 96-pixel-high window, not the Commander file panel.
+BIOS_DebugConsole_Clear::
+        push    af
+        push    bc
+        push    de
+        push    hl
+        ld      a, 96
+        ld      (bios_dbg_clear_y), a
+.clear_scanline:
+        ld      a, (bios_dbg_clear_y)
+        ld      c, 0
+        call    bios_dbg_calc_addr
+        push    hl
+        pop     de
+        inc     de
+        ld      (hl), 0
+        ld      bc, 31
+        ldir
+        ld      a, (bios_dbg_clear_y)
+        inc     a
+        ld      (bios_dbg_clear_y), a
+        cp      192
+        jr      c, .clear_scanline
+        ld      hl, #5980
+        ld      de, #5981
+        ld      (hl), #44
+        ld      bc, 383
+        ldir
+        xor     a
+        ld      (bios_dbg_row), a
+        ld      (bios_dbg_col), a
+        ld      (Console_Y), a
+        ld      a, BIOS_DEBUG_TOP
+        ld      (Console_Y), a
+        xor     a
+        ld      (Console_X), a
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+; IN: A=row, C=column. Invalid coordinates are ignored.
+BIOS_DebugConsole_SetCursor::
+        cp      BIOS_DEBUG_ROWS
+        ret     nc
+        ld      (bios_dbg_row), a
+        ld      a, c
+        cp      BIOS_DEBUG_COLUMNS
+        ret     nc
+        ld      (bios_dbg_col), a
+        ret
+
+; IN: A=one output byte from the NeoGS stream.
+; Printable bytes are drawn as packed 6-pixel glyphs; CR/LF/BS are handled.
+BIOS_DebugConsole_PrintChar::
+        push    af
+        push    bc
+        push    de
+        push    hl
+        ld      (bios_dbg_char), a
+
+        cp      13
+        jp      z, .carriage_return
+        cp      10
+        jp      z, .line_feed
+        cp      8
+        jp      z, .backspace
+        cp      7
+        jp      z, .done
+        cp      32
+        jp      c, .done
+        cp      128
+        jr      c, .glyph_range_ok
+        ld      a, '?'
+        ld      (bios_dbg_char), a
+.glyph_range_ok:
+        ld      a, (bios_dbg_char)
+        sub     32
+        ld      l, a
+        ld      h, 0
+        add     hl, hl
+        add     hl, hl
+        add     hl, hl
+        ld      de, FONT_DATA_68
+        add     hl, de
+        ld      (bios_dbg_font_ptr), hl
+
+        ; Pixel X = column * 6, so 42 cells occupy 252 of 256 pixels.
+        ld      a, (bios_dbg_col)
+        ld      b, a
+        add     a, a
+        ld      c, a
+        add     a, a
+        add     a, c
+        ld      (bios_dbg_xpixel), a
+        xor     a
+        ld      (bios_dbg_scan), a
+
+.glyph_scanline:
+        ld      hl, (bios_dbg_font_ptr)
+        ld      a, (hl)
+        ld      (bios_dbg_bits), a
+        inc     hl
+        ld      (bios_dbg_font_ptr), hl
+
+        ; Absolute Spectrum scanline = 96 + row*8 + scan.
+        ld      a, (bios_dbg_row)
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, 96
+        ld      b, a
+        ld      a, (bios_dbg_scan)
+        add     a, b
+        ld      (bios_dbg_y), a
+
+        ld      b, 6
+.glyph_pixel:
+        ld      a, (bios_dbg_xpixel)
+        ld      c, a
+        and     7
+        ld      (bios_dbg_bitpos), a
+        ld      a, c
+        srl     a
+        srl     a
+        srl     a
+        ld      c, a
+        ld      a, (bios_dbg_y)
+        call    bios_dbg_calc_addr
+
+        ld      a, (bios_dbg_bitpos)
+        ld      c, a
+        ld      a, #80
+.mask_loop:
+        ld      d, a
+        ld      a, c
+        or      a
+        ld      a, d
+        jr      z, .mask_ready
+        srl     a
+        dec     c
+        jr      .mask_loop
+.mask_ready:
+        ld      (bios_dbg_mask), a
+        ld      a, (bios_dbg_bits)
+        and     #20
+        jr      z, .pixel_clear
+        ld      a, (hl)
+        ld      e, a
+        ld      a, (bios_dbg_mask)
+        or      e
+        ld      (hl), a
+        jr      .pixel_done
+.pixel_clear:
+        ld      a, (bios_dbg_mask)
+        cpl
+        ld      e, a
+        ld      a, (hl)
+        and     e
+        ld      (hl), a
+.pixel_done:
+        ld      a, (bios_dbg_bits)
+        add     a, a
+        ld      (bios_dbg_bits), a
+        ld      a, (bios_dbg_xpixel)
+        inc     a
+        ld      (bios_dbg_xpixel), a
+        djnz    .glyph_pixel
+
+        ld      a, (bios_dbg_scan)
+        inc     a
+        ld      (bios_dbg_scan), a
+        cp      8
+        jr      c, .glyph_scanline
+
+        ld      a, (bios_dbg_col)
+        inc     a
+        ld      (bios_dbg_col), a
+        cp      BIOS_DEBUG_COLUMNS
+        jr      c, .done
+        xor     a
+        ld      (bios_dbg_col), a
+        call    bios_dbg_newline
+        jr      .done
+
+.carriage_return:
+        xor     a
+        ld      (bios_dbg_col), a
+        jr      .done
+.line_feed:
+        call    bios_dbg_newline
+        jr      .done
+.backspace:
+        ld      a, (bios_dbg_col)
+        or      a
+        jr      z, .done
+        dec     a
+        ld      (bios_dbg_col), a
+.done:
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+; IN: HL=16-bit value. Render four hexadecimal digits in the 6x8 console.
+BIOS_DebugConsole_PrintHex16::
+        push    af
+        push    bc
+        ld      a, h
+        call    bios_dbg_print_hex8
+        ld      a, l
+        call    bios_dbg_print_hex8
+        pop     bc
+        pop     af
+        ret
+
+bios_dbg_print_hex8:
+        push    af
+        rra
+        rra
+        rra
+        rra
+        call    bios_dbg_print_nibble
+        pop     af
+bios_dbg_print_nibble:
+        and     #0F
+        cp      10
+        jr      c, .hex_digit
+        add     a, 7
+.hex_digit:
+        add     a, '0'
+        jp      BIOS_DebugConsole_PrintChar
+
+; Advance one 8-pixel character row and scroll the existing lower window.
+bios_dbg_newline:
+        ld      a, (bios_dbg_row)
+        inc     a
+        cp      BIOS_DEBUG_ROWS
+        jr      c, .row_in_range
+        call    UI_ScrollConsoleUp
+        ld      a, BIOS_DEBUG_ROWS - 1
+.row_in_range:
+        ld      (bios_dbg_row), a
+        ret
+
+; IN: A=absolute Y (0..191), C=screen byte X (0..31).
+; OUT: HL=Spectrum bitmap address for that scanline and byte.
+bios_dbg_calc_addr:
+        ld      d, a
+        and     #C0
+        rrca
+        rrca
+        rrca
+        ld      h, a
+        ld      a, d
+        and     #07
+        or      h
+        or      #40
+        ld      h, a
+        ld      a, d
+        and     #38
+        rlca
+        rlca
+        add     a, c
+        ld      l, a
+        ; Start each pixel with a fresh mask = 80h >> (X & 7).
+        ld      a, #80
+        ld      (bios_dbg_mask), a
+        ret
+
+bios_dbg_row:       db 0
+bios_dbg_col:       db 0
+bios_dbg_char:      db 0
+bios_dbg_scan:      db 0
+bios_dbg_y:         db 0
+bios_dbg_xpixel:    db 0
+bios_dbg_bitpos:    db 0
+bios_dbg_bits:      db 0
+bios_dbg_mask:      db 0
+bios_dbg_font_ptr:  dw 0
+bios_dbg_clear_y:   db 0
 
 
 ; =========================================================================
@@ -2938,6 +3384,10 @@ main_loop:
         jp      z, command_int_test
         cp      CMD_INT_GUEST_TEST
         jp      z, command_int_guest_test
+        cp      CMD_BIOS_VIDEO_TEST
+        jp      z, command_bios_video_test
+        cp      CMD_RUN_X86_REAL
+        jp      z, command_run_x86_real
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -3083,6 +3533,93 @@ execute_neogs_x86:
         ld      (x86_exit_status), a
         ret
 
+; Execute the loaded DMA task as bounded guest code at 0000:5002.
+; The DMA frame is copied into the x86 physical-memory backend before execution.
+execute_neogs_x86_real:
+        ; Match the legacy loader's DMA error and length validation.
+        ld      a, (neo_dma_error)
+        or      a
+        jr      z, .real_dma_ok
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 3
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+.real_dma_ok:
+        ld      hl, (X86_DMA_HEADER_ADDR)
+        ld      a, h
+        or      l
+        jp      z, .real_invalid_length
+        ld      a, h
+        cp      #2F
+        jr      c, .real_length_valid
+        jp      nz, .real_invalid_length
+        ld      a, l
+        cp      #FF
+        jp      nc, .real_invalid_length
+
+.real_length_valid:
+        ld      de, X86_RAM_RUN_ADDR
+        add     hl, de
+        ld      (x86_real_task_end), hl
+
+        call    x86_mem_init
+        ld      hl, X86_RAM_RUN_ADDR
+        ld      de, #5002
+        ld      bc, (X86_DMA_HEADER_ADDR)
+        call    x86_real_copy_image
+        jp      c, .real_copy_failed
+
+        ; Reset the guest register file to a deterministic real-mode entry.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      (x86_reg_es), hl
+        ld      (x86_reg_ds), hl
+        ld      (x86_reg_cs), hl
+        ld      hl, #5002
+        ld      (x86_reg_ip), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+
+        ld      a, 1
+        ld      (x86_real_bounds_enable), a
+        call    x86_real_execute
+        push    af
+        ld      hl, (x86_reg_ax)
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_real_bounds_enable), a
+        pop     af
+        ret
+
+.real_invalid_length:
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+.real_copy_failed:
+        ld      hl, #1D01
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
+        ret
+
 ; -------------------------------------------------------------------------
 ; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
 ; Result is returned through the existing CMD_GET_STATUS frame.
@@ -3110,6 +3647,20 @@ command_int_test:
 ; Stage 2B: execute a guest INT handler through CS:IP and return with IRET.
 command_int_guest_test:
         call    x86_real_mode_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Stage 3A: guest INT 10h video BIOS service test.
+command_bios_video_test:
+        call    bios_int10_video_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Run a TR-DOS payload through the bounded CS:IP real-mode executor.
+command_run_x86_real:
+        call    execute_neogs_x86_real
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -3207,6 +3758,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_interpreter.asm"
         INCLUDE "x86_interrupt.asm"
         INCLUDE "x86_real_mode.asm"
+        INCLUDE "bios/bios_video.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
@@ -4135,6 +4687,10 @@ bios_post:
         call    bios_expect_byte
         jp      c, bios_post_fail_8
 
+        ; Publish the INT 10h firmware trap after the IVT zero-fill check.
+        call    bios_int10_install_vector
+        jp      c, bios_post_fail_8
+
         ld      hl, BIOS_POST_SIGNATURE
         ld      (saved_x86_ax), hl
         xor     a
@@ -4270,6 +4826,439 @@ bios_work_value:      db 0
 
         ASSERT BIOS_IVT_BASE + BIOS_IVT_SIZE = BIOS_BDA_BASE
         ASSERT BIOS_BDA_BASE + BIOS_BDA_SIZE = BIOS_LOW_MEMORY_END
+
+
+; =========================================================================
+; FILE: neogs_sub/bios/bios_video.asm
+; =========================================================================
+; =========================================================================
+; PROJECT 124 — BIOS INT 10h text services, Stage 3A
+;
+; Project text-console profile: 42 columns x 12 rows, 6x8 glyphs.
+; Implemented functions:
+;   AH=00h set mode 03h (project 42x12 text profile)
+;   AH=0Fh get mode (AL=03h, AH=42, BH=0)
+;   AH=02h set cursor (BH=0, DH=row, DL=column)
+;   AH=03h get cursor (DH=row, DL=column)
+;   AH=0Eh teletype output (AL=character, BH=0)
+;
+; INT 10h enters through the normal IVT/stack frame. The BIOS service itself
+; is a firmware trap, then returns through the normal IRET primitive.
+; Host stream protocol over DBIT/GSDAT:
+;   nonzero byte = teletype character
+;   00 00        = clear the lower debug console
+;   00 01 row col= set lower debug console cursor
+; =========================================================================
+
+BIOS_VIDEO_COLUMNS EQU 42
+BIOS_VIDEO_ROWS    EQU 12
+BIOS_VIDEO_MODE    EQU #03
+
+bios_int10_dispatch:
+        ld      hl, (x86_reg_ax)
+        ld      a, h
+        cp      #00
+        jp      z, bios_int10_set_mode
+        cp      #0F
+        jp      z, bios_int10_get_mode
+        cp      #02
+        jp      z, bios_int10_set_cursor
+        cp      #03
+        jp      z, bios_int10_get_cursor
+        cp      #0E
+        jp      z, bios_int10_teletype
+        or      a
+        ret
+
+; Install IVT[10h] -> 0000:5200 (firmware service trap).
+bios_int10_install_vector:
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0040
+        ld      (x86_mem_offset), hl
+        ld      hl, #5200
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        ret     c
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0042
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_word_value), hl
+        jp      x86_mem_write16
+
+; AH=00h — only mode 03h is supported by this project console.
+bios_int10_set_mode:
+        ld      a, l
+        cp      BIOS_VIDEO_MODE
+        jr      z, .mode_valid
+        or      a
+        ret
+.mode_valid:
+        ld      hl, #0449
+        ld      a, BIOS_VIDEO_MODE
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #044A
+        ld      a, BIOS_VIDEO_COLUMNS
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #044C
+        ld      a, #F0
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #044D
+        ld      a, #03
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #0462
+        xor     a
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #0484
+        ld      a, BIOS_VIDEO_ROWS - 1
+        call    bios_video_write_byte
+        ret     c
+        ld      hl, #0485
+        ld      a, 8
+        call    bios_video_write_byte
+        ret     c
+
+        xor     a
+        ld      (bios_video_col), a
+        ld      (bios_video_row), a
+        ld      hl, #0450
+        ld      de, 0
+        call    bios_video_write_word
+        ret     c
+
+        ; Host control frame: 00 00 = clear the 6x8 debug console.
+        xor     a
+        call    neo_send_data_byte
+        ret     c
+        xor     a
+        jp      neo_send_data_byte
+
+; AH=0Fh — return current project text mode, width and active page.
+bios_int10_get_mode:
+        ld      hl, #2A03
+        ld      (x86_reg_ax), hl
+        xor     a
+        ld      (x86_reg_bx+1), a
+        or      a
+        ret
+
+; AH=02h — set cursor. This implementation exposes page zero only.
+bios_int10_set_cursor:
+        ld      a, (x86_reg_bx+1)
+        or      a
+        ret     nz
+        ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
+        ld      a, h
+        cp      BIOS_VIDEO_ROWS
+        jr      c, .row_valid
+        or      a
+        ret
+.row_valid:
+        ld      a, l
+        cp      BIOS_VIDEO_COLUMNS
+        jr      c, .col_valid
+        or      a
+        ret
+.col_valid:
+        ld      a, h
+        ld      (bios_video_row), a
+        ld      a, l
+        ld      (bios_video_col), a
+        call    bios_video_store_cursor
+        ret     c
+
+        ; Host control frame: 00 01 row col.
+        xor     a
+        call    neo_send_data_byte
+        ret     c
+        ld      a, 1
+        call    neo_send_data_byte
+        ret     c
+        ld      a, (bios_video_row)
+        call    neo_send_data_byte
+        ret     c
+        ld      a, (bios_video_col)
+        jp      neo_send_data_byte
+
+; AH=03h — read page-zero cursor into DH:DL.
+bios_int10_get_cursor:
+        ld      a, (x86_reg_bx+1)
+        or      a
+        ret     nz
+        ld      hl, #0450
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        call    x86_mem_read16
+        ret     c
+        ld      (x86_reg_dx), hl
+        or      a
+        ret
+
+; AH=0Eh — teletype output. Every byte is streamed to the host.
+bios_int10_teletype:
+        ld      a, (x86_reg_bx+1)
+        or      a
+        ret     nz
+        ld      a, (x86_reg_ax)
+        ld      (bios_video_char), a
+        or      a
+        ret     z                       ; NUL is reserved for stream control frames.
+        cp      128
+        jr      c, .teletype_ascii
+        ld      a, '?'
+        ld      (bios_video_char), a
+.teletype_ascii:
+        ld      a, (bios_video_char)
+        call    neo_send_data_byte
+        ret     c
+
+        ld      a, (bios_video_char)
+        cp      13
+        jr      z, .carriage_return
+        cp      10
+        jr      z, .line_feed
+        cp      8
+        jr      z, .backspace
+        cp      7
+        jr      z, .cursor_done
+        cp      32
+        jr      c, .cursor_done
+
+        ld      a, (bios_video_col)
+        inc     a
+        ld      (bios_video_col), a
+        cp      BIOS_VIDEO_COLUMNS
+        jr      c, .cursor_store
+        xor     a
+        ld      (bios_video_col), a
+        jr      .line_feed
+.carriage_return:
+        xor     a
+        ld      (bios_video_col), a
+        jr      .cursor_store
+.backspace:
+        ld      a, (bios_video_col)
+        or      a
+        jr      z, .cursor_done
+        dec     a
+        ld      (bios_video_col), a
+        jr      .cursor_store
+.line_feed:
+        ld      a, (bios_video_row)
+        inc     a
+        cp      BIOS_VIDEO_ROWS
+        jr      c, .line_store
+        ld      a, BIOS_VIDEO_ROWS - 1
+.line_store:
+        ld      (bios_video_row), a
+.cursor_store:
+        call    bios_video_store_cursor
+        ret
+.cursor_done:
+        or      a
+        ret
+
+; Store project cursor word at BDA 00450h: low=column, high=row.
+bios_video_store_cursor:
+        ld      hl, #0450
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      a, (bios_video_col)
+        ld      l, a
+        ld      a, (bios_video_row)
+        ld      h, a
+        ld      (x86_mem_word_value), hl
+        jp      x86_mem_write16
+
+; IN: HL=physical address, A=value.
+bios_video_write_byte:
+        ld      (bios_video_write_value), a
+        ld      (x86_mem_addr), hl
+        xor     a
+        ld      (x86_mem_addr+2), a
+        ld      a, (bios_video_write_value)
+        ld      (x86_mem_value), a
+        jp      x86_mem_write8
+
+; IN: HL=physical address, DE=value.
+bios_video_write_word:
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ex      de, hl
+        ld      (x86_mem_word_value), hl
+        jp      x86_mem_write16
+
+; -------------------------------------------------------------------------
+; Stage 3A executable test. Exercises all five INT 10h services, cursor
+; round-trip, 42-column wrap, CR/LF, and the streamed host console path.
+; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
+; -------------------------------------------------------------------------
+bios_int10_video_test:
+        xor     a
+        ld      (x86_real_bounds_enable), a
+        call    x86_mem_init
+        ld      hl, x86_bios_video_test_image
+        ld      de, #5002
+        ld      bc, x86_bios_video_test_image_end - x86_bios_video_test_image
+        call    x86_real_copy_image
+        jp      c, bios_video_test_fail_1
+
+        ; Verify POST installed IVT[10h] -> 0000:5200.
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0040
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, bios_video_test_fail_2
+        ld      de, #5200
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_2
+
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        ld      hl, #0042
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, bios_video_test_fail_2
+        ld      de, 0
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_2
+
+        ; Initialize guest registers and real-mode stack.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      (x86_reg_es), hl
+        ld      (x86_reg_ds), hl
+        ld      (x86_reg_cs), hl
+        ld      hl, #5002
+        ld      (x86_reg_ip), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+
+        call    x86_real_execute
+        jp      c, bios_video_test_fail_3
+
+        ld      hl, (x86_reg_ax)
+        ld      de, #2A03
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_4
+        ld      hl, (x86_reg_dx)
+        ld      de, #020F
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_5
+
+        ld      hl, #0450
+        ld      (x86_mem_offset), hl
+        ld      hl, 0
+        ld      (x86_mem_segment), hl
+        call    x86_mem_read16
+        jp      c, bios_video_test_fail_6
+        ld      de, #020F
+        or      a
+        sbc     hl, de
+        jp      nz, bios_video_test_fail_6
+
+        ld      hl, #1A10
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+bios_video_test_fail_1:
+        ld      a, 1
+        jr      bios_video_test_fail
+bios_video_test_fail_2:
+        ld      a, 2
+        jr      bios_video_test_fail
+bios_video_test_fail_3:
+        ld      a, 3
+        jr      bios_video_test_fail
+bios_video_test_fail_4:
+        ld      a, 4
+        jr      bios_video_test_fail
+bios_video_test_fail_5:
+        ld      a, 5
+        jr      bios_video_test_fail
+bios_video_test_fail_6:
+        ld      a, 6
+        jr      bios_video_test_fail
+bios_video_test_fail_7:
+        ld      a, 7
+bios_video_test_fail:
+        ld      l, a
+        ld      h, #1C
+        ld      (saved_x86_ax), hl
+        ld      a, 10
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+bios_video_row: db 0
+bios_video_col: db 0
+bios_video_char: db 0
+bios_video_write_value: db 0
+
+; Guest program is assembled as a byte stream at physical 0000:5002.
+x86_bios_video_test_image:
+        ; AH=00h set mode 03h.
+        db #B8,#03,#00,#CD,#10
+        ; AH=02h set cursor to row 1, column 5; teletype X there.
+        db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
+        db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
+        ; AH=02h reset cursor to row 0, column 0 before the wrap test.
+        db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
+        ; 43 printable characters: the 43rd must wrap to row 1, column 1.
+        REPT 43
+        db #B4,#0E,#B0,#41,#CD,#10
+        ENDR
+        ; CR then LF; output a 15-character marker on row 2.
+        db #B4,#0E,#B0,#0D,#CD,#10
+        db #B4,#0E,#B0,#0A,#CD,#10
+        db #B4,#0E,#B0,#50,#CD,#10 ; P
+        db #B4,#0E,#B0,#31,#CD,#10 ; 1
+        db #B4,#0E,#B0,#32,#CD,#10 ; 2
+        db #B4,#0E,#B0,#34,#CD,#10 ; 4
+        db #B4,#0E,#B0,#20,#CD,#10 ; space
+        db #B4,#0E,#B0,#49,#CD,#10 ; I
+        db #B4,#0E,#B0,#4E,#CD,#10 ; N
+        db #B4,#0E,#B0,#54,#CD,#10 ; T
+        db #B4,#0E,#B0,#31,#CD,#10 ; 1
+        db #B4,#0E,#B0,#30,#CD,#10 ; 0
+        db #B4,#0E,#B0,#20,#CD,#10 ; space
+        db #B4,#0E,#B0,#50,#CD,#10 ; P
+        db #B4,#0E,#B0,#41,#CD,#10 ; A
+        db #B4,#0E,#B0,#53,#CD,#10 ; S
+        db #B4,#0E,#B0,#53,#CD,#10 ; S
+        ; AH=03h get cursor, then AH=0Fh get mode/columns.
+        db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
+        db #B4,#0F,#B0,#00,#CD,#10
+        db #F4
+x86_bios_video_test_image_end:
 
 
 ; =========================================================================
@@ -4582,7 +5571,7 @@ x86_int_target_cs: dw 0
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This first executable slice runs guest instructions through CS:IP and the
-; physical-memory backend. Supported: NOP, INC AX, MOV AX,imm16, HLT,
+; physical-memory backend. Supported: NOP, INC AX, MOV r8/r16,imm, HLT,
 ; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -4594,9 +5583,11 @@ x86_int_target_cs: dw 0
 ; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
 ; =========================================================================
 
-X86_REAL_STEP_LIMIT EQU 32
+X86_REAL_STEP_LIMIT EQU #FFFF
 
 x86_real_mode_test:
+        xor     a
+        ld      (x86_real_bounds_enable), a
         call    x86_mem_init
 
         ; Copy main guest program to physical 0000:5002.
@@ -4727,6 +5718,27 @@ x86_real_copy_loop:
 ; Fetch one guest byte from physical ((CS << 4) + IP) & FFFFFh.
 ; OUT A=byte; guest IP advances only after a successful memory read.
 x86_real_fetch8:
+        ld      a, (x86_real_bounds_enable)
+        or      a
+        jr      z, .fetch_unbounded
+        ld      hl, (x86_reg_cs)
+        ld      a, h
+        or      l
+        jp      nz, x86_real_fetch_out_of_range
+        ld      hl, (x86_reg_ip)
+        ld      de, #5002
+        or      a
+        sbc     hl, de
+        jp      c, x86_real_fetch_out_of_range
+        ld      hl, (x86_real_task_end)
+        ld      de, (x86_reg_ip)
+        or      a
+        sbc     hl, de
+        jp      c, x86_real_fetch_out_of_range
+        ld      a, h
+        or      l
+        jp      z, x86_real_fetch_out_of_range
+.fetch_unbounded:
         ld      hl, (x86_reg_ip)
         ld      (x86_mem_offset_work), hl
         ld      hl, (x86_reg_cs)
@@ -4740,6 +5752,12 @@ x86_real_fetch8:
         ld      (x86_reg_ip), hl
         pop     af
         or      a
+        ret
+
+x86_real_fetch_out_of_range:
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
         ret
 
 x86_real_execute:
@@ -4760,8 +5778,17 @@ x86_real_next:
         jp      z, x86_real_nop
         cp      #40
         jp      z, x86_real_inc_ax
+        cp      #B0
+        jp      c, .not_mov_r8
+        cp      #B8
+        jp      c, x86_real_mov_r8_imm8
+.not_mov_r8:
         cp      #B8
         jp      z, x86_real_mov_ax_imm16
+        cp      #BA
+        jp      z, x86_real_mov_dx_imm16
+        cp      #BB
+        jp      z, x86_real_mov_bx_imm16
         cp      #F4
         jp      z, x86_real_hlt
         cp      #CD
@@ -4797,11 +5824,68 @@ x86_real_mov_ax_imm16:
         ld      (x86_reg_ax), hl
         jp      x86_real_next
 
+; B0-B7 — MOV r8,imm8 (AL,CL,DL,BL,AH,CH,DH,BH).
+x86_real_mov_r8_imm8:
+        ld      (x86_real_opcode), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_byte), a
+        ld      a, (x86_real_opcode)
+        sub     #B0
+        cp      4
+        jr      c, .low_byte_register
+        sub     4
+        add     a, a
+        inc     a
+        jr      .register_offset_ready
+.low_byte_register:
+        add     a, a
+.register_offset_ready:
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      a, (x86_real_imm_byte)
+        ld      (hl), a
+        jp      x86_real_next
+
 x86_real_int_imm8:
         call    x86_real_fetch8
         ret     c
+        ld      (x86_real_int_vector), a
         call    x86_int_enter
         ret     c
+        ld      a, (x86_real_int_vector)
+        cp      #10
+        jp      nz, x86_real_next
+        call    bios_int10_dispatch
+        ret     c
+        call    x86_iret_return
+        ret     c
+        jp      x86_real_next
+
+x86_real_mov_bx_imm16:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_low), a
+        call    x86_real_fetch8
+        ret     c
+        ld      h, a
+        ld      a, (x86_real_imm_low)
+        ld      l, a
+        ld      (x86_reg_bx), hl
+        jp      x86_real_next
+
+x86_real_mov_dx_imm16:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_low), a
+        call    x86_real_fetch8
+        ret     c
+        ld      h, a
+        ld      a, (x86_real_imm_low)
+        ld      l, a
+        ld      (x86_reg_dx), hl
         jp      x86_real_next
 
 x86_real_int3:
@@ -4875,6 +5959,11 @@ x86_real_copy_source: dw 0
 x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
 x86_real_imm_low:    db 0
+x86_real_int_vector: db 0
+x86_real_opcode: db 0
+x86_real_imm_byte: db 0
+x86_real_bounds_enable: db 0
+x86_real_task_end: dw 0
 
 x86_guest_main_image:
         db #B8,#00,#00,#CD,#20,#F4

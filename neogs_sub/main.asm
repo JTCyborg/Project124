@@ -91,6 +91,10 @@ main_loop:
         jp      z, command_int_test
         cp      CMD_INT_GUEST_TEST
         jp      z, command_int_guest_test
+        cp      CMD_BIOS_VIDEO_TEST
+        jp      z, command_bios_video_test
+        cp      CMD_RUN_X86_REAL
+        jp      z, command_run_x86_real
 
         ; Unknown command: release CBIT so the host cannot deadlock.
         xor     a
@@ -236,6 +240,93 @@ execute_neogs_x86:
         ld      (x86_exit_status), a
         ret
 
+; Execute the loaded DMA task as bounded guest code at 0000:5002.
+; The DMA frame is copied into the x86 physical-memory backend before execution.
+execute_neogs_x86_real:
+        ; Match the legacy loader's DMA error and length validation.
+        ld      a, (neo_dma_error)
+        or      a
+        jr      z, .real_dma_ok
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 3
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+.real_dma_ok:
+        ld      hl, (X86_DMA_HEADER_ADDR)
+        ld      a, h
+        or      l
+        jp      z, .real_invalid_length
+        ld      a, h
+        cp      #2F
+        jr      c, .real_length_valid
+        jp      nz, .real_invalid_length
+        ld      a, l
+        cp      #FF
+        jp      nc, .real_invalid_length
+
+.real_length_valid:
+        ld      de, X86_RAM_RUN_ADDR
+        add     hl, de
+        ld      (x86_real_task_end), hl
+
+        call    x86_mem_init
+        ld      hl, X86_RAM_RUN_ADDR
+        ld      de, #5002
+        ld      bc, (X86_DMA_HEADER_ADDR)
+        call    x86_real_copy_image
+        jp      c, .real_copy_failed
+
+        ; Reset the guest register file to a deterministic real-mode entry.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      (x86_reg_es), hl
+        ld      (x86_reg_ds), hl
+        ld      (x86_reg_cs), hl
+        ld      hl, #5002
+        ld      (x86_reg_ip), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+
+        ld      a, 1
+        ld      (x86_real_bounds_enable), a
+        call    x86_real_execute
+        push    af
+        ld      hl, (x86_reg_ax)
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_real_bounds_enable), a
+        pop     af
+        ret
+
+.real_invalid_length:
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+.real_copy_failed:
+        ld      hl, #1D01
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
+        ret
+
 ; -------------------------------------------------------------------------
 ; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
 ; Result is returned through the existing CMD_GET_STATUS frame.
@@ -263,6 +354,20 @@ command_int_test:
 ; Stage 2B: execute a guest INT handler through CS:IP and return with IRET.
 command_int_guest_test:
         call    x86_real_mode_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Stage 3A: guest INT 10h video BIOS service test.
+command_bios_video_test:
+        call    bios_int10_video_test
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; Run a TR-DOS payload through the bounded CS:IP real-mode executor.
+command_run_x86_real:
+        call    execute_neogs_x86_real
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -360,6 +465,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_interpreter.asm"
         INCLUDE "x86_interrupt.asm"
         INCLUDE "x86_real_mode.asm"
+        INCLUDE "bios/bios_video.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
