@@ -1,15 +1,15 @@
 ; =========================================================================
 ; PROJECT 124 — first-stage NeoGS executable bootstrap
 ;
-; Loaded by the stock GS105a ROM using the standard General Sound protocol:
-;   #30 LOAD MODULE, #D1 OPEN STREAM, bytes, #D2 CLOSE STREAM, #31 RUN MODULE.
+; GS105a command #14 (RECEIVE BLOCK) loads this raw Z80 image into fixed RAM
+; at $4000. GS105a command #13 (JUMP TO ADDRESS) enters it at $4000.
 ;
-; The stock module loader places this small resident module at $5B00.
-; It maps RAM over the low ROM window, receives a 16-bit firmware length and
-; exactly that many bytes through the documented ZX data channel, stores the
-; custom firmware at RAM address $0000, then jumps to $0000.
+; The bootstrap maps RAM over the low ROM window, receives a 16-bit firmware
+; length and exactly that many bytes through the documented ZX data channel,
+; stores the custom firmware at RAM address $0000, then jumps to $0000.
 ;
-; It executes from the fixed RAM window $4000-$7FFF and keeps its stack below $4000.
+; It executes from the fixed RAM window $4000-$7FFF and keeps its stack below
+; $4000. The fixed $4000-$7FFF RAM window remains visible after B_NOROM is set.
 ; =========================================================================
 
 neogs_bootstrap_start:
