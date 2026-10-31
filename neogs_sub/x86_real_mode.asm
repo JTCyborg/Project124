@@ -238,7 +238,15 @@ x86_real_next:
         cp      #90
         jp      z, x86_real_nop
         cp      #40
-        jp      z, x86_real_inc_ax
+        jp      c, .not_inc_r16
+        cp      #48
+        jp      c, x86_real_inc_r16
+.not_inc_r16:
+        cp      #48
+        jp      c, .not_dec_r16
+        cp      #50
+        jp      c, x86_real_dec_r16
+.not_dec_r16:
         cp      #B0
         jp      c, .not_mov_r8
         cp      #B8
@@ -266,11 +274,162 @@ x86_real_next:
 x86_real_nop:
         jp      x86_real_next
 
-x86_real_inc_ax:
-        ld      hl, (x86_reg_ax)
+; 40-47 INC r16 and 48-4F DEC r16.
+; The register file is contiguous in 8086 encoding order (AX,CX,DX,BX,
+; SP,BP,SI,DI). INC/DEC preserve CF and all non-status/control FLAGS bits.
+x86_real_inc_r16:
+        ld      (x86_real_opcode), a
+        xor     a
+        ld      (x86_real_incdec_mode), a
+        jp      x86_real_incdec_r16
+
+x86_real_dec_r16:
+        ld      (x86_real_opcode), a
+        ld      a, 1
+        ld      (x86_real_incdec_mode), a
+
+x86_real_incdec_r16:
+        ld      a, (x86_real_opcode)
+        and     7
+        add     a, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      (x86_real_reg_ptr), hl
+
+        ; Save original operand before changing the selected guest register.
+        ld      a, (hl)
+        ld      (x86_real_old_low), a
         inc     hl
-        ld      (x86_reg_ax), hl
+        ld      a, (hl)
+        ld      (x86_real_old_high), a
+
+        ld      a, (x86_real_old_low)
+        ld      l, a
+        ld      a, (x86_real_old_high)
+        ld      h, a
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .decrement_word
+        inc     hl
+        jr      .store_word
+.decrement_word:
+        dec     hl
+.store_word:
+        ld      (x86_real_result), hl
+        ld      de, (x86_real_reg_ptr)
+        ld      a, l
+        ld      (de), a
+        inc     de
+        ld      a, h
+        ld      (de), a
+
+        call    x86_real_update_incdec_flags
         jp      x86_real_next
+
+; Update only OF/SF/ZF/AF/PF. CF is copied from the old FLAGS word;
+; all reserved/control bits are retained. PF is even parity of result AL.
+x86_real_update_incdec_flags:
+        ld      a, (x86_reg_flags)
+        and     1
+        ld      (x86_real_new_flags), a
+        xor     a
+        ld      (x86_real_new_flags+1), a
+
+        ; PF: even parity of the low result byte.
+        ld      hl, (x86_real_result)
+        ld      a, l
+        and     a
+        jp      po, .no_pf
+        ld      hl, x86_real_new_flags
+        set     2, (hl)
+.no_pf:
+        ; ZF: full 16-bit result is zero.
+        ld      hl, (x86_real_result)
+        ld      a, h
+        or      l
+        jr      nz, .no_zf
+        ld      hl, x86_real_new_flags
+        set     6, (hl)
+.no_zf:
+        ; SF: result bit 15.
+        ld      hl, (x86_real_result)
+        bit     7, h
+        jr      z, .no_sf
+        ld      hl, x86_real_new_flags
+        inc     hl
+        set     7, (hl)
+.no_sf:
+        ; AF: INC when old low nibble was F; DEC when it was 0.
+        ld      a, (x86_real_old_low)
+        and     #0F
+        ld      b, a
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .check_dec_af
+        ld      a, b
+        cp      #0F
+        jr      nz, .no_af
+        jr      .set_af
+.check_dec_af:
+        ld      a, b
+        or      a
+        jr      nz, .no_af
+.set_af:
+        ld      hl, x86_real_new_flags
+        set     4, (hl)
+.no_af:
+        ; OF: INC 7FFF->8000; DEC 8000->7FFF.
+        ld      a, (x86_real_old_low)
+        cp      #FF
+        jr      nz, .no_of
+        ld      a, (x86_real_old_high)
+        cp      #7F
+        jr      nz, .no_of
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      nz, .no_of
+        jr      .set_of
+.no_of_check_dec:
+        jr      .no_of
+.set_of:
+        ld      hl, x86_real_new_flags
+        inc     hl
+        set     3, (hl)
+.no_of:
+        ld      a, (x86_real_incdec_mode)
+        or      a
+        jr      z, .flags_merge
+        ld      a, (x86_real_old_low)
+        or      a
+        jr      nz, .flags_merge
+        ld      a, (x86_real_old_high)
+        cp      #80
+        jr      nz, .flags_merge
+        ld      hl, x86_real_new_flags
+        inc     hl
+        set     3, (hl)
+
+.flags_merge:
+        ; Merge new status bits with all untouched old FLAGS bits.
+        ld      hl, (x86_reg_flags)
+        ld      de, #F72B             ; ~(PF|AF|ZF|SF|OF), CF is preserved
+        ld      a, h
+        and     d
+        ld      h, a
+        ld      a, l
+        and     e
+        ld      l, a
+        ld      de, (x86_real_new_flags)
+        ld      a, h
+        or      d
+        ld      h, a
+        ld      a, l
+        or      e
+        ld      l, a
+        ld      (x86_reg_flags), hl
+        ret
 
 ; B8-BF — MOV r16,imm16 (AX,CX,DX,BX,SP,BP,SI,DI).
 ; The eight word registers are contiguous in x86_modrm.asm in opcode order.
@@ -412,6 +571,12 @@ x86_real_imm_high:   db 0
 x86_real_int_vector: db 0
 x86_real_opcode: db 0
 x86_real_imm_byte: db 0
+x86_real_incdec_mode: db 0
+x86_real_old_low: db 0
+x86_real_old_high: db 0
+x86_real_new_flags: dw 0
+x86_real_reg_ptr: dw 0
+x86_real_result: dw 0
 x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 
