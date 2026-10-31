@@ -20,7 +20,7 @@ x86_next_instruction:
         jr      nz, .budget_ok
         ld      a, 1
         ld      (x86_exit_status), a
-        ld      hl, (saved_z80_ax)
+        ld      hl, (x86_reg_ax)
         ret
 
 .budget_ok:
@@ -43,7 +43,7 @@ x86_next_instruction:
 
         ; Restore AX in HL and jump to the selected handler. PUSH/RET is
         ; the Z80's safe indirect-jump idiom; BC remains the virtual x86 IP.
-        ld      hl, (saved_z80_ax)
+        ld      hl, (x86_reg_ax)
         push    de
         ret
 
