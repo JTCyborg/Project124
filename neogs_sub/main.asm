@@ -243,12 +243,36 @@ execute_neogs_x86:
 ; Execute the loaded DMA task as bounded guest code at 0000:5002.
 ; The DMA frame is copied into the x86 physical-memory backend before execution.
 execute_neogs_x86_real:
-        call    x86_mem_init
+        ; Match the legacy loader's DMA error and length validation.
+        ld      a, (neo_dma_error)
+        or      a
+        jr      z, .real_dma_ok
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 3
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+.real_dma_ok:
         ld      hl, (X86_DMA_HEADER_ADDR)
+        ld      a, h
+        or      l
+        jp      z, .real_invalid_length
+        ld      a, h
+        cp      #2F
+        jr      c, .real_length_valid
+        jp      nz, .real_invalid_length
+        ld      a, l
+        cp      #FF
+        jp      nc, .real_invalid_length
+
+.real_length_valid:
         ld      de, X86_RAM_RUN_ADDR
         add     hl, de
         ld      (x86_real_task_end), hl
 
+        call    x86_mem_init
         ld      hl, X86_RAM_RUN_ADDR
         ld      de, #5002
         ld      bc, (X86_DMA_HEADER_ADDR)
@@ -285,6 +309,14 @@ execute_neogs_x86_real:
         xor     a
         ld      (x86_real_bounds_enable), a
         pop     af
+        ret
+
+.real_invalid_length:
+        ld      hl, #FFFF
+        ld      (saved_x86_ax), hl
+        ld      a, 4
+        ld      (x86_exit_status), a
+        scf
         ret
 
 .real_copy_failed:
