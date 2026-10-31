@@ -1,9 +1,10 @@
 ; =========================================================================
 ; PROJECT 124 — NeoGS interpreter and physical-memory diagnostics
 ;
-; All diagnostic x86 payloads are embedded in the host application and are
-; sent to the already-running NeoGS firmware through the existing DMA path.
-; neoprog.C is reserved exclusively for the NeoGS firmware image.
+; Built-in transport diagnostics remain embedded in the host application.
+; The external regression suite is loaded separately from TR-DOS TEST.C.
+; Both paths send raw x86 payloads to the running NeoGS firmware via DMA.
+; neoprog.C remains reserved exclusively for the NeoGS firmware image.
 ; =========================================================================
 
 DMA_HOST_WINDOW    EQU #0000
