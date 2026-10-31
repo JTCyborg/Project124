@@ -30,8 +30,10 @@ Host command: `08h`. Expected result: status 0 / AX=`1A01h`.
 
 `x86_real_mode.asm` adds a separate CS:IP fetch/execute path and executes
 a guest INT 20h handler through the real-mode memory backend. The limited
-instruction set at this stage includes NOP, INC r16, DEC r16, MOV r8,imm8, MOV r16,imm16 (all eight
-general registers), HLT, INT imm8, INT 3 and IRET.
+instruction set at this stage includes NOP, INC r16, DEC r16, MOV r8,imm8,
+MOV r16,imm16 (all eight general registers), short conditional branches
+(JO/JNO, JB/JAE, JE/JNE, JBE/JA, JS/JNS, JP/JNP, JL/JGE, JLE/JG),
+LOOPNZ/LOOPZ/LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT 3 and IRET.
 
 The self-test runs the guest caller at `0000:5002` and handler at
 `0000:5100`. It verifies all eight `MOV r16,imm16` destinations, `INC SI` (`7FFFh` to
@@ -95,8 +97,13 @@ payload and the current task entry uses CS=0.
 The legacy linear interpreter remains available for the transport/edge-case
 diagnostics. The real-mode executor currently supports NOP, INC r16, DEC r16, MOV
 r16,imm16 for AX/CX/DX/BX/SP/BP/SI/DI, MOV r8,imm8 (including the standard
-AH/AL BIOS calling convention), HLT, INT imm8, INT 3 and IRET. INC/DEC
-update OF/SF/ZF/AF/PF, preserve CF, and retain all other FLAGS bits. It is not a complete 8086 emulator.
+AH/AL BIOS calling convention), all short Jcc conditions (70h-7Fh),
+LOOPNZ/LOOPZ/LOOP/JCXZ (E0h-E3h), JMP rel8 (EBh), HLT, INT imm8, INT 3
+and IRET. INC/DEC update OF/SF/ZF/AF/PF, preserve CF, and retain all other
+FLAGS bits. LOOP-family instructions preserve FLAGS; Jcc tests the
+architectural CF/PF/ZF/SF/OF bits. Relative targets are computed from IP
+after the displacement byte, and the next instruction fetch remains bounded
+to the loaded task image. It is not a complete 8086 emulator.
 
 ## Memory map and limitations
 
