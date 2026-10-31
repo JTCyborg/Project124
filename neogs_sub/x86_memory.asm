@@ -142,11 +142,190 @@ x86_mem_test:
         cp      X86_MEM_PAGE_COUNT
         jr      c, .verify_page_loop
 
-        ; Success: AX=0001 means all 64 pages passed.
+        ; The physical page test passed. Now verify segment:offset arithmetic,
+        ; word access across a 16 KiB page, 16-bit offset wrap, and 20-bit wrap.
+        call    x86_mem_word_test
+        ret     c
+
+        ; Success: AX=0001 means all memory/addressing tests passed.
         ld      hl, 1
         ld      (saved_x86_ax), hl
         xor     a
         ld      (x86_exit_status), a
+        ret
+
+; -------------------------------------------------------------------------
+; Segment:offset -> physical address.
+; Uses x86_mem_segment and x86_mem_offset_work; result in x86_mem_addr.
+; Physical address = ((segment << 4) + offset) & FFFFFh.
+; -------------------------------------------------------------------------
+x86_mem_calc_phys:
+        ; Byte 0 = (segment low << 4) + offset low.
+        ld      a, (x86_mem_segment)
+        rlca
+        rlca
+        rlca
+        rlca
+        ld      b, a
+        ld      a, (x86_mem_offset_work)
+        add     a, b
+        ld      (x86_mem_addr), a
+        ld      a, 0
+        adc     a, 0
+        ld      (x86_mem_carry), a
+
+        ; Byte 1 base = (segment low >> 4) | (segment high << 4).
+        ld      a, (x86_mem_segment)
+        rrca
+        rrca
+        rrca
+        rrca
+        and     #0F
+        ld      b, a
+        ld      a, (x86_mem_segment+1)
+        rlca
+        rlca
+        rlca
+        rlca
+        or      b
+
+        ; Add offset high and carry from byte 0.
+        ld      b, a
+        ld      a, (x86_mem_offset_work+1)
+        add     a, b
+        ld      b, a
+        ld      a, (x86_mem_carry)
+        add     a, b
+        ld      (x86_mem_addr+1), a
+        ld      a, 0
+        adc     a, 0
+        ld      (x86_mem_carry), a
+
+        ; Byte 2 is the high segment nibble plus byte-1 carry.
+        ld      a, (x86_mem_segment+1)
+        rrca
+        rrca
+        rrca
+        rrca
+        and     #0F
+        ld      b, a
+        ld      a, (x86_mem_carry)
+        add     a, b
+        and     #0F                 ; 20-bit physical address wrap
+        ld      (x86_mem_addr+2), a
+        ret
+
+; Read a little-endian word at segment:offset.
+; IN: x86_mem_segment, x86_mem_offset. OUT: HL=word, carry=invalid.
+; The second byte uses (offset+1) modulo 65536 in the SAME segment.
+x86_mem_read16:
+        ld      hl, (x86_mem_offset)
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        call    x86_mem_read8
+        ret     c
+        ld      e, a
+
+        ld      hl, (x86_mem_offset_work)
+        inc     hl
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        call    x86_mem_read8
+        ret     c
+        ld      h, a
+        ld      l, e
+        or      a
+        ret
+
+; Write a little-endian word at segment:offset.
+; IN: x86_mem_segment, x86_mem_offset, x86_mem_word_value.
+; The second byte uses (offset+1) modulo 65536 in the SAME segment.
+x86_mem_write16:
+        ld      hl, (x86_mem_offset)
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        ld      a, (x86_mem_word_value)
+        ld      (x86_mem_value), a
+        call    x86_mem_write8
+        ret     c
+
+        ld      hl, (x86_mem_offset_work)
+        inc     hl
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        ld      a, (x86_mem_word_value+1)
+        ld      (x86_mem_value), a
+        call    x86_mem_write8
+        ret
+
+; Addressing self-test. Uses only the reserved x86 RAM pages 4..67.
+; Case 0 crosses a 16 KiB page boundary; case 1 wraps 16-bit offset;
+; case 2 wraps the 20-bit physical address space.
+x86_mem_word_test:
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #3FFF
+        ld      (x86_mem_offset), hl
+        ld      hl, #A55A
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        jp      c, x86_mem_word_fail_0
+        call    x86_mem_read16
+        jp      c, x86_mem_word_fail_0
+        ld      de, #A55A
+        or      a
+        sbc     hl, de
+        jp      nz, x86_mem_word_fail_0
+
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #FFFF
+        ld      (x86_mem_offset), hl
+        ld      hl, #5AA5
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        jp      c, x86_mem_word_fail_1
+        call    x86_mem_read16
+        jp      c, x86_mem_word_fail_1
+        ld      de, #5AA5
+        or      a
+        sbc     hl, de
+        jp      nz, x86_mem_word_fail_1
+
+        ld      hl, #FFFF
+        ld      (x86_mem_segment), hl
+        ld      (x86_mem_offset), hl
+        ld      hl, #C33C
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        jp      c, x86_mem_word_fail_2
+        call    x86_mem_read16
+        jp      c, x86_mem_word_fail_2
+        ld      de, #C33C
+        or      a
+        sbc     hl, de
+        jp      nz, x86_mem_word_fail_2
+
+        or      a
+        ret
+
+x86_mem_word_fail_0:
+        ld      a, 5
+        jr      x86_mem_word_fail
+x86_mem_word_fail_1:
+        ld      a, 6
+        jr      x86_mem_word_fail
+x86_mem_word_fail_2:
+        ld      a, 7
+x86_mem_word_fail:
+        ld      (x86_mem_phase), a
+        ld      a, (x86_mem_phase)
+        ld      h, a
+        ld      l, 0
+        ld      (saved_x86_ax), hl
+        ld      a, 6
+        ld      (x86_exit_status), a
+        scf
         ret
 
 x86_mem_test_write_start_fail:
@@ -219,3 +398,8 @@ x86_mem_addr:  db 0, 0, 0
 x86_mem_value: db 0
 x86_mem_page:  db 0
 x86_mem_phase: db 0
+x86_mem_segment: dw 0
+x86_mem_offset: dw 0
+x86_mem_offset_work: dw 0
+x86_mem_word_value: dw 0
+x86_mem_carry: db 0
