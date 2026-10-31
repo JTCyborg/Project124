@@ -208,11 +208,6 @@ BIOS_DebugConsole_PrintChar::
         cp      8
         jp      c, .glyph_scanline
 
-        ; The full-screen glyph test suppresses only the final auto-wrap,
-        ; so row 11 remains visible instead of scrolling the test's first row.
-        ld      a, (bios_dbg_no_wrap)
-        or      a
-        jr      nz, .done
         ld      a, (bios_dbg_col)
         inc     a
         ld      (bios_dbg_col), a
@@ -320,4 +315,3 @@ bios_dbg_bits:      db 0
 bios_dbg_mask:      db 0
 bios_dbg_font_ptr:  dw 0
 bios_dbg_clear_y:   db 0
-bios_dbg_no_wrap:   db 0
