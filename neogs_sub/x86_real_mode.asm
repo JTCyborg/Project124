@@ -413,7 +413,7 @@ x86_real_update_incdec_flags:
 .flags_merge:
         ; Merge new status bits with all untouched old FLAGS bits.
         ld      hl, (x86_reg_flags)
-        ld      de, #F72B             ; ~(PF|AF|ZF|SF|OF), CF is preserved
+        ld      de, #772B             ; clear PF/AF/ZF/OF/SF; preserve CF and other bits
         ld      a, h
         and     d
         ld      h, a
