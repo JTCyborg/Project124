@@ -243,6 +243,19 @@
 - Следующий шаг изменён: BIOS-01A — извлечь из `bios.asm` фактические opcode families и построить матрицу соответствия с активным `neogs_sub/x86_real_mode.asm` и подключёнными модулями; затем BIOS-01B — определить ROM write-protect в единой точке `x86_mem_write8` с проверкой byte/word write и границ `FDFFF/FE000/FFFFF`. BIOS loader/reset запускать после этих подготовительных работ.
 - Никакие исходники или бинарники BIOS и memory backend этим аудитом не изменялись. Сборка/эмулятор/runtime не запускались; совместимость образа пока не подтверждена.
 
+
+
+### 2026-11-01 — BIOS-01A: первичная матрица инструкций XT BIOS
+
+- Проанализирован `bios/bios.asm` (Generic Turbo XT BIOS 1987, Intel 8088/NEC V20) и opcode dispatch активного `neogs_sub/x86_real_mode.asm` с модулями ALU/ALU8/MOV/ModR/M/interrupt. Legacy `x86_interpreter.asm` не считается активным ядром.
+- В исходнике BIOS обнаружены важные семейства: MOV, ADD/ADC/SUB/SBB/CMP, AND/OR/XOR/TEST, INC/DEC/NEG/NOT, CALL/RET/RETF/JMP и условные переходы; IN/OUT, INT/INTO/IRET, строковые операции с REP, XLAT, MUL/DIV, LES/LDS, XCHG, PUSHF/POPF, WAIT, shifts/rotates, DAA, LOCK.
+- Активное ядро уже покрывает часть MOV, 8/16-bit ALU и logical ModR/M forms, INC/DEC r16, PUSH/POP, near/far CALL/RET/JMP, Jcc/LOOP/JCXZ, INT/INT3/IRET/HLT и сегментные префиксы. Поддержка семейств частичная: наличие одной формы не означает поддержку всех opcode/operand variants.
+- Не реализованы либо не подтверждены: IN/OUT; строковые операции и REP; XLAT; MUL/DIV; LES/LDS; XCHG; WAIT; DAA; shifts/rotates (включая RCL/RCR/SAR); INTO; PUSHF/POPF и полный набор flag-control; LOCK semantics; многие immediate ALU forms и группы C0/C1/C6/C7/F6/F7/FE/FF.
+- BIOS активно обращается к PC/XT I/O ports: CRT, COM/LPT, floppy controller, timer и прочим устройствам. Без соответствующей модели портов одного добавления opcode support недостаточно для прохождения POST и BIOS services.
+- `ORG 0E000h` при ROM-сегменте `F000h` означает физический ROM диапазон `FE000h-FFFFFh`, размер 8 КБ; reset entry offset `1FF0h` (physical `FFFF0h`). Это верхняя половина NeoGS page 67.
+- Статический подсчёт мнемоник по исходному тексту не является точной opcode coverage: там присутствуют комментарии, макросы и данные. Для точной матрицы нужен нормализованный проход по assembler listing или дизассемблированному ROM. Сборка MASM и runtime в этом аудите не выполнялись.
+- Статус BIOS-01A: **частично выполнен** — выявлены основные недостающие группы и аппаратные зависимости; точная матрица по opcode/subfunction ещё требуется. Совместимость BIOS runtime не подтверждена.
+
 ## Следующий этап — BIOS ROM и память гостевого 8086
 
 1. **BIOS-01 — аудит backend памяти (следующая задача):** проследить все активные пути чтения/записи x86 physical memory и определить единственную точку, где можно обеспечить ROM write-protect без обхода существующего 64-page mapper. Проверить, что все записи в F0000-FFFFF блокируются, а чтение возвращает байты ROM.
