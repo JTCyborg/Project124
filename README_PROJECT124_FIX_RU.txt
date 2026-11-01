@@ -99,12 +99,14 @@ PROJECT 124 — ПАКЕТ ИСПРАВЛЕНИЙ ИЗ ИСХОДНИКОВ
 Из корня проекта вручную (если SjASMPlus находится в tools):
 
   ./tools/sjasmplus -I neogs_sub -I shared neogs_sub/build_firmware.asm
+  powershell -ExecutionPolicy Bypass -File .\\pack_neogs.ps1
   ./tools/sjasmplus -I zx_main -I shared -I neogs_sub zx_main/main.asm
 
 ВАЖНО: не собирайте neogs_sub/main.asm отдельной командой как первый этап.
 Этот файл создаёт только основную Z80-прошивку и НЕ создаёт neogs_bootstrap.bin.
-Оба бинарника (neogs_code.bin и neogs_bootstrap.bin) создаёт именно
-neogs_sub/build_firmware.asm. После этого собирается zx_main/main.asm.
+Оба промежуточных бинарника (neogs_code.bin и neogs_bootstrap.bin) создаёт
+neogs_sub/build_firmware.asm. Затем pack_neogs.ps1 формирует neoprog.bin.
+Только после этого собирается zx_main/main.asm.
 
 Нужен SjASMPlus 1.21 или новее (рекомендуется 1.24.0), поскольку в сборке
 используются include paths также для INCBIN. Либо одной командой в PowerShell:
