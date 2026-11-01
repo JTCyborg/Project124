@@ -3,7 +3,7 @@ param(
     [string]$ImagePath,
 
     [Parameter(Mandatory = $true)]
-    [string]$FirmwarePath
+    [string]$PackagePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,18 +12,18 @@ try {
     if (-not (Test-Path -LiteralPath $ImagePath -PathType Leaf)) {
         throw "TR-DOS image not found: $ImagePath"
     }
-    if (-not (Test-Path -LiteralPath $FirmwarePath -PathType Leaf)) {
-        throw "NeoGS firmware binary not found: $FirmwarePath"
+    if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
+        throw "NeoGS package binary not found: $PackagePath"
     }
 
     [byte[]]$image = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $ImagePath))
-    [byte[]]$firmware = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $FirmwarePath))
+    [byte[]]$package = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $PackagePath))
 
     if ($image.Length -ne 655360) {
         throw "Invalid TRD image size: $($image.Length), expected 655360 bytes."
     }
-    if ($firmware.Length -le 0 -or $firmware.Length -gt 0x3000) {
-        throw "Invalid NeoGS firmware size: $($firmware.Length), allowed range is 1..12288 bytes."
+    if ($package.Length -le 0 -or $package.Length -gt 0xFF00) {
+        throw "Invalid NeoGS package size: $($package.Length), allowed range is 1..65280 bytes."
     }
 
     # TR-DOS catalogue: 128 entries * 16 bytes in the first 8 sectors.
@@ -50,11 +50,11 @@ try {
     $sector = [int]$image[$entryOffset + 14]
     $track = [int]$image[$entryOffset + 15]
 
-    if ($catalogueLength -ne $firmware.Length) {
-        throw "neoprog.C length mismatch: TR-DOS=$catalogueLength, firmware=$($firmware.Length)."
+    if ($catalogueLength -ne $package.Length) {
+        throw "neoprog.C length mismatch: TR-DOS=$catalogueLength, package=$($package.Length)."
     }
 
-    $expectedSectors = [int][Math]::Ceiling($firmware.Length / 256.0)
+    $expectedSectors = [int][Math]::Ceiling($package.Length / 256.0)
     if ($sectorCount -ne $expectedSectors) {
         throw "neoprog.C sector-count mismatch: TR-DOS=$sectorCount, expected=$expectedSectors."
     }
@@ -62,9 +62,9 @@ try {
         throw "Invalid first data sector in neoprog.C catalogue entry."
     }
 
-    # Verify every meaningful file byte against the freshly built firmware.
-    $firmwareOffset = 0
-    $remaining = $firmware.Length
+    # Verify every meaningful file byte against the freshly built package.
+    $packageOffset = 0
+    $remaining = $package.Length
     for ($index = 0; $index -lt $sectorCount; $index++) {
         if ($track -gt 79) {
             throw "neoprog.C data extends beyond the 80-track TR-DOS image."
@@ -74,12 +74,12 @@ try {
         $chunkLength = [Math]::Min(256, $remaining)
 
         for ($byteIndex = 0; $byteIndex -lt $chunkLength; $byteIndex++) {
-            if ($image[$diskOffset + $byteIndex] -ne $firmware[$firmwareOffset + $byteIndex]) {
-                throw ("neoprog.C data mismatch at file offset 0x{0:X4}." -f ($firmwareOffset + $byteIndex))
+            if ($image[$diskOffset + $byteIndex] -ne $package[$packageOffset + $byteIndex]) {
+                throw ("neoprog.C data mismatch at file offset 0x{0:X4}." -f ($packageOffset + $byteIndex))
             }
         }
 
-        $firmwareOffset += $chunkLength
+        $packageOffset += $chunkLength
         $remaining -= $chunkLength
         $sector++
         if ($sector -ge 16) {
@@ -89,12 +89,12 @@ try {
     }
 
     if ($remaining -ne 0) {
-        throw "TR-DOS data ended before the complete firmware image was verified."
+        throw "TR-DOS data ended before the complete package was verified."
     }
 
     Write-Host ("[VERIFY] neoprog.C found in TR-DOS catalogue.")
-    Write-Host ("[VERIFY] Firmware size: {0} bytes ({1} sectors)." -f $firmware.Length, $sectorCount)
-    Write-Host "[VERIFY] Every firmware byte in disk_A.trd matches neogs_code.bin."
+    Write-Host ("[VERIFY] Package size: {0} bytes ({1} sectors)." -f $package.Length, $sectorCount)
+    Write-Host "[VERIFY] Every package byte in disk_A.trd matches neoprog.bin."
     exit 0
 }
 catch {

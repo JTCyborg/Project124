@@ -8,8 +8,8 @@
 ; length and exactly that many bytes through the documented ZX data channel,
 ; stores the custom firmware at RAM address $0000, then jumps to $0000.
 ;
-; It executes from the fixed RAM window $4000-$7FFF and keeps its stack below
-; $4000. The fixed $4000-$7FFF RAM window remains visible after B_NOROM is set.
+; It executes from fixed RAM window $4000-$7FFF. Its stack is moved to
+; reserved $F000-$FFFF after the extended RAM windows are configured.
 ; =========================================================================
 
 neogs_bootstrap_start:
@@ -47,7 +47,7 @@ neogs_bootstrap_start:
         call    bootstrap_receive_data_byte
         ld      d, a
 
-        ; Reject zero length and any image larger than $3400, preserving a 3 KiB stack reserve.
+        ; Reject zero length and any image larger than the low 16-KiB window ($4000).
         ld      a, d
         or      e
         jr      z, bootstrap_error

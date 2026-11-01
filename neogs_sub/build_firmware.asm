@@ -8,8 +8,8 @@
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; Firmware occupies $0000-$33FF at most. Keep at least $0C00 bytes below SP=$3FFF
-; for the Z80 stack; x86 DMA payload remains at $5000.
+; The first firmware segment occupies the full low window $0000-$3FFF.
+; The Z80 stack is in the reserved upper WIN3 area $F000-$FFFF.
         ASSERT neogs_firmware_end <= $4000
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
