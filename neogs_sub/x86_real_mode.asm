@@ -2,8 +2,10 @@
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, INC/DEC r16, PUSH/POP r16,
-; MOV r8/r16,imm, short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
+; the physical-memory backend. Supported: NOP, 16-bit register-direct
+; ADD/ADC/SUB/SBB/CMP, PUSHF, INC/DEC r16, PUSH/POP r16, MOV r8/r16,imm,
+; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET. Memory ModR/M
+; ALU forms and 8-bit ALU forms remain unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -140,6 +142,10 @@ x86_real_mode_test:
         call    x86_real_clear_vector
         jp      c, x86_real_test_fail_6
 
+        ; Run the independent 16-bit register ALU guest regression.
+        call    x86_real_alu_test
+        ret     c
+
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
         xor     a
@@ -238,6 +244,28 @@ x86_real_next:
 
         cp      #90
         jp      z, x86_real_nop
+        cp      #01
+        jp      z, x86_real_alu_modrm16
+        cp      #03
+        jp      z, x86_real_alu_modrm16
+        cp      #11
+        jp      z, x86_real_alu_modrm16
+        cp      #13
+        jp      z, x86_real_alu_modrm16
+        cp      #19
+        jp      z, x86_real_alu_modrm16
+        cp      #1B
+        jp      z, x86_real_alu_modrm16
+        cp      #29
+        jp      z, x86_real_alu_modrm16
+        cp      #2B
+        jp      z, x86_real_alu_modrm16
+        cp      #39
+        jp      z, x86_real_alu_modrm16
+        cp      #3B
+        jp      z, x86_real_alu_modrm16
+        cp      #9C
+        jp      z, x86_real_pushf
         cp      #40
         jp      c, .not_inc_r16
         cp      #48

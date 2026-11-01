@@ -1141,7 +1141,14 @@ EXECUTE_X86_FILE_STAGE::
         or      a
         sbc     hl, de
         jp      nz, .int_guest_fail
-        MACRO_EF_STRING P124_msg_int_guest_pass
+        ; Stage 2B reports each regression group separately. These messages are
+        ; emitted only after the complete guest image and all final state
+        ; assertions have passed.
+        MACRO_EF_STRING P124_msg_int_guest_mov_flags_pass
+        MACRO_EF_STRING P124_msg_int_guest_flow_pass
+        MACRO_EF_STRING P124_msg_int_guest_stack_pass
+        MACRO_EF_STRING P124_msg_int_guest_alu_pass
+        MACRO_EF_STRING P124_msg_int_guest_iret_pass
 
         ; -------------------------------------------------------------
         ; Stage 3A: guest INT 10h video BIOS services and live console stream.
@@ -1736,7 +1743,11 @@ P124_msg_int_test_pass: DEFB "[INT] PASS: FLAGS/CS/IP frame, IF/TF clear, IRET r
 P124_msg_int_test_transport_fail: DEFB "[INT] FAIL: interrupt test command/result timeout.", 13, 0
 P124_msg_int_test_fail: DEFB "[INT] FAIL: status/detail = ", 0
 P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler and IRET...", 13, 0
-P124_msg_int_guest_pass: DEFB "[INT] PASS: guest handler executed through CS:IP; IRET returned to caller.", 13, 0
+P124_msg_int_guest_mov_flags_pass: DEFB "[CPU] PASS: MOV r16, INC/DEC and OF/SF/ZF/AF/PF; CF preservation verified.", 13, 0
+P124_msg_int_guest_flow_pass: DEFB "[CPU] PASS: LOOP/JCXZ/JMP and taken/not-taken Jcc paths; FLAGS preserved.", 13, 0
+P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP registers, PUSH SP, POP SP and SS:FFFF offset wrap.", 13, 0
+P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP both ModR/M directions; all six flags verified.", 13, 0
+P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
 P124_msg_bios_video_start: DEFB "[BIOS] Stage 3A: guest INT 10h video services and 6x8 console...", 13, 0
@@ -3766,6 +3777,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_interpreter.asm"
         INCLUDE "x86_interrupt.asm"
         INCLUDE "x86_real_mode.asm"
+        INCLUDE "x86_real_alu.asm"
         INCLUDE "bios/bios_video.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
@@ -5579,8 +5591,10 @@ x86_int_target_cs: dw 0
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, INC/DEC r16, PUSH/POP r16,
-; MOV r8/r16,imm, short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
+; the physical-memory backend. Supported: NOP, 16-bit register-direct
+; ADD/ADC/SUB/SBB/CMP, PUSHF, INC/DEC r16, PUSH/POP r16, MOV r8/r16,imm,
+; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET. Memory ModR/M
+; ALU forms and 8-bit ALU forms remain unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -5717,6 +5731,10 @@ x86_real_mode_test:
         call    x86_real_clear_vector
         jp      c, x86_real_test_fail_6
 
+        ; Run the independent 16-bit register ALU guest regression.
+        call    x86_real_alu_test
+        ret     c
+
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
         xor     a
@@ -5815,6 +5833,28 @@ x86_real_next:
 
         cp      #90
         jp      z, x86_real_nop
+        cp      #01
+        jp      z, x86_real_alu_modrm16
+        cp      #03
+        jp      z, x86_real_alu_modrm16
+        cp      #11
+        jp      z, x86_real_alu_modrm16
+        cp      #13
+        jp      z, x86_real_alu_modrm16
+        cp      #19
+        jp      z, x86_real_alu_modrm16
+        cp      #1B
+        jp      z, x86_real_alu_modrm16
+        cp      #29
+        jp      z, x86_real_alu_modrm16
+        cp      #2B
+        jp      z, x86_real_alu_modrm16
+        cp      #39
+        jp      z, x86_real_alu_modrm16
+        cp      #3B
+        jp      z, x86_real_alu_modrm16
+        cp      #9C
+        jp      z, x86_real_pushf
         cp      #40
         jp      c, .not_inc_r16
         cp      #48
