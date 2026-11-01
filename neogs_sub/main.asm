@@ -488,7 +488,9 @@ rom_return_trampoline_end:
         INCLUDE "x86_real_mov.asm"
         INCLUDE "bios/bios_video.asm"
 
-        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+; DMA intentionally overlays the trampoline's logical address while PG1
+; points to physical page 68. Restoring PG1 reveals the saved trampoline.
+        ASSERT rom_return_trampoline_end - rom_return_trampoline_code <= 16
         ASSERT X86_DMA_HEADER_ADDR = #4000
         ASSERT neogs_dma_handler_end <= #4000
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
