@@ -110,6 +110,8 @@ command_return_to_gsrom:
         jp      ROM_RETURN_TRAMPOLINE_ADDR
 
 command_reset:
+        ld      a, 3
+        out     (PG1), a                ; ensure firmware page is visible
         xor     a
         ld      (neo_dma_error), a
         ld      (x86_exit_status), a
@@ -186,6 +188,7 @@ command_load_x86:
         ld      (neo_dma_error), a
         ; Keep page 68 mapped until the guest image has been copied/executed.
         jp      main_loop
+neogs_dma_handler_end:
 
 ; -------------------------------------------------------------------------
 ; CMD_RUN_X86 — execute the length-framed payload beginning at $4002.
@@ -217,7 +220,7 @@ execute_neogs_x86:
 
         ; Maximum code length is $3FFE: $4002 + length must not exceed $8000.
         ld      a, h
-        cp      #2F
+        cp      #3F
         jr      c, .x86_length_valid
         jp      nz, .invalid_x86_length
         ld      a, l
@@ -271,7 +274,7 @@ execute_neogs_x86_real:
         or      l
         jp      z, .real_invalid_length
         ld      a, h
-        cp      #2F
+        cp      #3F
         jr      c, .real_length_valid
         jp      nz, .real_invalid_length
         ld      a, l
@@ -485,6 +488,7 @@ rom_return_trampoline_end:
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_DMA_HEADER_ADDR = #4000
+        ASSERT neogs_dma_handler_end <= #4000
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
 
 neogs_firmware_end:
