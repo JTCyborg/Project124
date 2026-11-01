@@ -5,8 +5,8 @@
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; The firmware occupies $0000-$33FF at most; at least $0C00 bytes remain for the stack at $3FFF.
-; NeoGS logical $4000-$7FFF is the second half of physical RAM page 1,
+; Current firmware image is kept below $3400; the stack grows down from $3FFF.
+; NeoGS logical $4000-$7FFF normally maps physical RAM page 1,
 ; DMA uses reserved physical page 68 (base $110000), temporarily mapped
 ; into logical $4000-$7FFF. The original firmware page is restored after run.
 ; The x86 DMA frame is placed at $4000: [length lo][length hi][x86 bytes].
