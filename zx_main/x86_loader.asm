@@ -198,6 +198,7 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_mov_address_pass
         MACRO_EF_STRING P124_msg_int_guest_io_pass
         MACRO_EF_STRING P124_msg_int_guest_strings_pass
+        MACRO_EF_STRING P124_msg_int_guest_rep_strings_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
 
         ; -------------------------------------------------------------
@@ -834,6 +835,7 @@ P124_msg_int_guest_mov_memory_pass: DEFB "[CPU] PASS: MOV r/m8,r8 and r/m16,r16;
 P124_msg_int_guest_mov_address_pass: DEFB "[CPU] PASS: MOV all 8 EA forms, signed disp8/disp16, segment overrides and offset wrap.", 13, 0
 P124_msg_int_guest_io_pass: DEFB "[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; imm8/DX; byte/word; full DX; FLAGS preserved.", 13, 0
 P124_msg_int_guest_strings_pass: DEFB "[CPU-STR] PASS: MOVS/CMPS/STOS/LODS/SCAS byte/word; segment override; DF +/-; FLAGS.", 13, 0
+P124_msg_int_guest_rep_strings_pass: DEFB "[CPU-STR-02] PASS: REP MOVSB; REPE CMPSB; REPNE SCASB; CX=0; REP + SS override.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
