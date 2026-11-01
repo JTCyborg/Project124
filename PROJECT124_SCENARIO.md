@@ -437,3 +437,12 @@
 - Commits: `6c22bb801c2fb59d257015e653a165b07368bd28` (разделение SI/DI/FLAGS второго checkpoint) и `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` (разделение AX первого/второго checkpoint).
 - Изменена только диагностика self-test; реализация string instructions не менялась. GitHub Actions run `41362495956` для commit `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` завершился success: Build, Verify и Upload artifacts — PASS. Artifact ID `13105633891` (`project124-build`): firmware `neogs_code.bin` 15 118 байт (`#3B0E`, запас 1 266 байт до `#4000`), bootstrap 196 байт (`#00C4`), package `neoprog.bin` 15 316 байт (`#3BD4`, 60 TR-DOS sectors), `disk_A.trd` 655 360 байт. Это подтверждает сборку/упаковку, но не runtime. Сценарий обновлён после получения runtime лога; свежий пакет готов для следующего запуска. Следующий лог должен различить первый AX checkpoint (`1D01`), второй AX mismatch (фактический AX), второй SI mismatch (фактический SI), второй DI mismatch (фактический DI) и второй FLAGS mismatch (фактические FLAGS).
 - CPU-STR-01 и STACK-01 остаются runtime NOT PASS; REP/REPE/REPNE по-прежнему заблокированы до полного прохождения regression.
+
+
+### 2026-11-02 — fourth CPU-STR runtime: обнаружен неверный expected FLAGS, исправлен тест
+
+- User ran package `neoprog.bin #3BD4` (60 sectors). All stages through INT Stage 2A passed. Guest INT 20h returned `status/detail = 000D 0346`.
+- Новый обработчик однозначно показывает, что сбой — FLAGS на втором string checkpoint (после LODSW/STOSB/STOSW/CMPSB), фактические FLAGS=`#0346`.
+- Это не дефект реализации сохранения FLAGS. Начальное FLAGS=`#0302` содержит IF=1. Общий `x86_alu_update_flags` намеренно сохраняет control bits, включая IF; результат CMPSB должен быть `#0346`, а не `#0246`. Аналогично ожидаемые значения последующих compare checkpoints должны сохранять IF: CMPSW `#0312`, SCASB `#0346`, SCASW `#0302`.
+- Исправлены четыре ожидаемых FLAGS значения в regression и комментарии. Изменён только self-test expected state; код выполнения CMPS/SCAS и общий ALU не менялся. Source commit: `1dc37b59bf2d19fb0e1eec314c563889be7c848e`.
+- Следующая сборка должна проверить, пройдёт ли второй checkpoint и выявятся ли более поздние проверки. CI/runtime для нового commit пока не подтверждены. CPU-STR и STACK остаются runtime NOT PASS; REP остаётся заблокирован.
