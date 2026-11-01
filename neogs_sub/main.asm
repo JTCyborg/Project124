@@ -5,7 +5,7 @@
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Current firmware image is kept below $3400; the stack grows down from $3FFE.
+; Current firmware image is kept below $3800; the stack grows down from $3FFE, reserving at least $0800 bytes for stack.
 ; Keep the active Z80 stack in fixed WIN0: x86_mem_map_addr remaps WIN3 via MPAGEX.
 ; WIN1 remains on the documented default physical 16 KiB page #03.
 ; The DMA frame at logical $5000 therefore maps to physical $00D000.
