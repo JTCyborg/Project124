@@ -32,7 +32,7 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, $3FFF
+        ld      sp, $FFFE
 
         ; Set Z80 to the documented maximum guaranteed clock: 20 MHz.
         ; Do not select 24 MHz: the guide explicitly says it is not guaranteed.
@@ -545,8 +545,10 @@ saved_x86_ax:      dw 0
 ; but the following JP is still fetched from RAM because PC remains in $4000.
 rom_return_trampoline_code:
         in      a, (GSCFG0)
-        and     #FE
+        and     #F6                    ; clear M_NOROM and M_EXPAG
         out     (GSCFG0), a
+        xor     a
+        out     (MPAG), a                ; restore stock ROM paging: WIN2=ROM0, WIN3=ROM1
         jp      0
 rom_return_trampoline_end:
 
