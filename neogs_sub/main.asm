@@ -5,11 +5,11 @@
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Current firmware image is kept below $3800; the stack grows down from $3FFE, reserving at least $0800 bytes for stack.
-; Keep the active Z80 stack in fixed WIN0: x86_mem_map_addr remaps WIN3 via MPAGEX.
-; WIN1 remains on the documented default physical 16 KiB page #03.
-; The DMA frame at logical $5000 therefore maps to physical $00D000.
-; Firmware and its stack remain in the low 16 KiB page.
+; Firmware occupies fixed WIN0 ($0000-$3FFF). The Z80 stack is moved to fixed WIN2,
+; physical page #01, at $BFFE. x86_mem_map_addr remaps only WIN3 via MPAGEX;
+; MPAG/WIN2 remains fixed throughout guest-memory access. A 128-byte canary
+; at $B800-$B87F detects stack overflow; the usable stack area is ~1.87 KiB.
+; WIN1 remains on physical page #03; the DMA frame at logical $5000 maps to $00D000.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -19,6 +19,10 @@
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
 X86_DMA_HEADER_ADDR        EQU $5000
 X86_RAM_RUN_ADDR           EQU $5002
+Z80_STACK_TOP              EQU $BFFE
+Z80_STACK_GUARD_BASE       EQU $B800
+Z80_STACK_GUARD_SIZE       EQU $0080
+Z80_STACK_FILL_LENGTH      EQU Z80_STACK_TOP - Z80_STACK_GUARD_BASE - 1
 DMA_WAIT_LIMIT   EQU #FFFF
 DMA_WAIT_OUTER   EQU 8
 IPC_WAIT_LIMIT   EQU #FFFF
@@ -33,7 +37,14 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, $3FFE              ; stack stays in fixed WIN0; WIN3 is remapped by MPAGEX
+        ld      sp, Z80_STACK_TOP     ; fixed WIN2/page #01; only WIN3 is remapped by MPAGEX
+        ; Fill the reserved stack area with a canary before the first CALL/PUSH.
+        ; The lower 128 bytes remain a guard; normal stack use grows down from BFFE.
+        ld      hl, Z80_STACK_GUARD_BASE
+        ld      (hl), #A5
+        ld      de, Z80_STACK_GUARD_BASE + 1
+        ld      bc, Z80_STACK_FILL_LENGTH
+        ldir
 
         ; Set Z80 to the documented maximum guaranteed clock: 20 MHz.
         ; Do not select 24 MHz: the guide explicitly says it is not guaranteed.
@@ -387,11 +398,36 @@ command_bios_video_test:
 ; Run a TR-DOS payload through the bounded CS:IP real-mode executor.
 command_run_x86_real:
         call    execute_neogs_x86_real
+        ; The guard is checked after all earlier diagnostics and the real-mode task.
+        call    z80_stack_guard_check
+        jr      nc, .stack_guard_ok
+        ld      hl, #7E00
+        ld      (saved_x86_ax), hl
+        ld      a, 12
+        ld      (x86_exit_status), a
+.stack_guard_ok:
         ld      a, 3
         call    neo_set_pg1             ; restore physical firmware page 1
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
+
+; Check the lower 128-byte canary in fixed WIN2/page #01.
+; Carry set means the Z80 stack crossed the #B880 safety boundary.
+z80_stack_guard_check:
+        ld      hl, Z80_STACK_GUARD_BASE
+        ld      b, Z80_STACK_GUARD_SIZE
+.loop:
+        ld      a, (hl)
+        cp      #A5
+        jr      nz, .fail
+        inc     hl
+        djnz    .loop
+        or      a
+        ret
+.fail:
+        scf
+        ret
 
 ; -------------------------------------------------------------------------
 ; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
