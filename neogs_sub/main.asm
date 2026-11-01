@@ -139,6 +139,32 @@ command_load_x86:
         ld      a, #44
         out     (PG1), a
 
+        ; Verify that PG1 really exposes writable physical page 68.
+        ; The marker occupies the first DMA-header byte and is overwritten
+        ; by the host's length prefix once DMA starts.
+        ld      a, #A5
+        ld      (X86_DMA_HEADER_ADDR), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        cp      #A5
+        jr      z, .pg1_map_verified
+
+        ; PG1 did not expose the requested page. Restore the trampoline
+        ; because the failed mapping may have left the write in page 3.
+        ld      a, #03
+        out     (PG1), a
+        ld      hl, rom_return_trampoline_code
+        ld      de, ROM_RETURN_TRAMPOLINE_ADDR
+        ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
+        ldir
+        ld      a, 0
+        ld      (neo_pg1_map_verified), a
+        jr      .pg1_map_test_done
+
+.pg1_map_verified:
+        ld      a, 1
+        ld      (neo_pg1_map_verified), a
+
+.pg1_map_test_done:
         ld      a, C_DMA_ZX
         out     (DMA_MOD), a
 
@@ -437,6 +463,10 @@ neo_debug_dump_dma_frame:
         call    neo_debug_send_string
         ld      a, #44                 ; PG1 value programmed by CMD_LOAD_X86
         call    neo_debug_hex8
+        ld      hl, neo_debug_map_label
+        call    neo_debug_send_string
+        ld      a, (neo_pg1_map_verified)
+        call    neo_debug_hex8
         ld      a, ' '
         call    neo_send_data_byte
         ld      hl, X86_DMA_HEADER_ADDR
@@ -489,6 +519,8 @@ neo_debug_hex_nibble:
 
 neo_debug_dma_prefix:
         defb    "[NGS DMA] PG1=", 0
+neo_debug_map_label:
+        defb    " MAP=", 0
 
 ; -------------------------------------------------------------------------
 ; neo_send_data_byte
@@ -533,6 +565,7 @@ neo_send_data_byte:
 neo_command:       db 0
 neo_tx_byte:       db 0
 neo_dma_error:     db 0
+neo_pg1_map_verified: db 0
 saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
 
