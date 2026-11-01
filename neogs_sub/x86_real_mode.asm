@@ -100,7 +100,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_bp)
-        ld      de, #ADDE
+        ld      de, #00F0
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -1010,6 +1010,7 @@ x86_guest_jl_target:
         db #B8,#F0,#00              ; MOV AX,00F0
         db #50                      ; PUSH AX
         db #5C                      ; POP SP -> SP=00F0
+        db #54,#5D                  ; PUSH SP / POP BP -> BP must receive 00F0
         db #BC,#00,#01              ; restore SP=0100
 
         ; Exercise a PUSH/POP word crossing SS:FFFF -> SS:0000 offset wrap.
