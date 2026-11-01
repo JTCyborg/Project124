@@ -7,9 +7,10 @@
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
 ; The firmware occupies $0000-$33FF at most; at least $0C00 bytes remain for the stack at $3FFF.
 ; NeoGS logical $4000-$7FFF is the second half of physical RAM page 1,
-; therefore logical $5000 maps to physical linear address $00D000.
-; The x86 DMA frame is placed at $5000: [length lo][length hi][x86 bytes].
-; The interpreter starts at $5002 and is bounded by the exact file length.
+; DMA uses reserved physical page 68 (base $110000), temporarily mapped
+; into logical $4000-$7FFF. The original firmware page is restored after run.
+; The x86 DMA frame is placed at $4000: [length lo][length hi][x86 bytes].
+; The interpreter starts at $4002 and is bounded by the exact file length.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -17,8 +18,8 @@
         ORG     $0000
 
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
-X86_DMA_HEADER_ADDR        EQU $5000
-X86_RAM_RUN_ADDR           EQU $5002
+X86_DMA_HEADER_ADDR        EQU $4000
+X86_RAM_RUN_ADDR           EQU $4002
 DMA_WAIT_LIMIT   EQU #FFFF
 DMA_WAIT_OUTER   EQU 8
 IPC_WAIT_LIMIT   EQU #FFFF
@@ -121,22 +122,27 @@ command_reset:
 
 ; -------------------------------------------------------------------------
 ; CMD_LOAD_X86
-; 1) Select ZX DMA module and set physical target $00D000.
-; 2) Enable DMA by setting DMA_CST bit 7.
-; 3) Clear CBIT: this is the READY indication to the host.
-; 4) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
-; 5) Disable DMA, then clear CBIT to acknowledge completion.
+; 1) Map reserved physical page 68 into logical $4000-$7FFF.
+; 2) Select ZX DMA module and set physical target $110000.
+; 3) Enable DMA by setting DMA_CST bit 7.
+; 4) Clear CBIT: this is the READY indication to the host.
+; 5) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
+; 6) Disable DMA, then clear CBIT to acknowledge completion.
 ;
 ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
 ; -------------------------------------------------------------------------
 command_load_x86:
+        ; PG1 is a direct page register: $88 selects physical page 68.
+        ld      a, #88
+        out     (PG1), a
+
         ld      a, C_DMA_ZX
         out     (DMA_MOD), a
 
+        ld      a, #11
+        out     (DMA_HAD), a            ; physical address bits 21:16 = #11
         xor     a
-        out     (DMA_HAD), a            ; physical address bits 21:16 = 0
-        ld      a, #D0
-        out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
+        out     (DMA_MAD), a            ; physical address bits 15:8 = 0
         xor     a
         out     (DMA_LAD), a            ; physical address bits 7:0 = 0
 
@@ -168,6 +174,8 @@ command_load_x86:
         ld      (neo_dma_error), a
         ld      a, 3
         ld      (x86_exit_status), a
+        ld      a, 3
+        out     (PG1), a                ; restore stock physical page 1
         jp      main_loop
 
 .dma_host_end:
@@ -176,13 +184,16 @@ command_load_x86:
         out     (CLRCBIT), a            ; acknowledge host's #FF marker
         xor     a
         ld      (neo_dma_error), a
+        ; Keep page 68 mapped until the guest image has been copied/executed.
         jp      main_loop
 
 ; -------------------------------------------------------------------------
-; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
+; CMD_RUN_X86 — execute the length-framed payload beginning at $4002.
 ; -------------------------------------------------------------------------
 command_run_x86:
         call    execute_neogs_x86
+        ld      a, 3
+        out     (PG1), a                ; restore physical firmware page 1
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -198,13 +209,13 @@ execute_neogs_x86:
         ret
 
 .dma_ok:
-        ; DMA frame begins with a little-endian x86 byte length at $5000.
+        ; DMA frame begins with a little-endian x86 byte length at $4000.
         ld      hl, (X86_DMA_HEADER_ADDR)
         ld      a, h
         or      l
         jp      z, .invalid_x86_length
 
-        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
+        ; Maximum code length is $3FFE: $4002 + length must not exceed $8000.
         ld      a, h
         cp      #2F
         jr      c, .x86_length_valid
@@ -240,7 +251,7 @@ execute_neogs_x86:
         ld      (x86_exit_status), a
         ret
 
-; Execute the loaded DMA task as bounded guest code at 0000:5002.
+; Execute the loaded DMA task as bounded guest code at 0000:4002.
 ; The DMA frame is copied into the x86 physical-memory backend before execution.
 execute_neogs_x86_real:
         ; Match the legacy loader's DMA error and length validation.
@@ -274,7 +285,7 @@ execute_neogs_x86_real:
 
         call    x86_mem_init
         ld      hl, X86_RAM_RUN_ADDR
-        ld      de, #5002
+        ld      de, #5002             ; guest physical destination remains 0000:5002
         ld      bc, (X86_DMA_HEADER_ADDR)
         call    x86_real_copy_image
         jp      c, .real_copy_failed
@@ -471,6 +482,7 @@ rom_return_trampoline_end:
         INCLUDE "bios/bios_video.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+        ASSERT X86_DMA_HEADER_ADDR = #4000
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
 
 neogs_firmware_end:
