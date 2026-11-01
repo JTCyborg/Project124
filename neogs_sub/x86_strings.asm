@@ -8,6 +8,56 @@
 
 x86_real_string_instruction:
         ld      (x86_string_opcode), a
+        ld      a, (x86_real_rep_mode)
+        or      a
+        jr      z, .first
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      z, x86_real_next
+.first:
+        call    x86_string_iteration
+        ret     c
+        ld      a, (x86_real_rep_mode)
+        or      a
+        jp      z, x86_real_next
+        ld      hl, (x86_reg_cx)
+        dec     hl
+        ld      (x86_reg_cx), hl
+        ld      a, h
+        or      l
+        jp      z, x86_real_next
+        ld      a, (x86_string_opcode)
+        and     #FE
+        cp      #A6
+        jr      z, .check_zf
+        cp      #AE
+        jr      nz, .again
+.check_zf:
+        ld      a, (x86_real_rep_mode)
+        cp      3
+        jr      z, .repe
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      nz, x86_real_next
+        jr      .again
+.repe:
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      z, x86_real_next
+.again:
+        ld      hl, (x86_real_steps)
+        ld      a, h
+        or      l
+        jp      z, x86_real_budget_fail
+        dec     hl
+        ld      (x86_real_steps), hl
+        call    x86_string_iteration
+        ret     c
+        jr      .first
+
+x86_string_iteration:
+        ld      a, (x86_string_opcode)
         and     #FE
         cp      #A4
         jp      z, x86_string_movs
