@@ -776,6 +776,59 @@ x86_real_alu8_memory_test:
         call    x86_real_alu8_memory_seed
         jp      c, .fail_seed
 
+        ; Additional zeroed cells for all 8086 16-bit EA forms and
+        ; signed disp8 / disp16 arithmetic stores.
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0210
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0220
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #7000
+        ld      bc, #0110
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #7000
+        ld      bc, #0120
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0010
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0020
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0300
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0205
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #01FB
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #1434
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+
         ; Initialize guest registers and real-mode segments.
         ld      hl, 0
         ld      (x86_reg_ax), hl
@@ -793,6 +846,10 @@ x86_real_alu8_memory_test:
         ld      (x86_reg_cs), hl
         ld      hl, #7000
         ld      (x86_reg_ss), hl
+        ld      hl, #0010
+        ld      (x86_reg_si), hl
+        ld      hl, #0020
+        ld      (x86_reg_di), hl
         ld      hl, #5700
         ld      (x86_reg_ip), hl
         ld      hl, #0100
@@ -940,6 +997,17 @@ x86_alu8_memory_guest_image:
         db #2E,#00,#07             ; ADD CS:[BX],AL -> 43
         db #36,#00,#07             ; ADD SS:[BX],AL -> 53
         db #3E,#00,#46,#00         ; ADD DS:[BP],AL -> 63
+        db #00,#00                 ; ADD [BX+SI],AL -> DS:0210 = 03
+        db #00,#01                 ; ADD [BX+DI],AL -> DS:0220 = 03
+        db #00,#02                 ; ADD [BP+SI],AL -> SS:0110 = 03
+        db #00,#03                 ; ADD [BP+DI],AL -> SS:0120 = 03
+        db #00,#04                 ; ADD [SI],AL -> DS:0010 = 03
+        db #00,#05                 ; ADD [DI],AL -> DS:0020 = 03
+        db #00,#46,#00             ; ADD [BP+0],AL -> SS:0100 = 1C
+        db #00,#06,#00,#03         ; ADD direct [0300],AL -> 03
+        db #00,#47,#05             ; ADD [BX+5],AL -> 03
+        db #00,#47,#FB             ; ADD [BX-5],AL -> 03
+        db #00,#87,#34,#12         ; ADD [BX+1234],AL -> 03
         db #38,#07                 ; CMP DS:[BX],AL (no memory write)
         db #3A,#07                 ; CMP AL,DS:[BX] (no register write)
         db #F4
@@ -950,7 +1018,7 @@ x86_alu8_mem_expected_table:
         dw #1000,#0200
         db #17
         dw #7000,#0100
-        db #19
+        db #1C
         dw #3000,#0200
         db #33
         dw #0800,#0200
@@ -959,7 +1027,27 @@ x86_alu8_mem_expected_table:
         db #53
         dw #1000,#0100
         db #63
-x86_alu8_mem_expected_count EQU 6
+        dw #1000,#0210
+        db #03
+        dw #1000,#0220
+        db #03
+        dw #7000,#0110
+        db #03
+        dw #7000,#0120
+        db #03
+        dw #1000,#0010
+        db #03
+        dw #1000,#0020
+        db #03
+        dw #1000,#0300
+        db #03
+        dw #1000,#0205
+        db #03
+        dw #1000,#01FB
+        db #03
+        dw #1000,#1434
+        db #03
+x86_alu8_mem_expected_count EQU 16
 
 x86_alu8_modrm:       db 0
 x86_alu8_mode:        db 0
