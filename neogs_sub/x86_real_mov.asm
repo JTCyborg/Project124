@@ -387,7 +387,7 @@ x86_real_mov_memory_test:
         ld      hl, #0200
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #1234
         or      a
         sbc     hl, de
@@ -398,7 +398,7 @@ x86_real_mov_memory_test:
         ld      hl, #0004
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #AB34
         or      a
         sbc     hl, de
@@ -409,7 +409,7 @@ x86_real_mov_memory_test:
         ld      hl, #0206
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #AB34
         or      a
         sbc     hl, de
@@ -421,7 +421,7 @@ x86_real_mov_memory_test:
         ld      hl, #0100
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #1234
         or      a
         sbc     hl, de
