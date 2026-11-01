@@ -165,6 +165,8 @@ x86_real_io_test:
         ld      bc, 0
         call    x86_real_io_run
         ret     c
+        call    x86_io_check_flags
+        jp      c, x86_io_test_fail_6
         ld      hl, (x86_reg_ax)
         ld      de, #005A
         or      a
@@ -177,6 +179,8 @@ x86_real_io_test:
         ld      bc, 0
         call    x86_real_io_run
         ret     c
+        call    x86_io_check_flags
+        jp      c, x86_io_test_fail_6
         ld      hl, (x86_reg_ax)
         ld      de, #1234
         or      a
@@ -189,6 +193,8 @@ x86_real_io_test:
         ld      bc, 0
         call    x86_real_io_run
         ret     c
+        call    x86_io_check_flags
+        jp      c, x86_io_test_fail_6
         ld      hl, (x86_reg_ax)
         ld      de, #006C
         or      a
@@ -201,6 +207,8 @@ x86_real_io_test:
         ld      bc, 0
         call    x86_real_io_run
         ret     c
+        call    x86_io_check_flags
+        jp      c, x86_io_test_fail_6
         ld      hl, (x86_reg_ax)
         ld      de, #A1B2
         or      a
@@ -214,7 +222,35 @@ x86_real_io_test:
         sbc     hl, de
         jp      nz, x86_io_test_fail_5
 
+        ; DX is a full 16-bit port number: 01E0h must not alias 00E0h.
+        ld      hl, x86_io_guest_dx_unmapped
+        ld      de, #5240
+        ld      bc, x86_io_guest_dx_unmapped_end - x86_io_guest_dx_unmapped
+        call    x86_real_copy_image
+        jp      c, x86_io_test_fail_copy
+        ld      hl, #5240
+        ld      de, 0
+        ld      bc, 0
+        call    x86_real_io_run
+        ret     c
+        call    x86_io_check_flags
+        jp      c, x86_io_test_fail_6
+        ld      hl, (x86_reg_ax)
+        ld      de, #00FF
         or      a
+        sbc     hl, de
+        jp      nz, x86_io_test_fail_6
+
+        or      a
+        ret
+
+x86_io_check_flags:
+        ld      hl, (x86_reg_flags)
+        ld      de, #0302
+        or      a
+        sbc     hl, de
+        ret     z
+        scf
         ret
 
 ; IN: HL=guest IP, DE=initial AX, BC=initial DX.
@@ -256,6 +292,9 @@ x86_io_test_fail_4:
         jr      x86_io_test_fail
 x86_io_test_fail_5:
         ld      hl, #1C05
+        jr      x86_io_test_fail
+x86_io_test_fail_6:
+        ld      hl, #1C06
 x86_io_test_fail:
         ld      (saved_x86_ax), hl
         ld      a, 10
@@ -286,3 +325,7 @@ x86_io_guest_dx8_end:
 x86_io_guest_dx16:
         db #BA,#E0,#00,#B8,#B2,#A1,#EF,#B8,#00,#00,#ED,#F4
 x86_io_guest_dx16_end:
+
+x86_io_guest_dx_unmapped:
+        db #BA,#E0,#01,#B0,#00,#EC,#F4
+x86_io_guest_dx_unmapped_end:
