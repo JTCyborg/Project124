@@ -4,15 +4,16 @@
 ; This bounded executable slice runs guest instructions through CS:IP and
 ; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
-; MOV r8/r16,imm, short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3,
-; IRET. Memory ModR/M ALU operands remain unsupported.
+; MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms, short Jcc,
+; LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
+; Memory ModR/M ALU operands and segment-override prefixes remain unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
 ; handler at 0000:5100. The guest loads all eight general registers with
 ; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
 ; The test checks all MOV destinations, interrupt return, FLAGS and SP.
-; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh or 1Cxxh.
+; Success: status=0, AX=1A02h. Failures: status=9/11 with stage-specific AX codes.
 ; =========================================================================
 
 X86_REAL_STEP_LIMIT EQU #FFFF
@@ -148,6 +149,10 @@ x86_real_mode_test:
 
         ; Run byte arithmetic and 8/16-bit logical regression.
         call    x86_real_alu8_logic_test
+        ret     c
+
+        ; Stage 3B: 8086 MOV between register and memory operands.
+        call    x86_real_mov_memory_test
         ret     c
 
         ld      hl, #1A02
@@ -316,6 +321,11 @@ x86_real_next:
         jp      z, x86_real_logic16_modrm
         cp      #85
         jp      z, x86_real_logic16_modrm
+        cp      #88
+        jp      c, .not_mov_rm_reg
+        cp      #8C
+        jp      c, x86_real_mov_modrm
+.not_mov_rm_reg:
         cp      #9C
         jp      z, x86_real_pushf
         cp      #40

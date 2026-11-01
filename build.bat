@@ -1,126 +1,94 @@
-```bat
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions
-
-rem =========================================================================
-rem PROJECT 124 — АВТОМАТИЗИРОВАННАЯ ДВУХПРОЦЕССОРНАЯ СБОРКА
-rem =========================================================================
-rem ШАГ 1: Сборка NeoGS:
-rem         neogs_code.bin
-rem         neogs_bootstrap.bin
-rem
-rem ШАГ 2: Сборка ZX Spectrum:
-rem         основной код + упаковка TRD
-rem
-rem Ассемблер: tools\sjasmplus.exe
-rem =========================================================================
+cd /d "%~dp0"
 
 echo.
 echo ================================================================
-echo              PROJECT 124 BUILD SYSTEM
+echo PROJECT 124 BUILD
 echo ================================================================
 echo.
 
 if not exist "tools\sjasmplus.exe" (
-    echo [ERROR] Не найден tools\sjasmplus.exe
+    echo ERROR: tools\sjasmplus.exe not found.
     goto BUILD_FAILED
 )
 
-rem =========================================================================
-rem ШАГ 1. СБОРКА ПРОШИВКИ NEOGS И BOOTSTRAP
-rem =========================================================================
+rem Download the package script if this working copy does not contain it.
+if not exist "%~dp0pack_neogs.ps1" (
+    echo [SETUP] pack_neogs.ps1 is missing. Downloading from Project124...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1' -OutFile '%~dp0pack_neogs.ps1'; exit 0 } catch { Write-Error $_; exit 1 }"
+    if errorlevel 1 goto BUILD_PACKER_FAILED
+)
+if not exist "%~dp0pack_neogs.ps1" goto BUILD_PACKER_FAILED
 
-echo [BUILD] Шаг 1: Сборка прошивки NeoGS и Bootstrap...
-echo.
-
-tools\sjasmplus.exe --dirbol ^
-    -I neogs_sub -I shared ^
-    --lst=neogs_list.txt ^
-    --sym=neogs_map.txt ^
-    neogs_sub/build_firmware.asm
-
+echo [1/2] Building NeoGS firmware and bootstrap...
+"tools\sjasmplus.exe" --dirbol -I "neogs_sub" -I "shared" --lst="neogs_list.txt" --sym="neogs_map.txt" "neogs_sub/build_firmware.asm"
 if errorlevel 1 goto BUILD_NEOGS_FAILED
 
-rem Проверка результата сборки
+echo [PACK] Creating neoprog.bin...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0pack_neogs.ps1"
+if errorlevel 1 goto BUILD_NEOGS_FAILED
 
 if not exist "neogs_code.bin" (
-    echo [ERROR] Не создан neogs_code.bin
+    echo ERROR: neogs_code.bin was not created.
     goto BUILD_NEOGS_FAILED
 )
-
 if not exist "neogs_bootstrap.bin" (
-    echo [ERROR] Не создан neogs_bootstrap.bin
+    echo ERROR: neogs_bootstrap.bin was not created.
+    goto BUILD_NEOGS_FAILED
+)
+if not exist "neoprog.bin" (
+    echo ERROR: neoprog.bin was not created.
+    goto BUILD_NEOGS_FAILED
+)
+if not exist "zx_main\neoprog.bin" (
+    echo ERROR: zx_main\neoprog.bin was not created.
     goto BUILD_NEOGS_FAILED
 )
 
-echo [SUCCESS] neogs_code.bin создан.
-echo [SUCCESS] neogs_bootstrap.bin создан.
-echo.
-
-rem =========================================================================
-rem ШАГ 2. СБОРКА ОСНОВНОГО КОДА ZX SPECTRUM
-rem =========================================================================
-
-echo [BUILD] Шаг 2: Сборка ZX Spectrum и TR-DOS...
-echo.
-
-tools\sjasmplus.exe --dirbol ^
-    -I zx_main -I shared -I neogs_sub ^
-    --lst=zx_list.txt ^
-    --sym=zx_map.txt ^
-    zx_main/main.asm
-
+echo [2/2] Building Spectrum host and TR-DOS image...
+"tools\sjasmplus.exe" --dirbol -I "zx_main" -I "shared" -I "neogs_sub" --lst="zx_list.txt" --sym="zx_map.txt" "zx_main/main.asm"
 if errorlevel 1 goto BUILD_ZX_FAILED
 
+if not exist "disk_A.trd" (
+    echo ERROR: disk_A.trd was not created.
+    goto BUILD_ZX_FAILED
+)
+
 echo.
 echo ================================================================
-echo [SUCCESS] PROJECT 124 BUILD COMPLETED
+echo BUILD COMPLETED
 echo ================================================================
 echo.
-echo [MAP] neogs_map.txt
-echo [MAP] zx_map.txt
-echo [LST] neogs_list.txt
-echo [LST] zx_list.txt
-echo.
-
-echo [FILES] Результаты:
-if exist "neogs_code.bin" echo   neogs_code.bin
-if exist "neogs_bootstrap.bin" echo   neogs_bootstrap.bin
-if exist "zx_main\neogs_code.bin" echo   zx_main\neogs_code.bin
-if exist "zx_main\neogs_bootstrap.bin" echo   zx_main\neogs_bootstrap.bin
-echo.
-
+dir "neogs_code.bin" "neogs_bootstrap.bin" "neoprog.bin" "disk_A.trd"
 pause
 exit /b 0
 
-rem =========================================================================
-rem ОШИБКИ СБОРКИ
-rem =========================================================================
+:BUILD_PACKER_FAILED
+echo.
+echo ERROR: pack_neogs.ps1 is missing and could not be downloaded.
+echo Download it from:
+echo https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1
+echo Save it in the Project124 root folder.
+pause
+exit /b 1
 
 :BUILD_NEOGS_FAILED
 echo.
-echo ================================================================
-echo [ERROR] ОШИБКА СБОРКИ NEOGS / BOOTSTRAP
-echo ================================================================
-echo Проверь neogs_list.txt и вывод ассемблера.
-echo.
+echo ERROR: NeoGS build or package creation failed.
+echo Check neogs_list.txt and the messages above.
 pause
 exit /b 1
 
 :BUILD_ZX_FAILED
 echo.
-echo ================================================================
-echo [ERROR] ОШИБКА СБОРКИ ZX SPECTRUM
-echo ================================================================
-echo Проверь zx_list.txt и вывод ассемблера.
-echo.
+echo ERROR: Spectrum build failed.
+echo Check zx_list.txt and the messages above.
 pause
 exit /b 1
 
 :BUILD_FAILED
 echo.
-echo [ERROR] Сборка невозможна: отсутствует ассемблер.
+echo ERROR: tools\sjasmplus.exe is missing.
 pause
 exit /b 1
-```

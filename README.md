@@ -4,34 +4,30 @@ ZX Spectrum Pentagon 1024 project with a host Z80 and a NeoGS Z80 firmware core.
 
 ## Build
 
-Run `build.bat` from the repository root on Windows. The build requires
-`tools/sjasmplus.exe`, `nasm.exe` on `PATH`, and Windows PowerShell.
+Run `build.bat` from the repository root on Windows. The build uses the
+project's `tools/sjasmplus.exe`.
 
-The build order is intentional:
-
-1. `neogs_sub/build_firmware.asm` assembles the NeoGS firmware to
-   `neogs_code.bin` and the first-stage loader to `neogs_bootstrap.bin`.
-2. `zx_main/main.asm` assembles `proj124.C` and `boot.B`. It also exports
-   the exact bytes from `neogs_code.bin` into the TR-DOS image as
-   `neoprog.C`.
-3. `tools/verify_neoprog_trd.ps1` verifies the `neoprog.C` catalogue entry,
-   byte length, sector count, and every stored firmware byte against
-   `neogs_code.bin`.
-
-The build fails if the firmware is empty, exceeds 12 KiB, or the TR-DOS copy
-does not match the freshly assembled firmware.
+1. `neogs_sub/build_firmware.asm` builds `neogs_code.bin` and
+   `neogs_bootstrap.bin`. `pack_neogs.ps1` combines them into `neoprog.bin`
+   using `[WORD bootstrap_length][bootstrap][firmware]`.
+2. `zx_main/main.asm` builds the host image and exports
+   `proj124.C`, `boot.B`, `neoprog.C`, and `x86task.C`.
+3. The complete NeoGS package is staged in RAM bank 1 only as a `SAVETRD`
+   source block. It is **not** included in the resident `proj124.C` image.
 
 ## Runtime loading model
 
-- `neoprog.C` is the **NeoGS firmware image**, not an x86 application.
-- The main Z80 finds `neoprog.C` in the TR-DOS catalogue and reads its sectors
-  into host RAM at `#C000`.
-- The existing GS105a ROM protocol loads the embedded first-stage bootstrap
-  at NeoGS RAM `#4000`. The bootstrap receives the firmware bytes from the
-  host buffer and installs the firmware at NeoGS RAM `#0000`.
-- The host waits for the firmware-ready ACK before proceeding.
-- Commander does not execute `neoprog.C` as a Spectrum code file. It is
-  reserved for the NeoGS firmware and is loaded automatically during startup.
+- `proj124.C` contains only the resident host Z80 program; no NeoGS bootstrap
+  or firmware bytes are embedded in it.
+- At startup, the existing Stage 2 routine `load_neogs_firmware_file` searches
+  for `neoprog.C`, reads its TR-DOS sectors once into host RAM at `#C000`,
+  and records the exact package length.
+- The existing GS105a handshake streams the bootstrap section to NeoGS RAM
+  `#4000`, starts it, then streams the firmware section to NeoGS RAM `#0000`.
+  Both sections come from that one already-loaded file; no second file loader
+  or second TR-DOS read is introduced.
+- The host proceeds only after the custom firmware returns its ready ACK.
+- Stage 5's separate x86 diagnostic fixture is now `x86task.C`.
 
 ## NeoGS-to-host debug channel
 
@@ -60,27 +56,39 @@ test writes and verifies two boundary bytes (offsets `0000` and `3FFF`) on
 each of the 64 mapped 16 KiB pages. It verifies page mapping and boundary-byte
 retention; it is **not** a full byte-by-byte RAM test.
 
-All instruction-level x86 tests are external records in `TEST.C`; there are
-no embedded x86 test payload arrays in the host application. A diagnostic
-PASS message is emitted only after the host has received and checked the
-corresponding NeoGS result frame.
+The Stage 2B firmware self-test executes guest programs for 16-bit
+ADD/ADC/SUB/SBB/CMP, 8-bit ADD/ADC/SUB/SBB/CMP, and 8/16-bit
+AND/OR/XOR/TEST. The host reports PASS only after the firmware has checked
+the resulting registers and FLAGS.
 
-## External x86 test pipeline
+## Current 8086 real-mode execution scope
 
-The external test source is `tests/TEST.ASM`. It is assembled on the PC by
-NASM into `TEST.BIN`; the Spectrum build exports that container to the TR-DOS
-disk as `TEST.C`. The test program is **not** embedded in the host Z80 source
-and is not part of the NeoGS firmware image.
+The NeoGS real-mode executor is an incremental 8086-compatible instruction
+slice, not a complete 8086 emulator. It currently includes register-direct
+arithmetic/logical groups, selected stack and control-flow instructions,
+software INT/IRET, the project INT 10h text services, and the MOV
+register/memory forms 88h-8Bh.
 
-The build now requires:
+The MOV 88h-8Bh implementation decodes all eight 8086 16-bit effective
+address combinations, direct [disp16], signed disp8 and disp16, with DS as
+the default segment and SS for BP-based addressing. It supports byte and word
+register/memory transfers. Segment-override prefixes and memory operands for
+the arithmetic/logical groups are not yet implemented.
 
-- `tools/sjasmplus.exe`
-- `nasm.exe` available through `PATH`
-- Windows PowerShell
+A Stage 3B self-test now executes all four MOV opcodes through the real
+CS:IP interpreter and checks register-direct transfers, DS-based memory
+writes/reads, direct addressing, byte transfers, and BP/SS default-segment
+behavior. On success, the host debug log prints a dedicated MOV memory PASS
+line. This regression is part of the existing Stage 2B guest CPU test and
+does not add a separate TR-DOS file read or a new runtime loader.
 
-Run `build.bat`. It assembles the test source, builds the NeoGS firmware and
-Spectrum host, exports both `neoprog.C` and `TEST.C`, and verifies the stored
-test bytes against `TEST.BIN`.
+## Stage 5 x86 task file
+
+The host searches the selected TR-DOS `.C` file, validates its descriptor,
+reads the sectors into `#C000`, transfers the exact byte length through the
+NeoGS DMA window, executes the task, and checks the returned result frame.
+The current `x86task.C` fixture is a six-byte diagnostic program
+(`MOV AX,BBAA / INC AX / NOP / HLT`), not a full x86 operating system.
 
 ### X86T container format, version 1
 

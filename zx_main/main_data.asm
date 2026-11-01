@@ -28,4 +28,4 @@ msg_log_sp_prefix:    DEFB "[SYS_INFO] ORIGINAL TR-DOS SYSTEM STACK POINTER WAS 
 msg_log_exec_x86:     DEFB "[EXECUTE] AUTOMATIC LINEAR TRANSFER INITIATED...",0
 
 ; Eight-character TR-DOS filename, extension supplied separately as 'C'.
-task_filename:        DEFB "neoprog "
+task_filename:        DEFB "x86task "
