@@ -117,7 +117,7 @@ START_APPLICATION:
         ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
         ; команда #13 запускает его, после чего он включает RAM-over-ROM,
         ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
-        ; The 9 KiB firmware is a separate TR-DOS file, not resident host code.
+        ; One TR-DOS package contains bootstrap + firmware; Stage 2 reads it once.
         MACRO_EF_STRING msg_stage2_file_start
         call    load_neogs_firmware_file
         jr      nc, .firmware_file_loaded
@@ -135,7 +135,7 @@ START_APPLICATION:
 .firmware_file_loaded:
         MACRO_EF_STRING msg_stage2_file_ok
         ld      hl, #C000
-        ld      de, neogs_binary_end - neogs_binary_start
+        ld      de, (neo_fw_file_length)
         call    upload_firmware
         jr      c, .firmware_upload_failed
         MACRO_EF_STRING msg_stage2
@@ -246,11 +246,11 @@ msg_stage2_rx:
 msg_stage2_bootstrap:
         DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
 msg_stage2_file_start:
-        DEFB "[FW] Loading neogs.C from TR-DOS into #C000...", 13, 0
+        DEFB "[FW] Loading neoprog.C from TR-DOS into #C000...", 13, 0
 msg_stage2_file_ok:
-        DEFB "[FW] neogs.C verified and loaded into #C000.", 13, 0
+        DEFB "[FW] neoprog.C verified and loaded into #C000.", 13, 0
 msg_stage2_file_fail:
-        DEFB "[FW] ERROR: neogs.C missing, corrupt or unreadable; code=#", 0
+        DEFB "[FW] ERROR: neoprog.C missing, corrupt or unreadable; code=#", 0
 
 ; =========================================================================
 ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
@@ -267,25 +267,18 @@ msg_stage2_file_fail:
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
-; Keep the small first-stage bootstrap inside the resident host image.
-; The large firmware is stored as a separate TR-DOS CODE file (neogs.C).
-        PAGE    0
-neogs_bootstrap_start:
-        INCBIN "neogs_bootstrap.bin"
-neogs_bootstrap_end:
-
+; NeoGS code is excluded from the resident host image proj124.C.
+; The package is placed in bank 1 only as the source for the separate TR-DOS file.
 ProgramEnd:
         ; Keep at least 2 KiB between the loaded program and the application
-        ; stack growing down from #AFFF. The TR-DOS buffer starts at #C000.
+        ; stack growing down from #AFFF. NeoGS code is not resident in proj124.C.
         ASSERT ProgramEnd <= #A800
 
-; Assemble the firmware payload in RAM bank 1 only as SAVETRD source data.
-; The host TR-DOS reader loads neogs.C into bank 0 at #C000 during startup.
         PAGE    1
         ORG     #C000
-neogs_binary_start:
-        INCBIN "neogs_code.bin"
-neogs_binary_end:
+neoprog_package_start:
+        INCBIN "neoprog.bin"
+neoprog_package_end:
 
 ; Return to bank 0 and place the BASIC boot program at #E000.
         PAGE    0
@@ -302,13 +295,12 @@ neogs_binary_end:
         ; Синхронный экспорт бинарных блоков в образ TRD
         SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
         SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
-        ; Firmware is a separate TR-DOS file loaded by the host sector reader to #C000.
+        ; Single NeoGS package: [bootstrap length][bootstrap][firmware].
         PAGE    1
-        SAVETRD "disk_A.trd", "neogs.C", neogs_binary_start, neogs_binary_end - neogs_binary_start
+        SAVETRD "disk_A.trd", "neoprog.C", neoprog_package_start, neoprog_package_end - neoprog_package_start
         PAGE    0
-        ; Диагностический x86 payload для проверки TR-DOS -> DMA -> interpreter.
-        ; Это тест из 6 байт, а не полноценное x86-ядро/операционная система.
-        SAVETRD "disk_A.trd", "neoprog.C", x86_diag_program, x86_diag_program_end - x86_diag_program
+        ; Separate x86 diagnostic task; never reuse the NeoGS package filename.
+        SAVETRD "disk_A.trd", "x86task.C", x86_diag_program, x86_diag_program_end - x86_diag_program
 
 
 ; =========================================================================
