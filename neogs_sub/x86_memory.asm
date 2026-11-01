@@ -3,8 +3,9 @@
 ;
 ; x86 physical $00000-$FFFFF maps to NeoGS RAM pages 4..67
 ; (NeoGS physical base $010000, page size $4000 / 16 KiB).
-; Window C000-FFFF is switched through MPAGEX. This keeps firmware in
-; window 0 / page 0 and the current DMA frame in window 1 / page 3.
+; Window C000-FFFF is switched through MPAGEX. Firmware code AND the active
+; Z80 stack must remain in fixed window 0 / page 0; WIN3 is not stack-safe
+; during x86 RAM accesses. The current DMA frame is in window 1 / page 3.
 ;
 ; x86_mem_addr is a 20-bit little-endian address:
 ;   +0 = bits 7:0, +1 = bits 15:8, +2 = bits 19:16 (valid 0..0F).
@@ -16,7 +17,8 @@
 ;   x86_mem_test: destructive test of the reserved 1 MiB x86 RAM region.
 ;                 status=0, AX=0001 on pass; status=5, AX=phase:page on fail.
 ;
-; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX.
+; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX;
+; callers must keep SP outside C000-FFFF for the entire test.
 ; =========================================================================
 
 X86_MEM_NGSPAGE_BASE EQU 4
