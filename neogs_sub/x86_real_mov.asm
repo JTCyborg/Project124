@@ -557,7 +557,7 @@ x86_mov_trace_event:
 .trace_keep_readback:
         ld      a, (x86_mov_trace_enable)
         or      a
-        jr      z, .trace_done
+        jp      z, .trace_done
 
         ld      a, 'M'
         call    x86_mov_trace_putc
