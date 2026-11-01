@@ -720,7 +720,8 @@ x86_guest_alu8_logic_image:
         db #B8,#F0,#F0             ; MOV AX,F0F0
         db #31,#C8                 ; XOR AX,CX (r/m destination) -> F0F0
         db #B8,#F0,#F0             ; MOV AX,F0F0
-        db #33,#C1                 ; XOR AX,CX (reg destination) -> F0F0
+        db #33,#C1                 ; XOR AX,CX (reg destination) -> FFFF
+        db #B8,#F0,#F0             ; MOV AX,F0F0 for final TEST/no-write check
         db #85,#C1                 ; TEST AX,CX -> flags only, AX stays F0F0
         db #F4
 x86_guest_alu8_logic_image_end:
