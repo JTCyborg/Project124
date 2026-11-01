@@ -415,3 +415,11 @@
 - Added separate failure details without changing guest execution: `1D01` = AX, `1D07` = SI, `1D08` = DI, `1D09` = FLAGS. Commit: `88b62c137d1648978e37f5b9abfd0e59f66e8005`.
 - GitHub Actions run `41361854774` for commit `88b62c137d1648978e37f5b9abfd0e59f66e8005` completed with conclusion `success` (Build, Verify, Upload artifacts). Artifact ID `13106125079`: `neogs_code.bin` 15,090 bytes (`#3AF2`, 1,038 bytes free to `#4000`); bootstrap 196 bytes (`#00C4`); package `neoprog.bin` 15,288 bytes (`#3BB8`, 60 sectors); `disk_A.trd` 655,360 bytes. Build/packaging PASS; hardware/emulator runtime of this diagnostic build is still pending.
 - Next action: wait for CI artifact, run the same test again, and use the refined `1Dxx` result to fix the actual failing state. Do not implement REP/REPE/REPNE until CPU-STR and STACK runtime tests pass.
+
+
+### 2026-11-02 — second CPU-STR runtime and LODSB value capture
+
+- User ran diagnostic artifact `neoprog.bin #3BB8` / 60 sectors. All earlier stages again passed: IPC/HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA, and INT stack-frame/IRET.
+- Guest INT 20h again failed with `status/detail = 000D 1D01`. With the prior diagnostic split, `1D01` now unambiguously identifies the AX comparison immediately after the first guest HLT (MOVSB/MOVSW/LODSB sequence). SI/DI/FLAGS checks are not reached.
+- Updated only the failure-report path: on this AX mismatch it now returns the **observed guest AX** in the existing status/detail field instead of the generic `1D01` marker. This is diagnostic instrumentation; it does not alter LODSB execution or the expected value. Commit: `a1391943ec32048bda16d0431ed71c109ac5e87e`.
+- Next run must report the actual AX value, allowing separation of an incorrect memory read, AL write, or AH preservation. Await CI artifact before runtime. CPU-STR and STACK runtime remain unpassed; REP work remains blocked.
