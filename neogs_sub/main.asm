@@ -124,7 +124,7 @@ command_reset:
 
 ; -------------------------------------------------------------------------
 ; CMD_LOAD_X86
-; 1) Map physical page 68 at logical $4000-$7FFF through PG1=#88.
+; 1) Map physical page 68 at logical $4000-$7FFF through PG1=#44.
 ; 2) Select ZX DMA module and set physical DMA target $110000.
 ; 3) Enable DMA by setting DMA_CST bit 7.
 ; 4) Clear CBIT: this is the READY indication to the host.
@@ -134,9 +134,9 @@ command_reset:
 ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
 ; -------------------------------------------------------------------------
 command_load_x86:
-        ; PG1 is a direct page register: value #88 maps physical page 68.
+        ; PG1 is a direct page register: value #44 maps physical page 68.
         ; The DMA engine writes physical $110000; Z80 sees the same bytes at $4000.
-        ld      a, #88
+        ld      a, #44
         out     (PG1), a
 
         ld      a, C_DMA_ZX
