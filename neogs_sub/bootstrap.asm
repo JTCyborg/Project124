@@ -32,7 +32,7 @@ neogs_bootstrap_start:
         call    bootstrap_receive_data_byte
         ld      d, a
 
-        ; Reject zero length and any image larger than the reserved low RAM area.
+        ; Reject zero length and any image larger than $3400, preserving a 3 KiB stack reserve.
         ld      a, d
         or      e
         jr      z, bootstrap_error
