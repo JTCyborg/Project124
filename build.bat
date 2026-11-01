@@ -8,7 +8,8 @@ rem PROJECT 124 — АВТОМАТИЗИРОВАННАЯ ДВУХПРОЦЕСС�
 rem =========================================================================
 rem ШАГ 1: Сборка NeoGS:
 rem         neogs_code.bin
-rem         neogs_bootstrap.bin
+rem         neogs_bootstrap.bin (intermediate)
+rem         neoprog.bin (combined TR-DOS NeoGS package)
 rem
 rem ШАГ 2: Сборка ZX Spectrum:
 rem         основной код + упаковка TRD
@@ -54,8 +55,14 @@ if not exist "neogs_bootstrap.bin" (
     goto BUILD_NEOGS_FAILED
 )
 
+if not exist "neoprog.bin" (
+    echo [ERROR] Не создан единый пакет NeoGS neoprog.bin
+    goto BUILD_NEOGS_FAILED
+)
+
 echo [SUCCESS] neogs_code.bin создан.
 echo [SUCCESS] neogs_bootstrap.bin создан.
+echo [SUCCESS] neoprog.bin создан (bootstrap + firmware в одном файле).
 echo.
 
 rem =========================================================================
@@ -86,7 +93,8 @@ echo.
 
 echo [FILES] Результаты:
 if exist "neogs_code.bin" echo   neogs_code.bin
-if exist "neogs_bootstrap.bin" echo   neogs_bootstrap.bin
+if exist "neogs_bootstrap.bin" echo   neogs_bootstrap.bin (intermediate)
+if exist "neoprog.bin" echo   neoprog.bin (NeoGS package)
 if exist "zx_main\neogs_code.bin" echo   zx_main\neogs_code.bin
 if exist "zx_main\neogs_bootstrap.bin" echo   zx_main\neogs_bootstrap.bin
 echo.
