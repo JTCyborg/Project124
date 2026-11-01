@@ -247,7 +247,7 @@ EXECUTE_X86_FILE_STAGE::
         ; #5CE8 = byte length, #5CEA = sector count,
         ; #5CEB = first internal sector (0..15), #5CEC = track.
         ; The DMA frame window is $5000..$7FFF (12 KiB). Its first two
-        ; bytes are the length header, so executable payload max is $3FFE.
+        ; bytes are the length header, so executable payload max is $2FFE.
         ; -------------------------------------------------------------
         ld      bc, (#5CE8)
         ld      a, b
