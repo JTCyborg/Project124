@@ -498,8 +498,13 @@ x86_string_test_fail_execute:
         jr      x86_string_test_fail
 x86_string_test_fail_1:
 x86_string_test_fail_1a:
-        ld      hl, #1D01             ; AX after LODSB
-        jr      x86_string_test_fail
+        ; Preserve the observed AX so the host log reveals the actual LODSB result.
+        ld      hl, (x86_reg_ax)
+        ld      (saved_x86_ax), hl
+        ld      a, 13
+        ld      (x86_exit_status), a
+        scf
+        ret
 x86_string_test_fail_1b:
         ld      hl, #1D07             ; SI after MOVSB/MOVSW/LODSB
         jr      x86_string_test_fail
