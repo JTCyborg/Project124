@@ -6,8 +6,9 @@
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
 ; Current firmware image is kept below $3400; the stack grows down from $3FFF.
-; NeoGS logical $4000-$7FFF normally maps physical RAM page 1.
-; The x86 DMA frame occupies $5000-$7FFF at physical address $00D000.
+; PG1 normally maps physical page 1 (register value #03).
+; During x86 DMA, PG1 maps physical page 68 (register value #88) at $4000-$7FFF.
+; Physical page 68 starts at $110000; firmware and its stack remain in page 0.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -15,8 +16,8 @@
         ORG     $0000
 
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
-X86_DMA_HEADER_ADDR        EQU $5000
-X86_RAM_RUN_ADDR           EQU $5002
+X86_DMA_HEADER_ADDR        EQU $4000
+X86_RAM_RUN_ADDR           EQU $4002
 DMA_WAIT_LIMIT   EQU #FFFF
 DMA_WAIT_OUTER   EQU 8
 IPC_WAIT_LIMIT   EQU #FFFF
@@ -109,6 +110,8 @@ command_return_to_gsrom:
         jp      ROM_RETURN_TRAMPOLINE_ADDR
 
 command_reset:
+        ld      a, #03
+        out     (PG1), a                ; ensure firmware page 1 is visible
         xor     a
         ld      (neo_dma_error), a
         ld      (x86_exit_status), a
@@ -130,6 +133,11 @@ command_reset:
 ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
 ; -------------------------------------------------------------------------
 command_load_x86:
+        ; PG1 is a direct page register: value #88 maps physical page 68.
+        ; The DMA engine writes physical $110000; Z80 sees the same bytes at $4000.
+        ld      a, #88
+        out     (PG1), a
+
         ld      a, C_DMA_ZX
         out     (DMA_MOD), a
 
@@ -160,14 +168,18 @@ command_load_x86:
         dec     d
         jr      nz, .dma_wait_outer
 
-        ; Timeout: close DMA and release the host command line.
+        ; Timeout: close DMA, restore PG1 and release the host command line.
         xor     a
         out     (DMA_CST), a
         out     (CLRCBIT), a
+        ld      a, #03
+        out     (PG1), a                ; restore page 1 on DMA timeout
         ld      a, 1
         ld      (neo_dma_error), a
         ld      a, 3
         ld      (x86_exit_status), a
+        ld      a, #03
+        out     (PG1), a                ; restore physical firmware page 1
         jp      main_loop
 
 .dma_host_end:
@@ -180,10 +192,12 @@ command_load_x86:
 neogs_dma_handler_end:
 
 ; -------------------------------------------------------------------------
-; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
+; CMD_RUN_X86 — execute the length-framed payload beginning at $4002.
 ; -------------------------------------------------------------------------
 command_run_x86:
         call    execute_neogs_x86
+        ld      a, #03
+        out     (PG1), a                ; restore firmware/trampoline page
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -199,13 +213,13 @@ execute_neogs_x86:
         ret
 
 .dma_ok:
-        ; DMA frame begins with a little-endian x86 byte length at $5000.
+        ; DMA frame begins with a little-endian x86 byte length at $4000.
         ld      hl, (X86_DMA_HEADER_ADDR)
         ld      a, h
         or      l
         jp      z, .invalid_x86_length
 
-        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
+        ; Maximum code length is $3FFE: $4002 + length must not exceed $8000.
         ld      a, h
         cp      #3F
         jr      c, .x86_length_valid
@@ -473,9 +487,11 @@ rom_return_trampoline_end:
         INCLUDE "x86_real_mov.asm"
         INCLUDE "bios/bios_video.asm"
 
-; Original DMA window begins after the return trampoline.
-        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
-        ASSERT neogs_dma_handler_end <= #5000
+; DMA temporarily overlays the logical trampoline window with physical page 68.
+; The trampoline remains intact in physical page 1 and is revealed on PG1 restore.
+        ASSERT rom_return_trampoline_end - rom_return_trampoline_code <= 16
+        ASSERT X86_DMA_HEADER_ADDR = #4000
+        ASSERT neogs_dma_handler_end <= #4000
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
 
 neogs_firmware_end:
