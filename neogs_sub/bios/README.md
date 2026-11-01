@@ -64,7 +64,7 @@ calculated from the result. Memory ModR/M operands remain unsupported.
 
 The Stage 2B host emits separate 16-bit arithmetic and byte/logical
 `[CPU] PASS` lines only after the guest image completes and the host verifies
-the saved FLAGS and final AX/BX/BP/DX/SI/DI/SP register values. The byte and
+the saved FLAGS and final AX/CX/BX/BP/DX/SI/DI/SP register values. The byte and
 logical test reports failure detail `1C07` for guest copy/execution failure,
 `1C08` for result-register mismatch, and `1C09` for FLAGS/snapshot mismatch.
 
