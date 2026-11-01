@@ -66,7 +66,7 @@ x86_real_mov_decode_modrm:
 
         ld      a, (x86_mov_mod)
         cp      3
-        jr      z, .register_operand
+        jp      z, .register_operand
 
         xor     a
         ld      (x86_mov_is_reg), a
