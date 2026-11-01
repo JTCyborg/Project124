@@ -57,6 +57,15 @@ load_neogs_firmware_file::
         cp      3
         jp      c, .bad_length
 .package_minimum_ok:
+        ; #C000 has at most 16 KiB available before address wrap at #0000.
+        ld      a, h
+        cp      #40
+        jr      c, .package_size_ok
+        jp      nz, .bad_length
+        ld      a, l
+        or      a
+        jp      nz, .bad_length
+.package_size_ok:
         ; Verify sector count = ceil(file_length / 256).
         ld      hl, (neo_fw_file_length)
         ld      de, 255
@@ -139,7 +148,7 @@ load_neogs_firmware_file::
 
 ; -------------------------------------------------------------------------
 ; upload_firmware
-; IN : HL = custom firmware binary, DE = byte length.
+; IN : HL = neoprog package in host RAM, DE = total package length.
 ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
 ;
 ; Cold/warm reset path:
