@@ -442,7 +442,7 @@ x86_mov_memory_test_image:
         db #8B,#0F                 ; MOV CX,[BX]
         db #88,#4F,#02             ; MOV [BX+02],CL
         db #8A,#57,#02             ; MOV DL,[BX+02]
-        db #BA,#CD,#AB             ; MOV DX,ABCD
+        db #BA,#34,#AB             ; MOV DX,AB34
         db #89,#14                 ; MOV [SI],DX (SI initially zero)
         db #8B,#1C                 ; MOV BX,[SI]
         db #89,#16,#06,#02         ; MOV [0206],DX
