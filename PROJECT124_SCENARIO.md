@@ -44,7 +44,7 @@
 | CPU-02 | 8086 far JMP (`EA`), far CALL (`9A`) и RETF (`CB`) | Общий CPU regression PASS 2026-11-01 22:59:26 | Весь текущий CPU regression прошёл после исправления RETF; отдельные CS:IP для far-переходов в логе не печатаются |
 | CPU-03 | Отдельная трассировка far JMP/CALL/RETF с проверкой CS:IP и SP | **Runtime PASS 2026-11-01 23:22** | Лог: CALL `0001:4FFE`; RETF `0000:5008`; JMP `0001:5000`; `SP=0100`. TRACE PASS marker выведен; весь pipeline завершён штатно |
 | CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
-| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе — анализ и проектирование** | Следующий этап после Runtime PASS CPU-03. Сначала проверить decoder, ALU helpers, operand/FLAGS контракты и подготовить тестовую матрицу; затем реализовать и добавить guest regression |
+| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
 
 ## Обязательные критерии завершения потоковой загрузки
 
@@ -60,6 +60,15 @@
 10. Только после полного лога фиксировать PASS.
 
 ## Журнал изменений
+
+### 2026-11-01 — CPU-05: анализ immediate ALU и измерение размера firmware
+
+- Проверен активный decoder `x86_real_mode.asm`: текущие ALU opcode families перечисляются явно; immediate opcode families `04/05`, `0C/0D`, `14/15`, `1C/1D`, `24/25`, `2C/2D`, `34/35`, `3C/3D`, а также группы `80/81/83` пока не подключены.
+- Разобраны контракты `x86_real_alu.asm`, `x86_real_alu8.asm`, `x86_real_mov.asm`: 16-bit arithmetic helper покрывает ADD/ADC/SBB/SUB/CMP; word logical helper — OR/AND/XOR; byte helper — byte arithmetic/logical; FLAGS helpers пересчитывают status bits и сохраняют control/reserved bits. MOV decoder предоставляет проверенный ModR/M EA и segment override path.
+- Измерен текущий tracked `neogs_code.bin` из `main` через base64 API: 17 748 base64 символов без whitespace = **13 311 байт (`#33FF`)**. Firmware ASSERT в `neogs_sub/build_firmware.asm` требует `neogs_firmware_end <= #3400` (13 312 байт), то есть запас всего 1 байт. Runtime package в последнем логе `#34C3` включает bootstrap и не равен размеру firmware image.
+- Вывод: немедленное добавление кода CPU-05 недопустимо без предварительного уменьшения/перекомпоновки firmware. Не удалять ASSERT и не урезать существующие проверки. Следующий технический этап — карта крупных resident regression routines/data и безопасное вынесение/перенос тестового кода либо оптимизация с сохранением всех текущих тестов; затем добавлять immediate ALU поэтапно с независимыми guest regression cases.
+- На этом этапе opcode implementation не менялась. Это статический анализ GitHub исходников и размера tracked binary; локальная сборка SjASMPlus не запускалась.
+
 
 ### 2026-11-01 — runtime PASS CPU-03 и запуск CPU-05 (23:22)
 
