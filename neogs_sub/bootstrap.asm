@@ -52,7 +52,7 @@ neogs_bootstrap_start:
         or      e
         jr      z, bootstrap_error
         ld      a, d
-        cp      #34
+        cp      #40
         jr      c, bootstrap_length_ok
         jr      nz, bootstrap_error
         ld      a, e
