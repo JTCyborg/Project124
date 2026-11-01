@@ -155,6 +155,11 @@ x86_real_mode_test:
         call    x86_real_mov_memory_test
         ret     c
 
+        ; Stage 3C: all eight 8086 EA forms, signed displacements,
+        ; four segment overrides and word access across offset FFFFh.
+        call    x86_real_mov_addressing_test
+        ret     c
+
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
         xor     a
