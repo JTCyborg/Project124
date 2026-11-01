@@ -615,9 +615,13 @@ x86_real_ret_far:
         ld      (x86_real_old_sp), hl
         call    x86_real_stack_pop
         ret     c
+        ; x86_real_stack_pop returns the advanced SP in HL; the popped
+        ; word itself is stored in x86_real_stack_value.
+        ld      hl, (x86_real_stack_value)
         ld      (x86_real_far_ip), hl
         call    x86_real_stack_pop
         jr      c, .rollback
+        ld      hl, (x86_real_stack_value)
         ld      (x86_real_far_cs), hl
         ld      hl, (x86_real_far_cs)
         ld      (x86_reg_cs), hl
