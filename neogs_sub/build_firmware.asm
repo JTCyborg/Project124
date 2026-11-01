@@ -11,6 +11,7 @@
 ; The first firmware segment occupies the full low window $0000-$3FFF.
 ; The Z80 stack is in the reserved upper WIN3 area $F000-$FFFF.
         ASSERT neogs_firmware_end <= $4000
+        ASSERT neogs_firmware_end <= $3400 ; reserve $0C00 for fixed-WIN0 Z80 stack
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 
