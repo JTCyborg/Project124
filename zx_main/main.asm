@@ -117,7 +117,9 @@ START_APPLICATION:
         ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
         ; команда #13 запускает его, после чего он включает RAM-over-ROM,
         ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
-        ld      hl, neogs_binary_start
+        ; BASIC bootloader has already loaded neogs.C at #C000.
+        ; Keep the 9 KiB firmware outside the resident host image.
+        ld      hl, #C000
         ld      de, neogs_binary_end - neogs_binary_start
         call    upload_firmware
         jr      c, .firmware_upload_failed
@@ -244,23 +246,28 @@ msg_stage2_bootstrap:
         INCLUDE "ui_panels.asm"     ; Модуль высокоуровневых панелей Commander
         INCLUDE "file_utils.asm"    ; Модуль живой работы с диском TR-DOS
 
-; Переключение на Банк 0 ОЗУ хоста для хранения двух NeoGS бинарников.
-; Оба файла создаются командой sjasmplus neogs_sub/build_firmware.asm.
+; Keep the small first-stage bootstrap inside the resident host image.
+; The large firmware is stored as a separate TR-DOS CODE file (neogs.C).
         PAGE    0
 neogs_bootstrap_start:
         INCBIN "neogs_bootstrap.bin"
 neogs_bootstrap_end:
-
-neogs_binary_start:
-        INCBIN "neogs_code.bin"
-neogs_binary_end:
 
 ProgramEnd:
         ; Keep at least 2 KiB between the loaded program and the application
         ; stack growing down from #AFFF. The TR-DOS buffer starts at #C000.
         ASSERT ProgramEnd <= #A800
 
-; Возвращаем базовый контекст компиляции для загрузчика
+; Assemble the firmware payload in RAM bank 1 only as SAVETRD source data.
+; The BASIC loader loads neogs.C into bank 0 at #C000 before the host starts.
+        PAGE    1
+        ORG     #C000
+neogs_binary_start:
+        INCBIN "neogs_code.bin"
+neogs_binary_end:
+
+; Return to bank 0 and place the BASIC boot program at #E000.
+        PAGE    0
         ORG     #E000
         INCLUDE "boot_loader.asm"
 
@@ -274,6 +281,10 @@ ProgramEnd:
         ; Синхронный экспорт бинарных блоков в образ TRD
         SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
         SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
+        ; Firmware is a separate TR-DOS file loaded by BASIC to #C000.
+        PAGE    1
+        SAVETRD "disk_A.trd", "neogs.C", neogs_binary_start, neogs_binary_end - neogs_binary_start
+        PAGE    0
         ; Диагностический x86 payload для проверки TR-DOS -> DMA -> interpreter.
         ; Это тест из 6 байт, а не полноценное x86-ядро/операционная система.
         SAVETRD "disk_A.trd", "neoprog.C", x86_diag_program, x86_diag_program_end - x86_diag_program
