@@ -184,6 +184,7 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_alu_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_alu8_logic_pass
+        MACRO_EF_STRING P124_msg_int_guest_alu8_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_address_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
@@ -789,6 +790,7 @@ P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP registers, PUSH SP, PO
 P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP register ModR/M; all six flags verified.", 13, 0
 P124_msg_int_guest_alu_memory_pass: DEFB "[CPU] PASS: 16-bit arithmetic memory ModR/M; DS/SS and ES/CS/SS/DS overrides verified.", 13, 0
 P124_msg_int_guest_alu8_logic_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP; 8/16-bit AND/OR/XOR/TEST; flags verified.", 13, 0
+P124_msg_int_guest_alu8_memory_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP memory ModR/M; both directions and segment overrides verified.", 13, 0
 P124_msg_int_guest_mov_memory_pass: DEFB "[CPU] PASS: MOV r/m8,r8 and r/m16,r16; DS/SS addressing verified.", 13, 0
 P124_msg_int_guest_mov_address_pass: DEFB "[CPU] PASS: MOV all 8 EA forms, signed disp8/disp16, segment overrides and offset wrap.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
