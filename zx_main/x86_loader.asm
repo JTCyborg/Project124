@@ -3,10 +3,10 @@
 ; Hardware protocol is based on NeoGS Programmer's Guide v0.1.A and
 ; ports.inc v0.3. The application-level command IDs/frame are Project 124.
 ;
-; DMA mapping used here:
-;   NeoGS physical DMA destination = $110000 (physical page 68)
-;   NeoGS Z80 logical DMA frame address = $4000 (PG1 direct value #44)
-;   two-byte length header at $4000; x86 execution begins at $4002.
+; DMA mapping used here (proven working configuration):
+;   NeoGS physical DMA destination = $00D000
+;   NeoGS Z80 logical DMA frame address = $5000 (default WIN1 page #03)
+;   two-byte length header at $5000; x86 execution begins at $5002.
 ;
 ; Host DMA writes to Spectrum address $0000-$3FFF. For DMA WRITE there is
 ; NO dummy write. The dummy access described by the user is only for DMA READ.
@@ -15,7 +15,7 @@
 ; neogs_io.inc is included once by neogs_driver.asm before this module.
 
 DMA_HOST_WINDOW    EQU #0000
-DMA_WINDOW_LIMIT   EQU #4000
+DMA_WINDOW_LIMIT   EQU #3000
 
 EXECUTE_X86_FILE_STAGE::
         ld      (P124_X86_REQUEST_FILENAME), hl
@@ -89,7 +89,7 @@ EXECUTE_X86_FILE_STAGE::
         ld      hl, x86_diag_unsupported
         ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
         ld      a, 2
-        ld      de, #0000
+        ld      de, #00CC
         call    neogs_run_diag_case
         jp      c, .diag_extended_fail
 
@@ -246,8 +246,8 @@ EXECUTE_X86_FILE_STAGE::
         ; Stage 5B: validate descriptor BEFORE reading any sector.
         ; #5CE8 = byte length, #5CEA = sector count,
         ; #5CEB = first internal sector (0..15), #5CEC = track.
-        ; The DMA frame window is $4000..$7FFF (16 KiB). Its first two
-        ; bytes are the length header, so executable payload max is $3FFE.
+        ; The DMA frame window is $5000..$7FFF (12 KiB). Its first two
+        ; bytes are the length header, so executable payload max is $2FFE.
         ; -------------------------------------------------------------
         ld      bc, (#5CE8)
         ld      a, b
@@ -255,9 +255,9 @@ EXECUTE_X86_FILE_STAGE::
         jp      z, .empty_file_error
         ld      (P124_X86_FILE_LENGTH), bc
 
-        ; Reject files larger than the executable 16 KB window minus header.
+        ; Reject files larger than the executable 12 KB window minus header.
         ld      a, b
-        cp      #3F
+        cp      #2F
         jr      c, .file_length_ok
         jp      nz, .task_too_large
         ld      a, c
@@ -549,7 +549,7 @@ EXECUTE_X86_FILE_STAGE::
 ; NeoGS transport helpers — exact CBIT/DBIT meanings from Guide v0.1.A
 ; =========================================================================
 
-; IN: HL=source in host RAM, BC=payload byte count (1..#3FFE).
+; IN: HL=source in host RAM, BC=payload byte count (1..#2FFE).
 ; OUT: Carry clear after NeoGS armed DMA, consumed the host end marker,
 ;      and disabled DMA. Carry set on timeout.
 ;
@@ -574,13 +574,13 @@ neogs_send_dma_block:
         ld      (P124_DMA_SOURCE), hl
         ld      (P124_DMA_LENGTH), bc
 
-        ; Validate payload + 2-byte length prefix <= $4000.
+        ; Validate payload + 2-byte length prefix <= $3000.
         push    bc
         pop     hl
         ld      de, 2
         add     hl, de
         ld      a, h
-        cp      #40
+        cp      #30
         jr      c, .dma_total_length_ok
         jp      nz, .dma_bad_length
         ld      a, l
@@ -892,7 +892,7 @@ P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 
 P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
 P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0
 P124_msg_err_sector_read:    defb "[STAGE 5] [ERROR] TR-DOS sector read failed; code=#", 0
-P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 16 KB executable window (max payload $3FFE).", 13, 0
+P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 12 KB executable window (max payload $2FFE).", 13, 0
 P124_msg_err_dma_transfer:   defb "[STAGE 5] [ERROR] NeoGS DMA handshake failed.", 13, 0
 P124_msg_err_result_timeout: defb "[STAGE 5] [ERROR] NeoGS result frame timed out.", 13, 0
 P124_msg_err_interpreter_status: defb "[STAGE 5] [ERROR] x86 interpreter returned non-zero status.", 13, 0

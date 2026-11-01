@@ -1171,11 +1171,11 @@
  99++ 66EE              NGS_STATUS_CBIT EQU M_CBIT
 100++ 66EE              NGS_STATUS_DBIT EQU M_DBIT
 101++ 66EE
-102++ 66EE              ; The x86 DMA frame occupies logical $4000..$7FFF (16 KiB) via PG1.
-103++ 66EE              ; PG1 direct page value #44 selects physical RAM page 68 ($110000).
-104++ 66EE              ; The two-byte length header leaves #3FFE bytes for the guest image.
-105++ 66EE              NGS_X86_DMA_WINDOW_SIZE EQU #4000
-106++ 66EE              NGS_X86_MAX_CODE_SIZE   EQU #3FFE
+102++ 66EE              ; The proven x86 DMA frame occupies logical $5000..$7FFF (12 KiB).
+103++ 66EE              ; Default NeoGS WIN1 page #03 maps logical $5000 to physical $00D000.
+104++ 66EE              ; The two-byte length header leaves #2FFE bytes for the guest image.
+105++ 66EE              NGS_X86_DMA_WINDOW_SIZE EQU #3000
+106++ 66EE              NGS_X86_MAX_CODE_SIZE   EQU #2FFE
 107++ 66EE
 # file closed: neogs_io.inc
   6+  66EE
@@ -1812,10 +1812,10 @@
   3+  6A9F              ; Hardware protocol is based on NeoGS Programmer's Guide v0.1.A and
   4+  6A9F              ; ports.inc v0.3. The application-level command IDs/frame are Project 124.
   5+  6A9F              ;
-  6+  6A9F              ; DMA mapping used here:
-  7+  6A9F              ;   NeoGS physical DMA destination = $110000 (physical page 68)
-  8+  6A9F              ;   NeoGS Z80 logical DMA frame address = $4000 (PG1 direct value #44)
-  9+  6A9F              ;   two-byte length header at $4000; x86 execution begins at $4002.
+  6+  6A9F              ; DMA mapping used here (proven working configuration):
+  7+  6A9F              ;   NeoGS physical DMA destination = $00D000
+  8+  6A9F              ;   NeoGS Z80 logical DMA frame address = $5000 (default WIN1 page #03)
+  9+  6A9F              ;   two-byte length header at $5000; x86 execution begins at $5002.
  10+  6A9F              ;
  11+  6A9F              ; Host DMA writes to Spectrum address $0000-$3FFF. For DMA WRITE there is
  12+  6A9F              ; NO dummy write. The dummy access described by the user is only for DMA READ.
@@ -1824,7 +1824,7 @@
  15+  6A9F              ; neogs_io.inc is included once by neogs_driver.asm before this module.
  16+  6A9F
  17+  6A9F              DMA_HOST_WINDOW    EQU #0000
- 18+  6A9F              DMA_WINDOW_LIMIT   EQU #4000
+ 18+  6A9F              DMA_WINDOW_LIMIT   EQU #3000
  19+  6A9F
  20+  6A9F              EXECUTE_X86_FILE_STAGE:
  20+  6A9F
@@ -1939,7 +1939,7 @@
  89+  6B3A 21 C6 78             ld      hl, x86_diag_unsupported
  90+  6B3D 01 01 00             ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
  91+  6B40 3E 02                ld      a, 2
- 92+  6B42 11 00 00             ld      de, #0000
+ 92+  6B42 11 CC 00             ld      de, #00CC
  93+  6B45 CD CA 78             call    neogs_run_diag_case
  94+  6B48 DA 2E 6E             jp      c, .diag_extended_fail
  95+  6B4B
@@ -2228,8 +2228,8 @@
 246+  6CD5                      ; Stage 5B: validate descriptor BEFORE reading any sector.
 247+  6CD5                      ; #5CE8 = byte length, #5CEA = sector count,
 248+  6CD5                      ; #5CEB = first internal sector (0..15), #5CEC = track.
-249+  6CD5                      ; The DMA frame window is $4000..$7FFF (16 KiB). Its first two
-250+  6CD5                      ; bytes are the length header, so executable payload max is $3FFE.
+249+  6CD5                      ; The DMA frame window is $5000..$7FFF (12 KiB). Its first two
+250+  6CD5                      ; bytes are the length header, so executable payload max is $2FFE.
 251+  6CD5                      ; -------------------------------------------------------------
 252+  6CD5 ED 4B E8 5C          ld      bc, (#5CE8)
 253+  6CD9 78                   ld      a, b
@@ -2237,9 +2237,9 @@
 255+  6CDB CA B4 6F             jp      z, .empty_file_error
 256+  6CDE ED 43 FE 78          ld      (P124_X86_FILE_LENGTH), bc
 257+  6CE2
-258+  6CE2                      ; Reject files larger than the executable 16 KB window minus header.
+258+  6CE2                      ; Reject files larger than the executable 12 KB window minus header.
 259+  6CE2 78                   ld      a, b
-260+  6CE3 FE 3F                cp      #3F
+260+  6CE3 FE 2F                cp      #2F
 261+  6CE5 38 09                jr      c, .file_length_ok
 262+  6CE7 C2 ED 6F             jp      nz, .task_too_large
 263+  6CEA 79                   ld      a, c
@@ -2934,7 +2934,7 @@
 549+  7022              ; NeoGS transport helpers — exact CBIT/DBIT meanings from Guide v0.1.A
 550+  7022              ; =========================================================================
 551+  7022
-552+  7022              ; IN: HL=source in host RAM, BC=payload byte count (1..#3FFE).
+552+  7022              ; IN: HL=source in host RAM, BC=payload byte count (1..#2FFE).
 553+  7022              ; OUT: Carry clear after NeoGS armed DMA, consumed the host end marker,
 554+  7022              ;      and disabled DMA. Carry set on timeout.
 555+  7022              ;
@@ -2959,13 +2959,13 @@
 574+  7034 22 F5 78             ld      (P124_DMA_SOURCE), hl
 575+  7037 ED 43 F7 78          ld      (P124_DMA_LENGTH), bc
 576+  703B
-577+  703B                      ; Validate payload + 2-byte length prefix <= $4000.
+577+  703B                      ; Validate payload + 2-byte length prefix <= $3000.
 578+  703B C5                   push    bc
 579+  703C E1                   pop     hl
 580+  703D 11 02 00             ld      de, 2
 581+  7040 19                   add     hl, de
 582+  7041 7C                   ld      a, h
-583+  7042 FE 40                cp      #40
+583+  7042 FE 30                cp      #30
 584+  7044 38 08                jr      c, .dma_total_length_ok
 585+  7046 C2 7C 70             jp      nz, .dma_bad_length
 586+  7049 7D                   ld      a, l
@@ -3962,7 +3962,7 @@
 894+  7CBB 6C 65 64 3B
 894+  7CBF 20 63 6F 64
 894+  7CC3 65 3D 23 00
-895+  7CC7 5B 53 54 41  P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 16 KB executable window (max payload $3FFE).", 13, 0
+895+  7CC7 5B 53 54 41  P124_msg_err_task_too_large: defb "[STAGE 5] [ERROR] Task exceeds the 12 KB executable window (max payload $2FFE).", 13, 0
 895+  7CCB 47 45 20 35
 895+  7CCF 5D 20 5B 45
 895+  7CD3 52 52 4F 52
@@ -3971,7 +3971,7 @@
 895+  7CDF 78 63 65 65
 895+  7CE3 64 73 20 74
 895+  7CE7 68 65 20 31
-895+  7CEB 36 20 4B 42
+895+  7CEB 32 20 4B 42
 895+  7CEF 20 65 78 65
 895+  7CF3 63 75 74 61
 895+  7CF7 62 6C 65 20
@@ -3980,7 +3980,7 @@
 895+  7D03 6D 61 78 20
 895+  7D07 70 61 79 6C
 895+  7D0B 6F 61 64 20
-895+  7D0F 24 33 46 46
+895+  7D0F 24 32 46 46
 895+  7D13 45 29 2E 0D
 895+  7D17 00
 896+  7D18 5B 53 54 41  P124_msg_err_dma_transfer:   defb "[STAGE 5] [ERROR] NeoGS DMA handshake failed.", 13, 0
@@ -5392,11 +5392,11 @@
 282   8B91                      ORG     #C000
 283   C000              neoprog_package_start:
 284   C000                      INCBIN "zx_main/neoprog.bin"
-285   F466              neoprog_package_end:
-286   F466
-287   F466              ; Return to bank 0 and place the BASIC boot program at #E000.
-288   F466                      PAGE    0
-289   F466                      ORG     #E000
+285   F366              neoprog_package_end:
+286   F366
+287   F366              ; Return to bank 0 and place the BASIC boot program at #E000.
+288   F366                      PAGE    0
+289   F366                      ORG     #E000
 290   E000                      INCLUDE "boot_loader.asm"
 # file opened: boot_loader.asm
   1+  E000              ; =========================================================================

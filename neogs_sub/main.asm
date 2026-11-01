@@ -6,9 +6,9 @@
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
 ; Current firmware image is kept below $3400; the stack grows down from $3FFF.
-; PG1 normally maps physical page 1 (register value #03).
-; During x86 DMA, PG1 maps physical page 68 (register value #44) at $4000-$7FFF.
-; Physical page 68 starts at $110000; firmware and its stack remain in page 0.
+; WIN1 remains on the documented default physical 16 KiB page #03.
+; The DMA frame at logical $5000 therefore maps to physical $00D000.
+; Firmware and its stack remain in the low 16 KiB page.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -16,8 +16,8 @@
         ORG     $0000
 
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
-X86_DMA_HEADER_ADDR        EQU $4000
-X86_RAM_RUN_ADDR           EQU $4002
+X86_DMA_HEADER_ADDR        EQU $5000
+X86_RAM_RUN_ADDR           EQU $5002
 DMA_WAIT_LIMIT   EQU #FFFF
 DMA_WAIT_OUTER   EQU 8
 IPC_WAIT_LIMIT   EQU #FFFF
@@ -124,8 +124,8 @@ command_reset:
 
 ; -------------------------------------------------------------------------
 ; CMD_LOAD_X86
-; 1) Map physical page 68 at logical $4000-$7FFF through PG1=#44.
-; 2) Select ZX DMA module and set physical DMA target $110000.
+; 1) Keep default WIN1 page #03 selected; logical $5000 maps to $00D000.
+; 2) Select ZX DMA module and set physical DMA target $00D000.
 ; 3) Enable DMA by setting DMA_CST bit 7.
 ; 4) Clear CBIT: this is the READY indication to the host.
 ; 5) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
@@ -134,110 +134,18 @@ command_reset:
 ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
 ; -------------------------------------------------------------------------
 command_load_x86:
-        ; PG1 is a direct page register: value #44 maps physical page 68.
-        ; The DMA engine writes physical $110000; Z80 sees the same bytes at $4000.
-        ld      a, #44
-        call    neo_set_pg1
-
-        ; Robust PG1 test: use different markers in both physical pages.
-        ; Save and restore the original byte at $4000 in each page.
-        ; MAP bits:
-        ; bit 0: page #44 write/read (#A5)
-        ; bit 1: page #03 write/read (#5A)
-        ; bit 2: page #44 still contains #A5 after writing page #03
-        ; bit 3: page #03 still contains #5A after returning from page #44
-        xor     a
-        ld      (neo_pg1_map_verified), a
-
-        ; Save original byte from normal page #03.
+        ; Keep the documented default WIN1 page selected. DMA writes to
+        ; physical $00D000, which appears at logical $5000 in page #03.
         ld      a, #03
         call    neo_set_pg1
-        ld      a, (X86_DMA_HEADER_ADDR)
-        ld      (neo_pg1_saved_page03), a
 
-        ; Select page #44 and save its original byte.
-        ld      a, #44
-        call    neo_set_pg1
-        ld      a, (X86_DMA_HEADER_ADDR)
-        ld      (neo_pg1_saved_page44), a
-
-        ; Write and verify marker on page #44.
-        ld      a, #A5
-        ld      (X86_DMA_HEADER_ADDR), a
-        ld      a, (X86_DMA_HEADER_ADDR)
-        cp      #A5
-        jr      nz, .pg1_test_page03
-        ld      a, (neo_pg1_map_verified)
-        or      1
-        ld      (neo_pg1_map_verified), a
-
-.pg1_test_page03:
-        ; Switch to page #03, write a different marker and verify it.
-        ld      a, #03
-        call    neo_set_pg1
-        ld      a, #5A
-        ld      (X86_DMA_HEADER_ADDR), a
-        ld      a, (X86_DMA_HEADER_ADDR)
-        cp      #5A
-        jr      nz, .pg1_test_check_page44
-        ld      a, (neo_pg1_map_verified)
-        or      2
-        ld      (neo_pg1_map_verified), a
-
-.pg1_test_check_page44:
-        ; Page #44 must retain #A5 despite the write to page #03.
-        ld      a, #44
-        call    neo_set_pg1
-        ld      a, (X86_DMA_HEADER_ADDR)
-        cp      #A5
-        jr      nz, .pg1_test_check_page03
-        ld      a, (neo_pg1_map_verified)
-        or      4
-        ld      (neo_pg1_map_verified), a
-
-.pg1_test_check_page03:
-        ; Page #03 must retain #5A after switching away and back.
-        ld      a, #03
-        call    neo_set_pg1
-        ld      a, (X86_DMA_HEADER_ADDR)
-        cp      #5A
-        jr      nz, .pg1_test_restore_pages
-        ld      a, (neo_pg1_map_verified)
-        or      8
-        ld      (neo_pg1_map_verified), a
-
-.pg1_test_restore_pages:
-        ; Restore the original page #44 byte, then the original page #03 byte.
-        ld      a, #44
-        call    neo_set_pg1
-        ld      a, (neo_pg1_saved_page44)
-        ld      (X86_DMA_HEADER_ADDR), a
-
-        ld      a, #03
-        call    neo_set_pg1
-        ld      a, (neo_pg1_saved_page03)
-        ld      (X86_DMA_HEADER_ADDR), a
-
-        ld      a, (neo_pg1_map_verified)
-        cp      15
-        jr      z, .pg1_map_test_done
-
-        ; On failure keep the standard page selected and restore trampoline.
-        ld      a, #03
-        call    neo_set_pg1
-        ld      hl, rom_return_trampoline_code
-        ld      de, ROM_RETURN_TRAMPOLINE_ADDR
-        ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
-        ldir
-
-.pg1_map_test_done:
         ld      a, C_DMA_ZX
         out     (DMA_MOD), a
 
-        ld      a, #11
-        out     (DMA_HAD), a            ; physical address bits 21:16 = #11
         xor     a
-        out     (DMA_MAD), a            ; physical address bits 15:8 = 0
+        out     (DMA_HAD), a            ; physical address bits 21:16 = 0
+        ld      a, #D0
+        out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
         xor     a
         out     (DMA_LAD), a            ; physical address bits 7:0 = 0
 
@@ -283,7 +191,7 @@ command_load_x86:
 neogs_dma_handler_end:
 
 ; -------------------------------------------------------------------------
-; CMD_RUN_X86 — execute the length-framed payload beginning at $4002.
+; CMD_RUN_X86 — execute the length-framed payload beginning at $5002.
 ; -------------------------------------------------------------------------
 command_run_x86:
         call    execute_neogs_x86
@@ -308,15 +216,15 @@ execute_neogs_x86:
         ; The host drains this stream and mirrors it to emulator port #EF.
         call    neo_debug_dump_dma_frame
 
-        ; DMA frame begins with a little-endian x86 byte length at $4000.
+        ; DMA frame begins with a little-endian x86 byte length at $5000.
         ld      hl, (X86_DMA_HEADER_ADDR)
         ld      a, h
         or      l
         jp      z, .invalid_x86_length
 
-        ; Maximum code length is $3FFE: $4002 + length must not exceed $8000.
+        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
         ld      a, h
-        cp      #3F
+        cp      #2F
         jr      c, .x86_length_valid
         jp      nz, .invalid_x86_length
         ld      a, l
@@ -370,7 +278,7 @@ execute_neogs_x86_real:
         or      l
         jp      z, .real_invalid_length
         ld      a, h
-        cp      #3F
+        cp      #2F
         jr      c, .real_length_valid
         jp      nz, .real_invalid_length
         ld      a, l
@@ -527,14 +435,6 @@ neo_debug_dump_dma_frame:
         push    de
         ld      hl, neo_debug_dma_prefix
         call    neo_debug_send_string
-        ld      a, #44                 ; PG1 value programmed by CMD_LOAD_X86
-        call    neo_debug_hex8
-        ld      hl, neo_debug_map_label
-        call    neo_debug_send_string
-        ld      a, (neo_pg1_map_verified)
-        call    neo_debug_hex8
-        ld      a, ' '
-        call    neo_send_data_byte
         ld      hl, X86_DMA_HEADER_ADDR
         ld      e, 12
 .neo_debug_dump_loop:
@@ -584,9 +484,7 @@ neo_debug_hex_nibble:
         jp      neo_send_data_byte
 
 neo_debug_dma_prefix:
-        defb    "[NGS DMA] PG1I=", 0
-neo_debug_map_label:
-        defb    " MAP=", 0
+        defb    "[NGS DMA] FRAME=", 0
 
 ; -------------------------------------------------------------------------
 ; neo_send_data_byte
@@ -629,12 +527,9 @@ neo_send_data_byte:
         ret
 
 ; -------------------------------------------------------------------------
-; Set PG1 through the immediate-port Z80 instruction.
-; OUT (n),A forms the 16-bit I/O address as A:n. Here n=#21, so the
-; low six address bits decode PG1. The FPGA port-enable logic checks
-; address bits A7:A6 (from n), not the high byte containing page data.
-; Thus #44 and #03 are both valid data values for this port.
-; Input: A = PG1 page value. Preserves A and all other registers.
+; Select the physical 16 KiB page visible in NeoGS logical window 1.
+; WIN1 is the GS-side port #21 from the official ports.inc interface.
+; Input: A = physical 16 KiB page number.
 ; -------------------------------------------------------------------------
 neo_set_pg1:
         out     (PG1), a
@@ -643,9 +538,6 @@ neo_set_pg1:
 neo_command:       db 0
 neo_tx_byte:       db 0
 neo_dma_error:     db 0
-neo_pg1_map_verified: db 0
-neo_pg1_saved_page03: db 0
-neo_pg1_saved_page44: db 0
 saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
 
@@ -669,11 +561,10 @@ rom_return_trampoline_end:
         INCLUDE "x86_real_mov.asm"
         INCLUDE "bios/bios_video.asm"
 
-; DMA temporarily overlays the logical trampoline window with physical page 68.
-; The trampoline remains intact in physical page 1 and is revealed on PG1 restore.
-        ASSERT rom_return_trampoline_end - rom_return_trampoline_code <= 16
-        ASSERT X86_DMA_HEADER_ADDR = #4000
-        ASSERT neogs_dma_handler_end <= #4000
+; The return trampoline occupies $4000; the DMA frame starts at $5000.
+        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+        ASSERT X86_DMA_HEADER_ADDR = #5000
+        ASSERT neogs_dma_handler_end <= #5000
         ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
 
 neogs_firmware_end:

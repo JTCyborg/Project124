@@ -117,6 +117,13 @@ both expected status and AX match. The suite continues after a test mismatch
 and prints aggregate pass/fail counts; a transport or malformed-container
 error aborts the suite.
 
+The DMA transport retains the verified default NeoGS WIN1 mapping: physical
+address `#00D000` is visible to the NeoGS Z80 at logical `#5000` while WIN1
+selects page `#03`. The frame occupies `#5000..#7FFF` (12 KiB), including its
+two-byte length header, so the maximum x86 payload is `#2FFE` bytes. The
+experimental page-68 remap at `#110000` was removed after the WIN1 page-isolation
+test showed that the requested page switch was not taking effect.
+
 ### Structured NeoGS result frame
 
 `CMD_GET_STATUS` now returns six bytes:
