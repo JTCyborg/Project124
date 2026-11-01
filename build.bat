@@ -1,4 +1,3 @@
-```bat
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
@@ -135,4 +134,3 @@ echo.
 echo [ERROR] Сборка невозможна: отсутствует ассемблер.
 pause
 exit /b 1
-```
