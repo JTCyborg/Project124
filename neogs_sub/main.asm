@@ -466,6 +466,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_interrupt.asm"
         INCLUDE "x86_real_mode.asm"
         INCLUDE "x86_real_alu.asm"
+        INCLUDE "x86_real_alu8.asm"
         INCLUDE "bios/bios_video.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR

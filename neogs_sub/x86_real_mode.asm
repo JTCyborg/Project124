@@ -2,17 +2,17 @@
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, 16-bit register-direct
-; ADD/ADC/SUB/SBB/CMP, PUSHF, INC/DEC r16, PUSH/POP r16, MOV r8/r16,imm,
-; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET. Memory ModR/M
-; ALU forms and 8-bit ALU forms remain unsupported.
+; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
+; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
+; MOV r8/r16,imm, short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3,
+; IRET. Memory ModR/M ALU operands remain unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
 ; handler at 0000:5100. The guest loads all eight general registers with
 ; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
 ; The test checks all MOV destinations, interrupt return, FLAGS and SP.
-; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
+; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh or 1Cxxh.
 ; =========================================================================
 
 X86_REAL_STEP_LIMIT EQU #FFFF
@@ -142,8 +142,12 @@ x86_real_mode_test:
         call    x86_real_clear_vector
         jp      c, x86_real_test_fail_6
 
-        ; Run the independent 16-bit register ALU guest regression.
+        ; Run the independent 16-bit arithmetic regression.
         call    x86_real_alu_test
+        ret     c
+
+        ; Run byte arithmetic and 8/16-bit logical regression.
+        call    x86_real_alu8_logic_test
         ret     c
 
         ld      hl, #1A02
@@ -244,6 +248,40 @@ x86_real_next:
 
         cp      #90
         jp      z, x86_real_nop
+        cp      #00
+        jp      z, x86_real_alu8_modrm
+        cp      #02
+        jp      z, x86_real_alu8_modrm
+        cp      #08
+        jp      z, x86_real_alu8_modrm
+        cp      #0A
+        jp      z, x86_real_alu8_modrm
+        cp      #10
+        jp      z, x86_real_alu8_modrm
+        cp      #12
+        jp      z, x86_real_alu8_modrm
+        cp      #18
+        jp      z, x86_real_alu8_modrm
+        cp      #1A
+        jp      z, x86_real_alu8_modrm
+        cp      #20
+        jp      z, x86_real_alu8_modrm
+        cp      #22
+        jp      z, x86_real_alu8_modrm
+        cp      #28
+        jp      z, x86_real_alu8_modrm
+        cp      #2A
+        jp      z, x86_real_alu8_modrm
+        cp      #30
+        jp      z, x86_real_alu8_modrm
+        cp      #32
+        jp      z, x86_real_alu8_modrm
+        cp      #38
+        jp      z, x86_real_alu8_modrm
+        cp      #3A
+        jp      z, x86_real_alu8_modrm
+        cp      #84
+        jp      z, x86_real_alu8_modrm
         cp      #01
         jp      z, x86_real_alu_modrm16
         cp      #03
@@ -264,6 +302,20 @@ x86_real_next:
         jp      z, x86_real_alu_modrm16
         cp      #3B
         jp      z, x86_real_alu_modrm16
+        cp      #09
+        jp      z, x86_real_logic16_modrm
+        cp      #0B
+        jp      z, x86_real_logic16_modrm
+        cp      #21
+        jp      z, x86_real_logic16_modrm
+        cp      #23
+        jp      z, x86_real_logic16_modrm
+        cp      #31
+        jp      z, x86_real_logic16_modrm
+        cp      #33
+        jp      z, x86_real_logic16_modrm
+        cp      #85
+        jp      z, x86_real_logic16_modrm
         cp      #9C
         jp      z, x86_real_pushf
         cp      #40
