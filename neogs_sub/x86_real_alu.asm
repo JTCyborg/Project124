@@ -1,9 +1,11 @@
 ; =========================================================================
 ; PROJECT 124 — 8086 real-mode 16-bit ALU (register and memory ModR/M)
 ;
-; Supported word register forms:
+; Supported 16-bit ModR/M forms:
 ; ADD 01/03, ADC 11/13, SBB 19/1B, SUB 29/2B, CMP 39/3B.
-; Memory operands use the shared MOV effective-address decoder, including segment overrides. 8-bit ALU memory forms remain unsupported.
+; Register and memory operands are supported in both directions. Memory
+; effective addresses and segment overrides use the shared MOV decoder.
+; 8-bit arithmetic and logical memory forms remain unsupported.
 ; PUSHF 9C is included to make guest FLAGS assertions observable.
 ; =========================================================================
 
