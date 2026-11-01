@@ -450,8 +450,14 @@ x86_real_mov_memory_test:
         ld      hl, #1D33
         jp      .fail
 .fail_di:
-        ld      hl, #1D34
-        jp      .fail
+        ; Diagnostic: return the actual DI value instead of the generic
+        ; 1D34 marker so the host log exposes the failed register contents.
+        ld      hl, (x86_reg_di)
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
 .fail_si:
         ld      hl, #1D35
         jp      .fail
