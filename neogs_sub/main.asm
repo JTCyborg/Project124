@@ -5,7 +5,8 @@
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Current firmware image is kept below $3400; the stack grows down from $3FFF.
+; Current firmware image is kept below $3400; the stack grows down from $3FFE.
+; Keep the active Z80 stack in fixed WIN0: x86_mem_map_addr remaps WIN3 via MPAGEX.
 ; WIN1 remains on the documented default physical 16 KiB page #03.
 ; The DMA frame at logical $5000 therefore maps to physical $00D000.
 ; Firmware and its stack remain in the low 16 KiB page.
@@ -32,7 +33,7 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, $FFFE
+        ld      sp, $3FFE              ; stack stays in fixed WIN0; WIN3 is remapped by MPAGEX
 
         ; Set Z80 to the documented maximum guaranteed clock: 20 MHz.
         ; Do not select 24 MHz: the guide explicitly says it is not guaranteed.
