@@ -43,6 +43,10 @@ tools\sjasmplus.exe --dirbol ^
 
 if errorlevel 1 goto BUILD_NEOGS_FAILED
 
+rem Упаковать bootstrap и firmware в один TR-DOS файл neoprog.C.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\pack_neogs.ps1
+if errorlevel 1 goto BUILD_NEOGS_FAILED
+
 rem Проверка результата сборки
 
 if not exist "neogs_code.bin" (
