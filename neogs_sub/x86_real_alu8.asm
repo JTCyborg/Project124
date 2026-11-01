@@ -597,22 +597,22 @@ x86_real_alu8_logic_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_si)
-        ld      de, #0892
+        ld      de, #0A92
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
         ld      hl, (x86_reg_di)
-        ld      de, #0097
+        ld      de, #0297
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
         ld      hl, (x86_reg_bp)
-        ld      de, #0046
+        ld      de, #0246
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
         ld      hl, (x86_reg_dx)
-        ld      de, #0086
+        ld      de, #0286
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
@@ -674,10 +674,10 @@ x86_guest_alu8_logic_image:
         db #00,#C8                 ; ADD AL,CL (r/m destination) -> 11
         db #B0,#7F                 ; MOV AL,7F
         db #02,#C1                 ; ADD AL,CL (reg destination) -> 80
-        db #9C,#5E                 ; PUSHF/POP SI -> 0892
+        db #9C,#5E                 ; PUSHF/POP SI -> 0A92
         db #B0,#00                 ; MOV AL,00
         db #2A,#C1                 ; SUB AL,CL -> FF, CF=1
-        db #9C,#5F                 ; PUSHF/POP DI -> 0097
+        db #9C,#5F                 ; PUSHF/POP DI -> 0297
         db #B3,#00                 ; MOV BL,00
         db #12,#D9                 ; ADC BL,CL -> 02 (reg destination, carry-in)
         db #B0,#00                 ; MOV AL,00
@@ -695,12 +695,12 @@ x86_guest_alu8_logic_image:
         db #B1,#0F                 ; MOV CL,0F
         db #B0,#F0                 ; MOV AL,F0
         db #20,#C8                 ; AND AL,CL (r/m destination) -> 00
-        db #9C,#5D                 ; PUSHF/POP BP -> 0046
+        db #9C,#5D                 ; PUSHF/POP BP -> 0246
         db #B0,#F0                 ; MOV AL,F0
         db #22,#C1                 ; AND AL,CL (reg destination) -> 00
         db #B0,#F0                 ; MOV AL,F0
         db #08,#C8                 ; OR AL,CL (r/m destination) -> FF
-        db #9C,#5A                 ; PUSHF/POP DX -> 0086
+        db #9C,#5A                 ; PUSHF/POP DX -> 0286
         db #B0,#F0                 ; MOV AL,F0
         db #0A,#C1                 ; OR AL,CL (reg destination) -> FF
         db #B0,#FF                 ; MOV AL,FF
