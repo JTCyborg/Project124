@@ -599,6 +599,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_real_alu8.asm"
         INCLUDE "x86_real_mov.asm"
         INCLUDE "x86_io.asm"
+        INCLUDE "x86_strings.asm"
         INCLUDE "bios/bios_video.asm"
 
 ; The return trampoline occupies $4000; the DMA frame starts at $5000.
