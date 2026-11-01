@@ -277,7 +277,7 @@ ProgramEnd:
         PAGE    1
         ORG     #C000
 neoprog_package_start:
-        INCBIN "neoprog.bin"
+        INCBIN "zx_main/neoprog.bin"
 neoprog_package_end:
 
 ; Return to bank 0 and place the BASIC boot program at #E000.
