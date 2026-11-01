@@ -199,6 +199,9 @@ x86_real_mode_test:
         call    x86_real_io_test
         ret     c
 
+        ; CPU-STR-01: MOVS/CMPS/STOS/LODS/SCAS byte and word forms, no REP.
+        call    x86_real_strings_test
+        ret     c
 
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
@@ -386,6 +389,26 @@ x86_real_dispatch:
         cp      #8C
         jp      c, x86_real_mov_modrm
 .not_mov_rm_reg:
+        cp      #A4
+        jp      z, x86_real_string_instruction
+        cp      #A5
+        jp      z, x86_real_string_instruction
+        cp      #A6
+        jp      z, x86_real_string_instruction
+        cp      #A7
+        jp      z, x86_real_string_instruction
+        cp      #AA
+        jp      z, x86_real_string_instruction
+        cp      #AB
+        jp      z, x86_real_string_instruction
+        cp      #AC
+        jp      z, x86_real_string_instruction
+        cp      #AD
+        jp      z, x86_real_string_instruction
+        cp      #AE
+        jp      z, x86_real_string_instruction
+        cp      #AF
+        jp      z, x86_real_string_instruction
         cp      #9C
         jp      z, x86_real_pushf
         cp      #40
