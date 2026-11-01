@@ -450,9 +450,21 @@ x86_real_mov_memory_test:
         ld      hl, #1D33
         jp      .fail
 .fail_di:
-        ; Diagnostic: return the actual DI value instead of the generic
-        ; 1D34 marker so the host log exposes the failed register contents.
-        ld      hl, (x86_reg_di)
+        ; Diagnostic: inspect the source word independently. This separates
+        ; a failed DS:0206 write/read from a failed MOV destination register.
+        ld      hl, (x86_reg_ds)
+        ld      (x86_mem_segment), hl
+        ld      hl, #0206
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jr      c, .fail_di_memory_error
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+.fail_di_memory_error:
+        ld      hl, #EEEE
         ld      (saved_x86_ax), hl
         ld      a, 11
         ld      (x86_exit_status), a
