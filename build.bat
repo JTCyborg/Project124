@@ -13,6 +13,14 @@ if not exist "tools\sjasmplus.exe" (
     goto BUILD_FAILED
 )
 
+rem Download the package script if this working copy does not contain it.
+if not exist "%~dp0pack_neogs.ps1" (
+    echo [SETUP] pack_neogs.ps1 is missing. Downloading from Project124...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1' -OutFile '%~dp0pack_neogs.ps1'; exit 0 } catch { Write-Error $_; exit 1 }"
+    if errorlevel 1 goto BUILD_PACKER_FAILED
+)
+if not exist "%~dp0pack_neogs.ps1" goto BUILD_PACKER_FAILED
+
 echo [1/2] Building NeoGS firmware and bootstrap...
 "tools\sjasmplus.exe" --dirbol -I "neogs_sub" -I "shared" --lst="neogs_list.txt" --sym="neogs_map.txt" "neogs_sub/build_firmware.asm"
 if errorlevel 1 goto BUILD_NEOGS_FAILED
@@ -55,6 +63,15 @@ echo.
 dir "neogs_code.bin" "neogs_bootstrap.bin" "neoprog.bin" "disk_A.trd"
 pause
 exit /b 0
+
+:BUILD_PACKER_FAILED
+echo.
+echo ERROR: pack_neogs.ps1 is missing and could not be downloaded.
+echo Download it from:
+echo https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1
+echo Save it in the Project124 root folder.
+pause
+exit /b 1
 
 :BUILD_NEOGS_FAILED
 echo.
