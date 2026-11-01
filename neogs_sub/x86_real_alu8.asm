@@ -814,7 +814,7 @@ x86_real_alu8_memory_test:
         sbc     hl, de
         jp      nz, .fail_register
         ld      hl, (x86_reg_dx)
-        ld      de, #00F1
+        ld      de, #00EB
         or      a
         sbc     hl, de
         jp      nz, .fail_register
