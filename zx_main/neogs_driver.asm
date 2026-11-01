@@ -228,7 +228,7 @@ upload_firmware::
         sbc     hl, de
         ld      (neo_fw_buffer_remaining), hl
 
-        ; Firmware image must fit below $3400, preserving at least 3 KiB for the stack below SP=$3FFF.
+        ; Firmware low-window image must fit in $0000-$3FFF; stack is now in reserved WIN3.
         ld      hl, (neo_fw_length)
         ld      a, h
         or      a
@@ -435,13 +435,11 @@ gs_boot_probe_rom:
         call    gs_boot_receive_data_byte
         ret     c
         ld      (neo_fw_rom_ram_high), a
-        ld      a, (neo_fw_rom_ram_low)
-        ld      b, a
-        ld      a, (neo_fw_rom_ram_mid)
-        or      b
-        ld      b, a
+        ; #20 reports total RAM as a 24-bit byte count. The 48-KiB
+        ; memory map needs at least four 16-KiB pages (64 KiB total):
+        ; fixed pages 0 and 3 plus selectable pages 1 and 2.
         ld      a, (neo_fw_rom_ram_high)
-        or      b
+        or      a
         jr      nz, .rom_probe_ok
         scf
         ret
