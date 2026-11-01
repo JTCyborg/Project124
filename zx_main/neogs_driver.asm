@@ -384,7 +384,6 @@ upload_firmware::
         call    neo_fw_read_next_sector
         pop     de
         jp      c, .upload_failed
-        ld      hl, #C000
         ld      hl, 256
         ld      (neo_fw_buffer_remaining), hl
         ld      hl, #C000
