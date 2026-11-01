@@ -256,9 +256,9 @@ neogs_binary_start:
 neogs_binary_end:
 
 ProgramEnd:
-        ; Code/data must end before the application stack at #AFFF and well
-        ; before the TR-DOS buffer at #C000 / BASIC loader at #E000.
-        ASSERT ProgramEnd <= #A000
+        ; Keep at least 2 KiB between the loaded program and the application
+        ; stack growing down from #AFFF. The TR-DOS buffer starts at #C000.
+        ASSERT ProgramEnd <= #A800
 
 ; Возвращаем базовый контекст компиляции для загрузчика
         ORG     #E000
