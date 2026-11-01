@@ -316,7 +316,31 @@ x86_real_strings_test:
         xor     a
         ld      (x86_real_seg_override_active), a
 
-        ; MOVSB/MOVSW, LODSB/LODSW, STOSB/STOSW, CMPSB -> HLT.
+        ; MOVSB/MOVSW/LODSB -> HLT. Verify LODSB independently before LODSW.
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_ax)
+        ld      de, #AB55
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_si)
+        ld      de, #0104
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_di)
+        ld      de, #0203
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_flags)
+        ld      de, #0302
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+
+        ; LODSW/STOSB/STOSW/CMPSB -> HLT.
         call    x86_real_execute
         jp      c, x86_string_test_fail_execute
         ld      hl, (x86_reg_ax)
@@ -502,7 +526,7 @@ x86_string_other:    dw 0
 x86_string_expected: db 0
 
 x86_string_guest_image:
-        db #36,#A4,#A5,#AC,#AD,#AA,#AB,#A6,#F4,#A7,#F4,#AE,#F4,#AF,#F4
+        db #36,#A4,#A5,#AC,#F4,#AD,#AA,#AB,#A6,#F4,#A7,#F4,#AE,#F4,#AF,#F4
 x86_string_guest_image_end:
 
 x86_string_guest_df_image:
