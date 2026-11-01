@@ -337,7 +337,7 @@ x86_real_alu_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_bx)
-        ld      de, 1
+        ld      de, 2
         or      a
         sbc     hl, de
         jp      nz, .result_fail
@@ -416,7 +416,7 @@ x86_guest_alu_image:
         db #1B,#D9                 ; SBB BX,CX -> 0003 (reg destination)
         db #B8,#00,#00             ; MOV AX,0000
         db #2B,#C1                 ; SUB AX,CX -> CF=1
-        db #19,#CB                 ; SBB BX,CX -> 0001 (r/m destination)
+        db #19,#CB                 ; SBB BX,CX -> 0002 (r/m destination)
         db #B8,#01,#00             ; MOV AX,0001
         db #3B,#C1                 ; CMP AX,CX -> ZF=1 (reg destination)
         db #39,#C8                 ; CMP AX,CX -> ZF=1 (r/m destination)
