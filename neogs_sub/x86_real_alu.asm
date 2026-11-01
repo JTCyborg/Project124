@@ -1,9 +1,9 @@
 ; =========================================================================
-; PROJECT 124 — 8086 real-mode 16-bit register-direct ALU
+; PROJECT 124 — 8086 real-mode 16-bit ALU (register and memory ModR/M)
 ;
 ; Supported word register forms:
 ; ADD 01/03, ADC 11/13, SBB 19/1B, SUB 29/2B, CMP 39/3B.
-; ModR/M mod=11 only. Memory operands and 8-bit ALU are not implemented.
+; Memory operands use the shared MOV effective-address decoder, including segment overrides. 8-bit ALU memory forms remain unsupported.
 ; PUSHF 9C is included to make guest FLAGS assertions observable.
 ; =========================================================================
 
@@ -14,8 +14,10 @@ x86_real_alu_modrm16:
         ld      (x86_alu_modrm), a
         and     #C0
         cp      #C0
-        jp      nz, x86_real_alu_unsupported
+        jp      nz, .memory_operand
 
+        xor     a
+        ld      (x86_alu_dst_is_mem), a
         ld      a, (x86_alu_modrm)
         and     #38
         srl     a
@@ -47,7 +49,41 @@ x86_real_alu_modrm16:
         ld      a, (x86_alu_src_reg)
         call    x86_alu_read_reg16
         ld      (x86_alu_src), hl
+        jp      .operands_ready
 
+.memory_operand:
+        ; Reuse the tested 8086 16-bit EA decoder from MOV. It also applies
+        ; the active ES/CS/SS/DS override and BP's default SS selection.
+        ld      a, (x86_alu_modrm)
+        call    x86_real_mov_decode_modrm
+        ret     c
+        xor     a
+        ld      (x86_alu_dst_is_mem), a
+        ld      a, (x86_real_opcode)
+        and     2
+        jr      nz, .memory_source
+
+        ; ADD/ADC/SBB/SUB/CMP r/m16,r16: memory is destination.
+        ld      a, 1
+        ld      (x86_alu_dst_is_mem), a
+        call    x86_real_alu_read_memory_word
+        ret     c
+        ld      (x86_alu_dst), hl
+        ld      a, (x86_mov_reg)
+        call    x86_alu_read_reg16
+        ld      (x86_alu_src), hl
+        jp      .operands_ready
+
+.memory_source:
+        ; ADD/ADC/SBB/SUB/CMP r16,r/m16: memory is source.
+        ld      a, (x86_mov_reg)
+        call    x86_alu_read_reg16
+        ld      (x86_alu_dst), hl
+        call    x86_real_alu_read_memory_word
+        ret     c
+        ld      (x86_alu_src), hl
+
+.operands_ready:
         ld      a, (x86_real_opcode)
         and     #38
         ld      (x86_alu_mode), a
@@ -120,10 +156,31 @@ x86_real_alu_modrm16:
         ld      a, (x86_alu_mode)
         cp      #38
         jp      z, x86_real_next
+        ld      a, (x86_alu_dst_is_mem)
+        or      a
+        jr      z, .write_register_destination
+        ld      hl, (x86_alu_result)
+        ld      (x86_mem_word_value), hl
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_write16
+        ret     c
+        jp      x86_real_next
+.write_register_destination:
         ld      a, (x86_alu_dst_reg)
         ld      hl, (x86_alu_result)
         call    x86_alu_write_reg16
         jp      x86_real_next
+
+; Read the word addressed by the shared MOV effective-address decoder.
+x86_real_alu_read_memory_word:
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        jp      x86_mem_read16
 
 ; A=8086 word register number (AX,CX,DX,BX,SP,BP,SI,DI), OUT HL=value.
 x86_alu_read_reg16:
@@ -380,6 +437,7 @@ x86_real_alu_test:
         scf
         ret
 
+x86_alu_dst_is_mem:  db 0
 x86_alu_modrm:       db 0
 x86_alu_mode:        db 0
 x86_alu_reg:         db 0
