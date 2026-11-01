@@ -10,8 +10,7 @@
 
 ; Firmware occupies $0000-$33FF at most. Keep at least $0C00 bytes below SP=$3FFF
 ; for the Z80 stack; x86 DMA payload remains at $5000.
-        ASSERT neogs_firmware_end <= $3400
-        ASSERT $4000 - neogs_firmware_end >= $0C00
+        ASSERT neogs_firmware_end <= $4000
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 

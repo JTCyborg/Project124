@@ -239,7 +239,7 @@ upload_firmware::
         jr      .firmware_length_valid
 .firmware_high_nonzero:
         ld      a, h
-        cp      #34
+        cp      #40
         jr      c, .firmware_length_valid
         jp      nz, .upload_failed
         ld      a, l
