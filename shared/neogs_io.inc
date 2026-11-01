@@ -49,6 +49,12 @@ M_PAN4CH        EQU #40
 B_INV7B         EQU 7
 M_INV7B         EQU #80
 
+; NeoGS physical page registers
+PG0             EQU #20
+PG1             EQU #21
+PG2             EQU #22
+PG3             EQU #23
+
 ; NeoGS DMA registers
 DMA_MOD         EQU #1B
 DMA_HAD         EQU #1C
