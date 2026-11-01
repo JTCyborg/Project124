@@ -151,8 +151,12 @@ x86_real_mode_test:
         call    x86_real_alu_memory_test
         ret     c
 
-        ; Run byte arithmetic and 8/16-bit logical regression.
+        ; Run byte arithmetic and 8/16-bit logical register regression.
         call    x86_real_alu8_logic_test
+        ret     c
+
+        ; Stage 3E: byte arithmetic ModR/M memory operands and segment overrides.
+        call    x86_real_alu8_memory_test
         ret     c
 
         ; Stage 3B: 8086 MOV between register and memory operands.
