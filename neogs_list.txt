@@ -472,7 +472,7 @@
  360+ 0313
  361+ 0313              ; Stage 3A: guest INT 10h video BIOS service test.
  362+ 0313              command_bios_video_test:
- 363+ 0313 CD 27 1B             call    bios_int10_video_test
+ 363+ 0313 CD 29 1B             call    bios_int10_video_test
  364+ 0316 AF                   xor     a
  365+ 0317 D3 05                out     (CLRCBIT), a
  366+ 0319 C3 37 01             jp      main_loop
@@ -1183,7 +1183,7 @@
  188++0758 DA 1A 08             jp      c, bios_post_fail_8
  189++075B
  190++075B                      ; Publish the INT 10h firmware trap after the IVT zero-fill check.
- 191++075B CD 96 19             call    bios_int10_install_vector
+ 191++075B CD 98 19             call    bios_int10_install_vector
  192++075E DA 1A 08             jp      c, bios_post_fail_8
  193++0761
  194++0761 21 05 B1             ld      hl, BIOS_POST_SIGNATURE
@@ -3112,7 +3112,7 @@
  864++155B 3A E7 15             ld      a, (x86_real_int_vector)
  865++155E FE 10                cp      #10
  866++1560 C2 EC 10             jp      nz, x86_real_next
- 867++1563 CD 77 19             call    bios_int10_dispatch
+ 867++1563 CD 79 19             call    bios_int10_dispatch
  868++1566 D8                   ret     c
  869++1567 CD 60 0D             call    x86_iret_return
  870++156A D8                   ret     c
@@ -3602,7 +3602,7 @@
  295++1859              x86_real_alu_test:
  296++1859 21 37 19             ld      hl, x86_guest_alu_image
  297++185C 11 00 52             ld      de, #5200
- 298++185F 01 40 00             ld      bc, x86_guest_alu_image_end - x86_guest_alu_image
+ 298++185F 01 42 00             ld      bc, x86_guest_alu_image_end - x86_guest_alu_image
  299++1862 CD 57 10             call    x86_real_copy_image
  300++1865 30 06                jr      nc, .image_ready
  301++1867 21 07 1B             ld      hl, #1B07
@@ -3718,579 +3718,580 @@
  411++1957 13 D1                db #13,#D1                 ; ADC DX,CX -> 0002 (reg destination)
  412++1959 B8 00 00             db #B8,#00,#00             ; MOV AX,0000
  413++195C 2B C1                db #2B,#C1                 ; SUB AX,CX -> FFFF, CF=1 (reg destination)
- 414++195E 11 CA                db #11,#CA                 ; ADC DX,CX -> 0004 (r/m destination)
- 415++1960 BB 05 00             db #BB,#05,#00             ; MOV BX,0005
- 416++1963 1B D9                db #1B,#D9                 ; SBB BX,CX -> 0003 (reg destination)
- 417++1965 B8 00 00             db #B8,#00,#00             ; MOV AX,0000
- 418++1968 2B C1                db #2B,#C1                 ; SUB AX,CX -> CF=1
- 419++196A 19 CB                db #19,#CB                 ; SBB BX,CX -> 0002 (r/m destination)
- 420++196C B8 01 00             db #B8,#01,#00             ; MOV AX,0001
- 421++196F 3B C1                db #3B,#C1                 ; CMP AX,CX -> ZF=1 (reg destination)
- 422++1971 39 C8                db #39,#C8                 ; CMP AX,CX -> ZF=1 (r/m destination)
- 423++1973 74 01 00             db #74,#01,#00             ; JE taken
- 424++1976 F4                   db #F4
- 425++1977              x86_guest_alu_image_end:
- 426++1977
+ 414++195E 9C 5E                db #9C,#5E                 ; PUSHF / POP SI -> 0297 (snapshot before ADC)
+ 415++1960 11 CA                db #11,#CA                 ; ADC DX,CX -> 0004 (r/m destination)
+ 416++1962 BB 05 00             db #BB,#05,#00             ; MOV BX,0005
+ 417++1965 1B D9                db #1B,#D9                 ; SBB BX,CX -> 0003 (reg destination)
+ 418++1967 B8 00 00             db #B8,#00,#00             ; MOV AX,0000
+ 419++196A 2B C1                db #2B,#C1                 ; SUB AX,CX -> CF=1
+ 420++196C 19 CB                db #19,#CB                 ; SBB BX,CX -> 0002 (r/m destination)
+ 421++196E B8 01 00             db #B8,#01,#00             ; MOV AX,0001
+ 422++1971 3B C1                db #3B,#C1                 ; CMP AX,CX -> ZF=1 (reg destination)
+ 423++1973 39 C8                db #39,#C8                 ; CMP AX,CX -> ZF=1 (r/m destination)
+ 424++1975 74 01 00             db #74,#01,#00             ; JE taken
+ 425++1978 F4                   db #F4
+ 426++1979              x86_guest_alu_image_end:
+ 427++1979
 # file closed: x86_real_alu.asm
- 469+ 1977                      INCLUDE "bios/bios_video.asm"
+ 469+ 1979                      INCLUDE "bios/bios_video.asm"
 # file opened: bios_video.asm
-   1++1977              ; =========================================================================
-   2++1977              ; PROJECT 124 — BIOS INT 10h text services, Stage 3A
-   3++1977              ;
-   4++1977              ; Project text-console profile: 42 columns x 12 rows, 6x8 glyphs.
-   5++1977              ; Implemented functions:
-   6++1977              ;   AH=00h set mode 03h (project 42x12 text profile)
-   7++1977              ;   AH=0Fh get mode (AL=03h, AH=42, BH=0)
-   8++1977              ;   AH=02h set cursor (BH=0, DH=row, DL=column)
-   9++1977              ;   AH=03h get cursor (DH=row, DL=column)
-  10++1977              ;   AH=0Eh teletype output (AL=character, BH=0)
-  11++1977              ;
-  12++1977              ; INT 10h enters through the normal IVT/stack frame. The BIOS service itself
-  13++1977              ; is a firmware trap, then returns through the normal IRET primitive.
-  14++1977              ; Host stream protocol over DBIT/GSDAT:
-  15++1977              ;   nonzero byte = teletype character
-  16++1977              ;   00 00        = clear the lower debug console
-  17++1977              ;   00 01 row col= set lower debug console cursor
-  18++1977              ; =========================================================================
-  19++1977
-  20++1977              BIOS_VIDEO_COLUMNS EQU 42
-  21++1977              BIOS_VIDEO_ROWS    EQU 12
-  22++1977              BIOS_VIDEO_MODE    EQU #03
-  23++1977
-  24++1977              bios_int10_dispatch:
-  25++1977 2A 6E 09             ld      hl, (x86_reg_ax)
-  26++197A 7C                   ld      a, h
-  27++197B FE 00                cp      #00
-  28++197D CA C1 19             jp      z, bios_int10_set_mode
-  29++1980 FE 0F                cp      #0F
-  30++1982 CA 20 1A             jp      z, bios_int10_get_mode
-  31++1985 FE 02                cp      #02
-  32++1987 CA 2C 1A             jp      z, bios_int10_set_cursor
-  33++198A FE 03                cp      #03
-  34++198C CA 66 1A             jp      z, bios_int10_get_cursor
-  35++198F FE 0E                cp      #0E
-  36++1991 CA 80 1A             jp      z, bios_int10_teletype
-  37++1994 B7                   or      a
-  38++1995 C9                   ret
-  39++1996
-  40++1996              ; Install IVT[10h] -> 0000:5200 (firmware service trap).
-  41++1996              bios_int10_install_vector:
-  42++1996 21 00 00             ld      hl, 0
-  43++1999 22 DC 05             ld      (x86_mem_segment), hl
-  44++199C 21 40 00             ld      hl, #0040
-  45++199F 22 DE 05             ld      (x86_mem_offset), hl
-  46++19A2 21 00 52             ld      hl, #5200
-  47++19A5 22 E2 05             ld      (x86_mem_word_value), hl
-  48++19A8 CD C1 04             call    x86_mem_write16
-  49++19AB D8                   ret     c
-  50++19AC 21 00 00             ld      hl, 0
-  51++19AF 22 DC 05             ld      (x86_mem_segment), hl
-  52++19B2 21 42 00             ld      hl, #0042
-  53++19B5 22 DE 05             ld      (x86_mem_offset), hl
-  54++19B8 21 00 00             ld      hl, 0
-  55++19BB 22 E2 05             ld      (x86_mem_word_value), hl
-  56++19BE C3 C1 04             jp      x86_mem_write16
-  57++19C1
-  58++19C1              ; AH=00h — only mode 03h is supported by this project console.
-  59++19C1              bios_int10_set_mode:
-  60++19C1 7D                   ld      a, l
-  61++19C2 FE 03                cp      BIOS_VIDEO_MODE
-  62++19C4 28 02                jr      z, .mode_valid
-  63++19C6 B7                   or      a
-  64++19C7 C9                   ret
-  65++19C8              .mode_valid:
-  66++19C8 21 49 04             ld      hl, #0449
-  67++19CB 3E 03                ld      a, BIOS_VIDEO_MODE
-  68++19CD CD 04 1B             call    bios_video_write_byte
-  69++19D0 D8                   ret     c
-  70++19D1 21 4A 04             ld      hl, #044A
-  71++19D4 3E 2A                ld      a, BIOS_VIDEO_COLUMNS
-  72++19D6 CD 04 1B             call    bios_video_write_byte
-  73++19D9 D8                   ret     c
-  74++19DA 21 4C 04             ld      hl, #044C
-  75++19DD 3E F0                ld      a, #F0
-  76++19DF CD 04 1B             call    bios_video_write_byte
-  77++19E2 D8                   ret     c
-  78++19E3 21 4D 04             ld      hl, #044D
-  79++19E6 3E 03                ld      a, #03
-  80++19E8 CD 04 1B             call    bios_video_write_byte
-  81++19EB D8                   ret     c
-  82++19EC 21 62 04             ld      hl, #0462
-  83++19EF AF                   xor     a
-  84++19F0 CD 04 1B             call    bios_video_write_byte
-  85++19F3 D8                   ret     c
-  86++19F4 21 84 04             ld      hl, #0484
-  87++19F7 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
-  88++19F9 CD 04 1B             call    bios_video_write_byte
-  89++19FC D8                   ret     c
-  90++19FD 21 85 04             ld      hl, #0485
-  91++1A00 3E 08                ld      a, 8
-  92++1A02 CD 04 1B             call    bios_video_write_byte
-  93++1A05 D8                   ret     c
-  94++1A06
-  95++1A06 AF                   xor     a
-  96++1A07 32 19 1C             ld      (bios_video_col), a
-  97++1A0A 32 18 1C             ld      (bios_video_row), a
-  98++1A0D 21 50 04             ld      hl, #0450
-  99++1A10 11 00 00             ld      de, 0
- 100++1A13 CD 17 1B             call    bios_video_write_word
- 101++1A16 D8                   ret     c
- 102++1A17
- 103++1A17                      ; Host control frame: 00 00 = clear the 6x8 debug console.
- 104++1A17 AF                   xor     a
- 105++1A18 CD 4F 03             call    neo_send_data_byte
- 106++1A1B D8                   ret     c
- 107++1A1C AF                   xor     a
- 108++1A1D C3 4F 03             jp      neo_send_data_byte
- 109++1A20
- 110++1A20              ; AH=0Fh — return current project text mode, width and active page.
- 111++1A20              bios_int10_get_mode:
- 112++1A20 21 03 2A             ld      hl, #2A03
- 113++1A23 22 6E 09             ld      (x86_reg_ax), hl
- 114++1A26 AF                   xor     a
- 115++1A27 32 75 09             ld      (x86_reg_bx+1), a
- 116++1A2A B7                   or      a
- 117++1A2B C9                   ret
- 118++1A2C
- 119++1A2C              ; AH=02h — set cursor. This implementation exposes page zero only.
- 120++1A2C              bios_int10_set_cursor:
- 121++1A2C 3A 75 09             ld      a, (x86_reg_bx+1)
- 122++1A2F B7                   or      a
- 123++1A30 C0                   ret     nz
- 124++1A31 2A 72 09             ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
- 125++1A34 7C                   ld      a, h
- 126++1A35 FE 0C                cp      BIOS_VIDEO_ROWS
- 127++1A37 38 02                jr      c, .row_valid
- 128++1A39 B7                   or      a
- 129++1A3A C9                   ret
- 130++1A3B              .row_valid:
- 131++1A3B 7D                   ld      a, l
- 132++1A3C FE 2A                cp      BIOS_VIDEO_COLUMNS
- 133++1A3E 38 02                jr      c, .col_valid
- 134++1A40 B7                   or      a
- 135++1A41 C9                   ret
- 136++1A42              .col_valid:
- 137++1A42 7C                   ld      a, h
- 138++1A43 32 18 1C             ld      (bios_video_row), a
- 139++1A46 7D                   ld      a, l
- 140++1A47 32 19 1C             ld      (bios_video_col), a
- 141++1A4A CD EA 1A             call    bios_video_store_cursor
- 142++1A4D D8                   ret     c
- 143++1A4E
- 144++1A4E                      ; Host control frame: 00 01 row col.
- 145++1A4E AF                   xor     a
- 146++1A4F CD 4F 03             call    neo_send_data_byte
- 147++1A52 D8                   ret     c
- 148++1A53 3E 01                ld      a, 1
- 149++1A55 CD 4F 03             call    neo_send_data_byte
- 150++1A58 D8                   ret     c
- 151++1A59 3A 18 1C             ld      a, (bios_video_row)
- 152++1A5C CD 4F 03             call    neo_send_data_byte
- 153++1A5F D8                   ret     c
- 154++1A60 3A 19 1C             ld      a, (bios_video_col)
- 155++1A63 C3 4F 03             jp      neo_send_data_byte
- 156++1A66
- 157++1A66              ; AH=03h — read page-zero cursor into DH:DL.
- 158++1A66              bios_int10_get_cursor:
- 159++1A66 3A 75 09             ld      a, (x86_reg_bx+1)
- 160++1A69 B7                   or      a
- 161++1A6A C0                   ret     nz
- 162++1A6B 21 50 04             ld      hl, #0450
- 163++1A6E 22 DE 05             ld      (x86_mem_offset), hl
- 164++1A71 21 00 00             ld      hl, 0
- 165++1A74 22 DC 05             ld      (x86_mem_segment), hl
- 166++1A77 CD A1 04             call    x86_mem_read16
- 167++1A7A D8                   ret     c
- 168++1A7B 22 72 09             ld      (x86_reg_dx), hl
- 169++1A7E B7                   or      a
- 170++1A7F C9                   ret
- 171++1A80
- 172++1A80              ; AH=0Eh — teletype output. Every byte is streamed to the host.
- 173++1A80              bios_int10_teletype:
- 174++1A80 3A 75 09             ld      a, (x86_reg_bx+1)
- 175++1A83 B7                   or      a
- 176++1A84 C0                   ret     nz
- 177++1A85 3A 6E 09             ld      a, (x86_reg_ax)
- 178++1A88 32 1A 1C             ld      (bios_video_char), a
- 179++1A8B B7                   or      a
- 180++1A8C C8                   ret     z                       ; NUL is reserved for stream control frames.
- 181++1A8D FE 80                cp      128
- 182++1A8F 38 05                jr      c, .teletype_ascii
- 183++1A91 3E 3F                ld      a, '?'
- 184++1A93 32 1A 1C             ld      (bios_video_char), a
- 185++1A96              .teletype_ascii:
- 186++1A96 3A 1A 1C             ld      a, (bios_video_char)
- 187++1A99 CD 4F 03             call    neo_send_data_byte
- 188++1A9C D8                   ret     c
- 189++1A9D
- 190++1A9D 3A 1A 1C             ld      a, (bios_video_char)
- 191++1AA0 FE 0D                cp      13
- 192++1AA2 28 21                jr      z, .carriage_return
- 193++1AA4 FE 0A                cp      10
- 194++1AA6 28 2F                jr      z, .line_feed
- 195++1AA8 FE 08                cp      8
- 196++1AAA 28 1F                jr      z, .backspace
- 197++1AAC FE 07                cp      7
- 198++1AAE 28 38                jr      z, .cursor_done
- 199++1AB0 FE 20                cp      32
- 200++1AB2 38 34                jr      c, .cursor_done
- 201++1AB4
- 202++1AB4 3A 19 1C             ld      a, (bios_video_col)
- 203++1AB7 3C                   inc     a
- 204++1AB8 32 19 1C             ld      (bios_video_col), a
- 205++1ABB FE 2A                cp      BIOS_VIDEO_COLUMNS
- 206++1ABD 38 25                jr      c, .cursor_store
- 207++1ABF AF                   xor     a
- 208++1AC0 32 19 1C             ld      (bios_video_col), a
- 209++1AC3 18 12                jr      .line_feed
- 210++1AC5              .carriage_return:
- 211++1AC5 AF                   xor     a
- 212++1AC6 32 19 1C             ld      (bios_video_col), a
- 213++1AC9 18 19                jr      .cursor_store
- 214++1ACB              .backspace:
- 215++1ACB 3A 19 1C             ld      a, (bios_video_col)
- 216++1ACE B7                   or      a
- 217++1ACF 28 17                jr      z, .cursor_done
- 218++1AD1 3D                   dec     a
- 219++1AD2 32 19 1C             ld      (bios_video_col), a
- 220++1AD5 18 0D                jr      .cursor_store
- 221++1AD7              .line_feed:
- 222++1AD7 3A 18 1C             ld      a, (bios_video_row)
- 223++1ADA 3C                   inc     a
- 224++1ADB FE 0C                cp      BIOS_VIDEO_ROWS
- 225++1ADD 38 02                jr      c, .line_store
- 226++1ADF 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
- 227++1AE1              .line_store:
- 228++1AE1 32 18 1C             ld      (bios_video_row), a
- 229++1AE4              .cursor_store:
- 230++1AE4 CD EA 1A             call    bios_video_store_cursor
- 231++1AE7 C9                   ret
- 232++1AE8              .cursor_done:
- 233++1AE8 B7                   or      a
- 234++1AE9 C9                   ret
- 235++1AEA
- 236++1AEA              ; Store project cursor word at BDA 00450h: low=column, high=row.
- 237++1AEA              bios_video_store_cursor:
- 238++1AEA 21 50 04             ld      hl, #0450
- 239++1AED 22 DE 05             ld      (x86_mem_offset), hl
- 240++1AF0 21 00 00             ld      hl, 0
- 241++1AF3 22 DC 05             ld      (x86_mem_segment), hl
- 242++1AF6 3A 19 1C             ld      a, (bios_video_col)
- 243++1AF9 6F                   ld      l, a
- 244++1AFA 3A 18 1C             ld      a, (bios_video_row)
- 245++1AFD 67                   ld      h, a
- 246++1AFE 22 E2 05             ld      (x86_mem_word_value), hl
- 247++1B01 C3 C1 04             jp      x86_mem_write16
- 248++1B04
- 249++1B04              ; IN: HL=physical address, A=value.
- 250++1B04              bios_video_write_byte:
- 251++1B04 32 1B 1C             ld      (bios_video_write_value), a
- 252++1B07 22 D6 05             ld      (x86_mem_addr), hl
- 253++1B0A AF                   xor     a
- 254++1B0B 32 D8 05             ld      (x86_mem_addr+2), a
- 255++1B0E 3A 1B 1C             ld      a, (bios_video_write_value)
- 256++1B11 32 D9 05             ld      (x86_mem_value), a
- 257++1B14 C3 BE 03             jp      x86_mem_write8
- 258++1B17
- 259++1B17              ; IN: HL=physical address, DE=value.
- 260++1B17              bios_video_write_word:
- 261++1B17 22 DE 05             ld      (x86_mem_offset), hl
- 262++1B1A 21 00 00             ld      hl, 0
- 263++1B1D 22 DC 05             ld      (x86_mem_segment), hl
- 264++1B20 EB                   ex      de, hl
- 265++1B21 22 E2 05             ld      (x86_mem_word_value), hl
- 266++1B24 C3 C1 04             jp      x86_mem_write16
- 267++1B27
- 268++1B27              ; -------------------------------------------------------------------------
- 269++1B27              ; Stage 3A executable test. Exercises all five INT 10h services, cursor
- 270++1B27              ; round-trip, 42-column wrap, CR/LF, and the streamed host console path.
- 271++1B27              ; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
- 272++1B27              ; -------------------------------------------------------------------------
- 273++1B27              bios_int10_video_test:
- 274++1B27 AF                   xor     a
- 275++1B28 32 F3 15             ld      (x86_real_bounds_enable), a
- 276++1B2B CD 89 03             call    x86_mem_init
- 277++1B2E 21 1C 1C             ld      hl, x86_bios_video_test_image
- 278++1B31 11 02 50             ld      de, #5002
- 279++1B34 01 99 01             ld      bc, x86_bios_video_test_image_end - x86_bios_video_test_image
- 280++1B37 CD 57 10             call    x86_real_copy_image
- 281++1B3A DA F1 1B             jp      c, bios_video_test_fail_1
- 282++1B3D
- 283++1B3D                      ; Verify POST installed IVT[10h] -> 0000:5200.
- 284++1B3D 21 00 00             ld      hl, 0
- 285++1B40 22 DC 05             ld      (x86_mem_segment), hl
- 286++1B43 21 40 00             ld      hl, #0040
- 287++1B46 22 DE 05             ld      (x86_mem_offset), hl
- 288++1B49 CD A1 04             call    x86_mem_read16
- 289++1B4C DA F5 1B             jp      c, bios_video_test_fail_2
- 290++1B4F 11 00 52             ld      de, #5200
- 291++1B52 B7                   or      a
- 292++1B53 ED 52                sbc     hl, de
- 293++1B55 C2 F5 1B             jp      nz, bios_video_test_fail_2
- 294++1B58
- 295++1B58 21 00 00             ld      hl, 0
- 296++1B5B 22 DC 05             ld      (x86_mem_segment), hl
- 297++1B5E 21 42 00             ld      hl, #0042
- 298++1B61 22 DE 05             ld      (x86_mem_offset), hl
- 299++1B64 CD A1 04             call    x86_mem_read16
- 300++1B67 DA F5 1B             jp      c, bios_video_test_fail_2
- 301++1B6A 11 00 00             ld      de, 0
- 302++1B6D B7                   or      a
- 303++1B6E ED 52                sbc     hl, de
- 304++1B70 C2 F5 1B             jp      nz, bios_video_test_fail_2
- 305++1B73
- 306++1B73                      ; Initialize guest registers and real-mode stack.
- 307++1B73 21 00 00             ld      hl, 0
- 308++1B76 22 6E 09             ld      (x86_reg_ax), hl
- 309++1B79 22 74 09             ld      (x86_reg_bx), hl
- 310++1B7C 22 70 09             ld      (x86_reg_cx), hl
- 311++1B7F 22 72 09             ld      (x86_reg_dx), hl
- 312++1B82 22 78 09             ld      (x86_reg_bp), hl
- 313++1B85 22 7A 09             ld      (x86_reg_si), hl
- 314++1B88 22 7C 09             ld      (x86_reg_di), hl
- 315++1B8B 22 7E 09             ld      (x86_reg_es), hl
- 316++1B8E 22 84 09             ld      (x86_reg_ds), hl
- 317++1B91 22 80 09             ld      (x86_reg_cs), hl
- 318++1B94 21 02 50             ld      hl, #5002
- 319++1B97 22 86 09             ld      (x86_reg_ip), hl
- 320++1B9A 21 00 70             ld      hl, #7000
- 321++1B9D 22 82 09             ld      (x86_reg_ss), hl
- 322++1BA0 21 00 01             ld      hl, #0100
- 323++1BA3 22 76 09             ld      (x86_reg_sp), hl
- 324++1BA6 21 02 02             ld      hl, #0202
- 325++1BA9 22 88 09             ld      (x86_reg_flags), hl
- 326++1BAC
- 327++1BAC CD E6 10             call    x86_real_execute
- 328++1BAF DA F9 1B             jp      c, bios_video_test_fail_3
- 329++1BB2
- 330++1BB2 2A 6E 09             ld      hl, (x86_reg_ax)
- 331++1BB5 11 03 2A             ld      de, #2A03
- 332++1BB8 B7                   or      a
- 333++1BB9 ED 52                sbc     hl, de
- 334++1BBB C2 FD 1B             jp      nz, bios_video_test_fail_4
- 335++1BBE 2A 72 09             ld      hl, (x86_reg_dx)
- 336++1BC1 11 0F 02             ld      de, #020F
- 337++1BC4 B7                   or      a
- 338++1BC5 ED 52                sbc     hl, de
- 339++1BC7 C2 01 1C             jp      nz, bios_video_test_fail_5
- 340++1BCA
- 341++1BCA 21 50 04             ld      hl, #0450
- 342++1BCD 22 DE 05             ld      (x86_mem_offset), hl
- 343++1BD0 21 00 00             ld      hl, 0
- 344++1BD3 22 DC 05             ld      (x86_mem_segment), hl
- 345++1BD6 CD A1 04             call    x86_mem_read16
- 346++1BD9 DA 05 1C             jp      c, bios_video_test_fail_6
- 347++1BDC 11 0F 02             ld      de, #020F
- 348++1BDF B7                   or      a
- 349++1BE0 ED 52                sbc     hl, de
- 350++1BE2 C2 05 1C             jp      nz, bios_video_test_fail_6
- 351++1BE5
- 352++1BE5 21 10 1A             ld      hl, #1A10
- 353++1BE8 22 7E 03             ld      (saved_x86_ax), hl
- 354++1BEB AF                   xor     a
- 355++1BEC 32 04 0D             ld      (x86_exit_status), a
- 356++1BEF B7                   or      a
- 357++1BF0 C9                   ret
- 358++1BF1
- 359++1BF1              bios_video_test_fail_1:
- 360++1BF1 3E 01                ld      a, 1
- 361++1BF3 18 16                jr      bios_video_test_fail
- 362++1BF5              bios_video_test_fail_2:
- 363++1BF5 3E 02                ld      a, 2
- 364++1BF7 18 12                jr      bios_video_test_fail
- 365++1BF9              bios_video_test_fail_3:
- 366++1BF9 3E 03                ld      a, 3
- 367++1BFB 18 0E                jr      bios_video_test_fail
- 368++1BFD              bios_video_test_fail_4:
- 369++1BFD 3E 04                ld      a, 4
- 370++1BFF 18 0A                jr      bios_video_test_fail
- 371++1C01              bios_video_test_fail_5:
- 372++1C01 3E 05                ld      a, 5
- 373++1C03 18 06                jr      bios_video_test_fail
- 374++1C05              bios_video_test_fail_6:
- 375++1C05 3E 06                ld      a, 6
- 376++1C07 18 02                jr      bios_video_test_fail
- 377++1C09              bios_video_test_fail_7:
- 378++1C09 3E 07                ld      a, 7
- 379++1C0B              bios_video_test_fail:
- 380++1C0B 6F                   ld      l, a
- 381++1C0C 26 1C                ld      h, #1C
- 382++1C0E 22 7E 03             ld      (saved_x86_ax), hl
- 383++1C11 3E 0A                ld      a, 10
- 384++1C13 32 04 0D             ld      (x86_exit_status), a
- 385++1C16 37                   scf
- 386++1C17 C9                   ret
- 387++1C18
- 388++1C18 00           bios_video_row: db 0
- 389++1C19 00           bios_video_col: db 0
- 390++1C1A 00           bios_video_char: db 0
- 391++1C1B 00           bios_video_write_value: db 0
- 392++1C1C
- 393++1C1C              ; Guest program is assembled as a byte stream at physical 0000:5002.
- 394++1C1C              x86_bios_video_test_image:
- 395++1C1C                      ; AH=00h set mode 03h.
- 396++1C1C B8 03 00 CD          db #B8,#03,#00,#CD,#10
- 396++1C20 10
- 397++1C21                      ; AH=02h set cursor to row 1, column 5; teletype X there.
- 398++1C21 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
- 398++1C25 00 00 BA 05
- 398++1C29 01 CD 10
- 399++1C2C B4 0E B0 58          db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
- 399++1C30 CD 10
- 400++1C32                      ; AH=02h reset cursor to row 0, column 0 before the wrap test.
- 401++1C32 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
- 401++1C36 00 00 BA 00
- 401++1C3A 00 CD 10
- 402++1C3D                      ; 43 printable characters: the 43rd must wrap to row 1, column 1.
- 403++1C3D                      REPT 43
- 404++1C3D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C41 CD 10       >
- 404++1C43 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C47 CD 10       >
- 404++1C49 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C4D CD 10       >
- 404++1C4F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C53 CD 10       >
- 404++1C55 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C59 CD 10       >
- 404++1C5B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C5F CD 10       >
- 404++1C61 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C65 CD 10       >
- 404++1C67 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C6B CD 10       >
- 404++1C6D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C71 CD 10       >
- 404++1C73 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C77 CD 10       >
- 404++1C79 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C7D CD 10       >
- 404++1C7F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C83 CD 10       >
- 404++1C85 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C89 CD 10       >
- 404++1C8B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C8F CD 10       >
- 404++1C91 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C95 CD 10       >
- 404++1C97 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1C9B CD 10       >
- 404++1C9D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CA1 CD 10       >
- 404++1CA3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CA7 CD 10       >
- 404++1CA9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CAD CD 10       >
- 404++1CAF B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CB3 CD 10       >
- 404++1CB5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CB9 CD 10       >
- 404++1CBB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CBF CD 10       >
- 404++1CC1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CC5 CD 10       >
- 404++1CC7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CCB CD 10       >
- 404++1CCD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CD1 CD 10       >
- 404++1CD3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CD7 CD 10       >
- 404++1CD9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CDD CD 10       >
- 404++1CDF B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CE3 CD 10       >
- 404++1CE5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CE9 CD 10       >
- 404++1CEB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CEF CD 10       >
- 404++1CF1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CF5 CD 10       >
- 404++1CF7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1CFB CD 10       >
- 404++1CFD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D01 CD 10       >
- 404++1D03 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D07 CD 10       >
- 404++1D09 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D0D CD 10       >
- 404++1D0F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D13 CD 10       >
- 404++1D15 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D19 CD 10       >
- 404++1D1B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D1F CD 10       >
- 404++1D21 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D25 CD 10       >
- 404++1D27 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D2B CD 10       >
- 404++1D2D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D31 CD 10       >
- 404++1D33 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D37 CD 10       >
- 404++1D39 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
- 404++1D3D CD 10       >
- 405++1D3F                      ENDR
- 406++1D3F                      ; CR then LF; output a 15-character marker on row 2.
- 407++1D3F B4 0E B0 0D          db #B4,#0E,#B0,#0D,#CD,#10
- 407++1D43 CD 10
- 408++1D45 B4 0E B0 0A          db #B4,#0E,#B0,#0A,#CD,#10
- 408++1D49 CD 10
- 409++1D4B B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
- 409++1D4F CD 10
- 410++1D51 B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
- 410++1D55 CD 10
- 411++1D57 B4 0E B0 32          db #B4,#0E,#B0,#32,#CD,#10 ; 2
- 411++1D5B CD 10
- 412++1D5D B4 0E B0 34          db #B4,#0E,#B0,#34,#CD,#10 ; 4
- 412++1D61 CD 10
- 413++1D63 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
- 413++1D67 CD 10
- 414++1D69 B4 0E B0 49          db #B4,#0E,#B0,#49,#CD,#10 ; I
- 414++1D6D CD 10
- 415++1D6F B4 0E B0 4E          db #B4,#0E,#B0,#4E,#CD,#10 ; N
- 415++1D73 CD 10
- 416++1D75 B4 0E B0 54          db #B4,#0E,#B0,#54,#CD,#10 ; T
- 416++1D79 CD 10
- 417++1D7B B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
- 417++1D7F CD 10
- 418++1D81 B4 0E B0 30          db #B4,#0E,#B0,#30,#CD,#10 ; 0
- 418++1D85 CD 10
- 419++1D87 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
- 419++1D8B CD 10
- 420++1D8D B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
- 420++1D91 CD 10
- 421++1D93 B4 0E B0 41          db #B4,#0E,#B0,#41,#CD,#10 ; A
- 421++1D97 CD 10
- 422++1D99 B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
- 422++1D9D CD 10
- 423++1D9F B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
- 423++1DA3 CD 10
- 424++1DA5                      ; AH=03h get cursor, then AH=0Fh get mode/columns.
- 425++1DA5 B4 03 B0 00          db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
- 425++1DA9 BB 00 00 CD
- 425++1DAD 10
- 426++1DAE B4 0F B0 00          db #B4,#0F,#B0,#00,#CD,#10
- 426++1DB2 CD 10
- 427++1DB4 F4                   db #F4
- 428++1DB5              x86_bios_video_test_image_end:
- 429++1DB5
+   1++1979              ; =========================================================================
+   2++1979              ; PROJECT 124 — BIOS INT 10h text services, Stage 3A
+   3++1979              ;
+   4++1979              ; Project text-console profile: 42 columns x 12 rows, 6x8 glyphs.
+   5++1979              ; Implemented functions:
+   6++1979              ;   AH=00h set mode 03h (project 42x12 text profile)
+   7++1979              ;   AH=0Fh get mode (AL=03h, AH=42, BH=0)
+   8++1979              ;   AH=02h set cursor (BH=0, DH=row, DL=column)
+   9++1979              ;   AH=03h get cursor (DH=row, DL=column)
+  10++1979              ;   AH=0Eh teletype output (AL=character, BH=0)
+  11++1979              ;
+  12++1979              ; INT 10h enters through the normal IVT/stack frame. The BIOS service itself
+  13++1979              ; is a firmware trap, then returns through the normal IRET primitive.
+  14++1979              ; Host stream protocol over DBIT/GSDAT:
+  15++1979              ;   nonzero byte = teletype character
+  16++1979              ;   00 00        = clear the lower debug console
+  17++1979              ;   00 01 row col= set lower debug console cursor
+  18++1979              ; =========================================================================
+  19++1979
+  20++1979              BIOS_VIDEO_COLUMNS EQU 42
+  21++1979              BIOS_VIDEO_ROWS    EQU 12
+  22++1979              BIOS_VIDEO_MODE    EQU #03
+  23++1979
+  24++1979              bios_int10_dispatch:
+  25++1979 2A 6E 09             ld      hl, (x86_reg_ax)
+  26++197C 7C                   ld      a, h
+  27++197D FE 00                cp      #00
+  28++197F CA C3 19             jp      z, bios_int10_set_mode
+  29++1982 FE 0F                cp      #0F
+  30++1984 CA 22 1A             jp      z, bios_int10_get_mode
+  31++1987 FE 02                cp      #02
+  32++1989 CA 2E 1A             jp      z, bios_int10_set_cursor
+  33++198C FE 03                cp      #03
+  34++198E CA 68 1A             jp      z, bios_int10_get_cursor
+  35++1991 FE 0E                cp      #0E
+  36++1993 CA 82 1A             jp      z, bios_int10_teletype
+  37++1996 B7                   or      a
+  38++1997 C9                   ret
+  39++1998
+  40++1998              ; Install IVT[10h] -> 0000:5200 (firmware service trap).
+  41++1998              bios_int10_install_vector:
+  42++1998 21 00 00             ld      hl, 0
+  43++199B 22 DC 05             ld      (x86_mem_segment), hl
+  44++199E 21 40 00             ld      hl, #0040
+  45++19A1 22 DE 05             ld      (x86_mem_offset), hl
+  46++19A4 21 00 52             ld      hl, #5200
+  47++19A7 22 E2 05             ld      (x86_mem_word_value), hl
+  48++19AA CD C1 04             call    x86_mem_write16
+  49++19AD D8                   ret     c
+  50++19AE 21 00 00             ld      hl, 0
+  51++19B1 22 DC 05             ld      (x86_mem_segment), hl
+  52++19B4 21 42 00             ld      hl, #0042
+  53++19B7 22 DE 05             ld      (x86_mem_offset), hl
+  54++19BA 21 00 00             ld      hl, 0
+  55++19BD 22 E2 05             ld      (x86_mem_word_value), hl
+  56++19C0 C3 C1 04             jp      x86_mem_write16
+  57++19C3
+  58++19C3              ; AH=00h — only mode 03h is supported by this project console.
+  59++19C3              bios_int10_set_mode:
+  60++19C3 7D                   ld      a, l
+  61++19C4 FE 03                cp      BIOS_VIDEO_MODE
+  62++19C6 28 02                jr      z, .mode_valid
+  63++19C8 B7                   or      a
+  64++19C9 C9                   ret
+  65++19CA              .mode_valid:
+  66++19CA 21 49 04             ld      hl, #0449
+  67++19CD 3E 03                ld      a, BIOS_VIDEO_MODE
+  68++19CF CD 06 1B             call    bios_video_write_byte
+  69++19D2 D8                   ret     c
+  70++19D3 21 4A 04             ld      hl, #044A
+  71++19D6 3E 2A                ld      a, BIOS_VIDEO_COLUMNS
+  72++19D8 CD 06 1B             call    bios_video_write_byte
+  73++19DB D8                   ret     c
+  74++19DC 21 4C 04             ld      hl, #044C
+  75++19DF 3E F0                ld      a, #F0
+  76++19E1 CD 06 1B             call    bios_video_write_byte
+  77++19E4 D8                   ret     c
+  78++19E5 21 4D 04             ld      hl, #044D
+  79++19E8 3E 03                ld      a, #03
+  80++19EA CD 06 1B             call    bios_video_write_byte
+  81++19ED D8                   ret     c
+  82++19EE 21 62 04             ld      hl, #0462
+  83++19F1 AF                   xor     a
+  84++19F2 CD 06 1B             call    bios_video_write_byte
+  85++19F5 D8                   ret     c
+  86++19F6 21 84 04             ld      hl, #0484
+  87++19F9 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
+  88++19FB CD 06 1B             call    bios_video_write_byte
+  89++19FE D8                   ret     c
+  90++19FF 21 85 04             ld      hl, #0485
+  91++1A02 3E 08                ld      a, 8
+  92++1A04 CD 06 1B             call    bios_video_write_byte
+  93++1A07 D8                   ret     c
+  94++1A08
+  95++1A08 AF                   xor     a
+  96++1A09 32 1B 1C             ld      (bios_video_col), a
+  97++1A0C 32 1A 1C             ld      (bios_video_row), a
+  98++1A0F 21 50 04             ld      hl, #0450
+  99++1A12 11 00 00             ld      de, 0
+ 100++1A15 CD 19 1B             call    bios_video_write_word
+ 101++1A18 D8                   ret     c
+ 102++1A19
+ 103++1A19                      ; Host control frame: 00 00 = clear the 6x8 debug console.
+ 104++1A19 AF                   xor     a
+ 105++1A1A CD 4F 03             call    neo_send_data_byte
+ 106++1A1D D8                   ret     c
+ 107++1A1E AF                   xor     a
+ 108++1A1F C3 4F 03             jp      neo_send_data_byte
+ 109++1A22
+ 110++1A22              ; AH=0Fh — return current project text mode, width and active page.
+ 111++1A22              bios_int10_get_mode:
+ 112++1A22 21 03 2A             ld      hl, #2A03
+ 113++1A25 22 6E 09             ld      (x86_reg_ax), hl
+ 114++1A28 AF                   xor     a
+ 115++1A29 32 75 09             ld      (x86_reg_bx+1), a
+ 116++1A2C B7                   or      a
+ 117++1A2D C9                   ret
+ 118++1A2E
+ 119++1A2E              ; AH=02h — set cursor. This implementation exposes page zero only.
+ 120++1A2E              bios_int10_set_cursor:
+ 121++1A2E 3A 75 09             ld      a, (x86_reg_bx+1)
+ 122++1A31 B7                   or      a
+ 123++1A32 C0                   ret     nz
+ 124++1A33 2A 72 09             ld      hl, (x86_reg_dx)       ; H=DH row, L=DL column
+ 125++1A36 7C                   ld      a, h
+ 126++1A37 FE 0C                cp      BIOS_VIDEO_ROWS
+ 127++1A39 38 02                jr      c, .row_valid
+ 128++1A3B B7                   or      a
+ 129++1A3C C9                   ret
+ 130++1A3D              .row_valid:
+ 131++1A3D 7D                   ld      a, l
+ 132++1A3E FE 2A                cp      BIOS_VIDEO_COLUMNS
+ 133++1A40 38 02                jr      c, .col_valid
+ 134++1A42 B7                   or      a
+ 135++1A43 C9                   ret
+ 136++1A44              .col_valid:
+ 137++1A44 7C                   ld      a, h
+ 138++1A45 32 1A 1C             ld      (bios_video_row), a
+ 139++1A48 7D                   ld      a, l
+ 140++1A49 32 1B 1C             ld      (bios_video_col), a
+ 141++1A4C CD EC 1A             call    bios_video_store_cursor
+ 142++1A4F D8                   ret     c
+ 143++1A50
+ 144++1A50                      ; Host control frame: 00 01 row col.
+ 145++1A50 AF                   xor     a
+ 146++1A51 CD 4F 03             call    neo_send_data_byte
+ 147++1A54 D8                   ret     c
+ 148++1A55 3E 01                ld      a, 1
+ 149++1A57 CD 4F 03             call    neo_send_data_byte
+ 150++1A5A D8                   ret     c
+ 151++1A5B 3A 1A 1C             ld      a, (bios_video_row)
+ 152++1A5E CD 4F 03             call    neo_send_data_byte
+ 153++1A61 D8                   ret     c
+ 154++1A62 3A 1B 1C             ld      a, (bios_video_col)
+ 155++1A65 C3 4F 03             jp      neo_send_data_byte
+ 156++1A68
+ 157++1A68              ; AH=03h — read page-zero cursor into DH:DL.
+ 158++1A68              bios_int10_get_cursor:
+ 159++1A68 3A 75 09             ld      a, (x86_reg_bx+1)
+ 160++1A6B B7                   or      a
+ 161++1A6C C0                   ret     nz
+ 162++1A6D 21 50 04             ld      hl, #0450
+ 163++1A70 22 DE 05             ld      (x86_mem_offset), hl
+ 164++1A73 21 00 00             ld      hl, 0
+ 165++1A76 22 DC 05             ld      (x86_mem_segment), hl
+ 166++1A79 CD A1 04             call    x86_mem_read16
+ 167++1A7C D8                   ret     c
+ 168++1A7D 22 72 09             ld      (x86_reg_dx), hl
+ 169++1A80 B7                   or      a
+ 170++1A81 C9                   ret
+ 171++1A82
+ 172++1A82              ; AH=0Eh — teletype output. Every byte is streamed to the host.
+ 173++1A82              bios_int10_teletype:
+ 174++1A82 3A 75 09             ld      a, (x86_reg_bx+1)
+ 175++1A85 B7                   or      a
+ 176++1A86 C0                   ret     nz
+ 177++1A87 3A 6E 09             ld      a, (x86_reg_ax)
+ 178++1A8A 32 1C 1C             ld      (bios_video_char), a
+ 179++1A8D B7                   or      a
+ 180++1A8E C8                   ret     z                       ; NUL is reserved for stream control frames.
+ 181++1A8F FE 80                cp      128
+ 182++1A91 38 05                jr      c, .teletype_ascii
+ 183++1A93 3E 3F                ld      a, '?'
+ 184++1A95 32 1C 1C             ld      (bios_video_char), a
+ 185++1A98              .teletype_ascii:
+ 186++1A98 3A 1C 1C             ld      a, (bios_video_char)
+ 187++1A9B CD 4F 03             call    neo_send_data_byte
+ 188++1A9E D8                   ret     c
+ 189++1A9F
+ 190++1A9F 3A 1C 1C             ld      a, (bios_video_char)
+ 191++1AA2 FE 0D                cp      13
+ 192++1AA4 28 21                jr      z, .carriage_return
+ 193++1AA6 FE 0A                cp      10
+ 194++1AA8 28 2F                jr      z, .line_feed
+ 195++1AAA FE 08                cp      8
+ 196++1AAC 28 1F                jr      z, .backspace
+ 197++1AAE FE 07                cp      7
+ 198++1AB0 28 38                jr      z, .cursor_done
+ 199++1AB2 FE 20                cp      32
+ 200++1AB4 38 34                jr      c, .cursor_done
+ 201++1AB6
+ 202++1AB6 3A 1B 1C             ld      a, (bios_video_col)
+ 203++1AB9 3C                   inc     a
+ 204++1ABA 32 1B 1C             ld      (bios_video_col), a
+ 205++1ABD FE 2A                cp      BIOS_VIDEO_COLUMNS
+ 206++1ABF 38 25                jr      c, .cursor_store
+ 207++1AC1 AF                   xor     a
+ 208++1AC2 32 1B 1C             ld      (bios_video_col), a
+ 209++1AC5 18 12                jr      .line_feed
+ 210++1AC7              .carriage_return:
+ 211++1AC7 AF                   xor     a
+ 212++1AC8 32 1B 1C             ld      (bios_video_col), a
+ 213++1ACB 18 19                jr      .cursor_store
+ 214++1ACD              .backspace:
+ 215++1ACD 3A 1B 1C             ld      a, (bios_video_col)
+ 216++1AD0 B7                   or      a
+ 217++1AD1 28 17                jr      z, .cursor_done
+ 218++1AD3 3D                   dec     a
+ 219++1AD4 32 1B 1C             ld      (bios_video_col), a
+ 220++1AD7 18 0D                jr      .cursor_store
+ 221++1AD9              .line_feed:
+ 222++1AD9 3A 1A 1C             ld      a, (bios_video_row)
+ 223++1ADC 3C                   inc     a
+ 224++1ADD FE 0C                cp      BIOS_VIDEO_ROWS
+ 225++1ADF 38 02                jr      c, .line_store
+ 226++1AE1 3E 0B                ld      a, BIOS_VIDEO_ROWS - 1
+ 227++1AE3              .line_store:
+ 228++1AE3 32 1A 1C             ld      (bios_video_row), a
+ 229++1AE6              .cursor_store:
+ 230++1AE6 CD EC 1A             call    bios_video_store_cursor
+ 231++1AE9 C9                   ret
+ 232++1AEA              .cursor_done:
+ 233++1AEA B7                   or      a
+ 234++1AEB C9                   ret
+ 235++1AEC
+ 236++1AEC              ; Store project cursor word at BDA 00450h: low=column, high=row.
+ 237++1AEC              bios_video_store_cursor:
+ 238++1AEC 21 50 04             ld      hl, #0450
+ 239++1AEF 22 DE 05             ld      (x86_mem_offset), hl
+ 240++1AF2 21 00 00             ld      hl, 0
+ 241++1AF5 22 DC 05             ld      (x86_mem_segment), hl
+ 242++1AF8 3A 1B 1C             ld      a, (bios_video_col)
+ 243++1AFB 6F                   ld      l, a
+ 244++1AFC 3A 1A 1C             ld      a, (bios_video_row)
+ 245++1AFF 67                   ld      h, a
+ 246++1B00 22 E2 05             ld      (x86_mem_word_value), hl
+ 247++1B03 C3 C1 04             jp      x86_mem_write16
+ 248++1B06
+ 249++1B06              ; IN: HL=physical address, A=value.
+ 250++1B06              bios_video_write_byte:
+ 251++1B06 32 1D 1C             ld      (bios_video_write_value), a
+ 252++1B09 22 D6 05             ld      (x86_mem_addr), hl
+ 253++1B0C AF                   xor     a
+ 254++1B0D 32 D8 05             ld      (x86_mem_addr+2), a
+ 255++1B10 3A 1D 1C             ld      a, (bios_video_write_value)
+ 256++1B13 32 D9 05             ld      (x86_mem_value), a
+ 257++1B16 C3 BE 03             jp      x86_mem_write8
+ 258++1B19
+ 259++1B19              ; IN: HL=physical address, DE=value.
+ 260++1B19              bios_video_write_word:
+ 261++1B19 22 DE 05             ld      (x86_mem_offset), hl
+ 262++1B1C 21 00 00             ld      hl, 0
+ 263++1B1F 22 DC 05             ld      (x86_mem_segment), hl
+ 264++1B22 EB                   ex      de, hl
+ 265++1B23 22 E2 05             ld      (x86_mem_word_value), hl
+ 266++1B26 C3 C1 04             jp      x86_mem_write16
+ 267++1B29
+ 268++1B29              ; -------------------------------------------------------------------------
+ 269++1B29              ; Stage 3A executable test. Exercises all five INT 10h services, cursor
+ 270++1B29              ; round-trip, 42-column wrap, CR/LF, and the streamed host console path.
+ 271++1B29              ; Expected final AX=1A10h, DX=020Fh, BDA cursor=020Fh.
+ 272++1B29              ; -------------------------------------------------------------------------
+ 273++1B29              bios_int10_video_test:
+ 274++1B29 AF                   xor     a
+ 275++1B2A 32 F3 15             ld      (x86_real_bounds_enable), a
+ 276++1B2D CD 89 03             call    x86_mem_init
+ 277++1B30 21 1E 1C             ld      hl, x86_bios_video_test_image
+ 278++1B33 11 02 50             ld      de, #5002
+ 279++1B36 01 99 01             ld      bc, x86_bios_video_test_image_end - x86_bios_video_test_image
+ 280++1B39 CD 57 10             call    x86_real_copy_image
+ 281++1B3C DA F3 1B             jp      c, bios_video_test_fail_1
+ 282++1B3F
+ 283++1B3F                      ; Verify POST installed IVT[10h] -> 0000:5200.
+ 284++1B3F 21 00 00             ld      hl, 0
+ 285++1B42 22 DC 05             ld      (x86_mem_segment), hl
+ 286++1B45 21 40 00             ld      hl, #0040
+ 287++1B48 22 DE 05             ld      (x86_mem_offset), hl
+ 288++1B4B CD A1 04             call    x86_mem_read16
+ 289++1B4E DA F7 1B             jp      c, bios_video_test_fail_2
+ 290++1B51 11 00 52             ld      de, #5200
+ 291++1B54 B7                   or      a
+ 292++1B55 ED 52                sbc     hl, de
+ 293++1B57 C2 F7 1B             jp      nz, bios_video_test_fail_2
+ 294++1B5A
+ 295++1B5A 21 00 00             ld      hl, 0
+ 296++1B5D 22 DC 05             ld      (x86_mem_segment), hl
+ 297++1B60 21 42 00             ld      hl, #0042
+ 298++1B63 22 DE 05             ld      (x86_mem_offset), hl
+ 299++1B66 CD A1 04             call    x86_mem_read16
+ 300++1B69 DA F7 1B             jp      c, bios_video_test_fail_2
+ 301++1B6C 11 00 00             ld      de, 0
+ 302++1B6F B7                   or      a
+ 303++1B70 ED 52                sbc     hl, de
+ 304++1B72 C2 F7 1B             jp      nz, bios_video_test_fail_2
+ 305++1B75
+ 306++1B75                      ; Initialize guest registers and real-mode stack.
+ 307++1B75 21 00 00             ld      hl, 0
+ 308++1B78 22 6E 09             ld      (x86_reg_ax), hl
+ 309++1B7B 22 74 09             ld      (x86_reg_bx), hl
+ 310++1B7E 22 70 09             ld      (x86_reg_cx), hl
+ 311++1B81 22 72 09             ld      (x86_reg_dx), hl
+ 312++1B84 22 78 09             ld      (x86_reg_bp), hl
+ 313++1B87 22 7A 09             ld      (x86_reg_si), hl
+ 314++1B8A 22 7C 09             ld      (x86_reg_di), hl
+ 315++1B8D 22 7E 09             ld      (x86_reg_es), hl
+ 316++1B90 22 84 09             ld      (x86_reg_ds), hl
+ 317++1B93 22 80 09             ld      (x86_reg_cs), hl
+ 318++1B96 21 02 50             ld      hl, #5002
+ 319++1B99 22 86 09             ld      (x86_reg_ip), hl
+ 320++1B9C 21 00 70             ld      hl, #7000
+ 321++1B9F 22 82 09             ld      (x86_reg_ss), hl
+ 322++1BA2 21 00 01             ld      hl, #0100
+ 323++1BA5 22 76 09             ld      (x86_reg_sp), hl
+ 324++1BA8 21 02 02             ld      hl, #0202
+ 325++1BAB 22 88 09             ld      (x86_reg_flags), hl
+ 326++1BAE
+ 327++1BAE CD E6 10             call    x86_real_execute
+ 328++1BB1 DA FB 1B             jp      c, bios_video_test_fail_3
+ 329++1BB4
+ 330++1BB4 2A 6E 09             ld      hl, (x86_reg_ax)
+ 331++1BB7 11 03 2A             ld      de, #2A03
+ 332++1BBA B7                   or      a
+ 333++1BBB ED 52                sbc     hl, de
+ 334++1BBD C2 FF 1B             jp      nz, bios_video_test_fail_4
+ 335++1BC0 2A 72 09             ld      hl, (x86_reg_dx)
+ 336++1BC3 11 0F 02             ld      de, #020F
+ 337++1BC6 B7                   or      a
+ 338++1BC7 ED 52                sbc     hl, de
+ 339++1BC9 C2 03 1C             jp      nz, bios_video_test_fail_5
+ 340++1BCC
+ 341++1BCC 21 50 04             ld      hl, #0450
+ 342++1BCF 22 DE 05             ld      (x86_mem_offset), hl
+ 343++1BD2 21 00 00             ld      hl, 0
+ 344++1BD5 22 DC 05             ld      (x86_mem_segment), hl
+ 345++1BD8 CD A1 04             call    x86_mem_read16
+ 346++1BDB DA 07 1C             jp      c, bios_video_test_fail_6
+ 347++1BDE 11 0F 02             ld      de, #020F
+ 348++1BE1 B7                   or      a
+ 349++1BE2 ED 52                sbc     hl, de
+ 350++1BE4 C2 07 1C             jp      nz, bios_video_test_fail_6
+ 351++1BE7
+ 352++1BE7 21 10 1A             ld      hl, #1A10
+ 353++1BEA 22 7E 03             ld      (saved_x86_ax), hl
+ 354++1BED AF                   xor     a
+ 355++1BEE 32 04 0D             ld      (x86_exit_status), a
+ 356++1BF1 B7                   or      a
+ 357++1BF2 C9                   ret
+ 358++1BF3
+ 359++1BF3              bios_video_test_fail_1:
+ 360++1BF3 3E 01                ld      a, 1
+ 361++1BF5 18 16                jr      bios_video_test_fail
+ 362++1BF7              bios_video_test_fail_2:
+ 363++1BF7 3E 02                ld      a, 2
+ 364++1BF9 18 12                jr      bios_video_test_fail
+ 365++1BFB              bios_video_test_fail_3:
+ 366++1BFB 3E 03                ld      a, 3
+ 367++1BFD 18 0E                jr      bios_video_test_fail
+ 368++1BFF              bios_video_test_fail_4:
+ 369++1BFF 3E 04                ld      a, 4
+ 370++1C01 18 0A                jr      bios_video_test_fail
+ 371++1C03              bios_video_test_fail_5:
+ 372++1C03 3E 05                ld      a, 5
+ 373++1C05 18 06                jr      bios_video_test_fail
+ 374++1C07              bios_video_test_fail_6:
+ 375++1C07 3E 06                ld      a, 6
+ 376++1C09 18 02                jr      bios_video_test_fail
+ 377++1C0B              bios_video_test_fail_7:
+ 378++1C0B 3E 07                ld      a, 7
+ 379++1C0D              bios_video_test_fail:
+ 380++1C0D 6F                   ld      l, a
+ 381++1C0E 26 1C                ld      h, #1C
+ 382++1C10 22 7E 03             ld      (saved_x86_ax), hl
+ 383++1C13 3E 0A                ld      a, 10
+ 384++1C15 32 04 0D             ld      (x86_exit_status), a
+ 385++1C18 37                   scf
+ 386++1C19 C9                   ret
+ 387++1C1A
+ 388++1C1A 00           bios_video_row: db 0
+ 389++1C1B 00           bios_video_col: db 0
+ 390++1C1C 00           bios_video_char: db 0
+ 391++1C1D 00           bios_video_write_value: db 0
+ 392++1C1E
+ 393++1C1E              ; Guest program is assembled as a byte stream at physical 0000:5002.
+ 394++1C1E              x86_bios_video_test_image:
+ 395++1C1E                      ; AH=00h set mode 03h.
+ 396++1C1E B8 03 00 CD          db #B8,#03,#00,#CD,#10
+ 396++1C22 10
+ 397++1C23                      ; AH=02h set cursor to row 1, column 5; teletype X there.
+ 398++1C23 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#05,#01,#CD,#10
+ 398++1C27 00 00 BA 05
+ 398++1C2B 01 CD 10
+ 399++1C2E B4 0E B0 58          db #B4,#0E,#B0,#58,#CD,#10 ; X — visible cursor-position marker
+ 399++1C32 CD 10
+ 400++1C34                      ; AH=02h reset cursor to row 0, column 0 before the wrap test.
+ 401++1C34 B8 00 02 BB          db #B8,#00,#02,#BB,#00,#00,#BA,#00,#00,#CD,#10
+ 401++1C38 00 00 BA 00
+ 401++1C3C 00 CD 10
+ 402++1C3F                      ; 43 printable characters: the 43rd must wrap to row 1, column 1.
+ 403++1C3F                      REPT 43
+ 404++1C3F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C43 CD 10       >
+ 404++1C45 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C49 CD 10       >
+ 404++1C4B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C4F CD 10       >
+ 404++1C51 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C55 CD 10       >
+ 404++1C57 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C5B CD 10       >
+ 404++1C5D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C61 CD 10       >
+ 404++1C63 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C67 CD 10       >
+ 404++1C69 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C6D CD 10       >
+ 404++1C6F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C73 CD 10       >
+ 404++1C75 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C79 CD 10       >
+ 404++1C7B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C7F CD 10       >
+ 404++1C81 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C85 CD 10       >
+ 404++1C87 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C8B CD 10       >
+ 404++1C8D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C91 CD 10       >
+ 404++1C93 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C97 CD 10       >
+ 404++1C99 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1C9D CD 10       >
+ 404++1C9F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CA3 CD 10       >
+ 404++1CA5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CA9 CD 10       >
+ 404++1CAB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CAF CD 10       >
+ 404++1CB1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CB5 CD 10       >
+ 404++1CB7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CBB CD 10       >
+ 404++1CBD B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CC1 CD 10       >
+ 404++1CC3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CC7 CD 10       >
+ 404++1CC9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CCD CD 10       >
+ 404++1CCF B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CD3 CD 10       >
+ 404++1CD5 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CD9 CD 10       >
+ 404++1CDB B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CDF CD 10       >
+ 404++1CE1 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CE5 CD 10       >
+ 404++1CE7 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CEB CD 10       >
+ 404++1CED B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CF1 CD 10       >
+ 404++1CF3 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CF7 CD 10       >
+ 404++1CF9 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1CFD CD 10       >
+ 404++1CFF B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D03 CD 10       >
+ 404++1D05 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D09 CD 10       >
+ 404++1D0B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D0F CD 10       >
+ 404++1D11 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D15 CD 10       >
+ 404++1D17 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D1B CD 10       >
+ 404++1D1D B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D21 CD 10       >
+ 404++1D23 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D27 CD 10       >
+ 404++1D29 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D2D CD 10       >
+ 404++1D2F B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D33 CD 10       >
+ 404++1D35 B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D39 CD 10       >
+ 404++1D3B B4 0E B0 41 >        db #B4,#0E,#B0,#41,#CD,#10
+ 404++1D3F CD 10       >
+ 405++1D41                      ENDR
+ 406++1D41                      ; CR then LF; output a 15-character marker on row 2.
+ 407++1D41 B4 0E B0 0D          db #B4,#0E,#B0,#0D,#CD,#10
+ 407++1D45 CD 10
+ 408++1D47 B4 0E B0 0A          db #B4,#0E,#B0,#0A,#CD,#10
+ 408++1D4B CD 10
+ 409++1D4D B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
+ 409++1D51 CD 10
+ 410++1D53 B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
+ 410++1D57 CD 10
+ 411++1D59 B4 0E B0 32          db #B4,#0E,#B0,#32,#CD,#10 ; 2
+ 411++1D5D CD 10
+ 412++1D5F B4 0E B0 34          db #B4,#0E,#B0,#34,#CD,#10 ; 4
+ 412++1D63 CD 10
+ 413++1D65 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
+ 413++1D69 CD 10
+ 414++1D6B B4 0E B0 49          db #B4,#0E,#B0,#49,#CD,#10 ; I
+ 414++1D6F CD 10
+ 415++1D71 B4 0E B0 4E          db #B4,#0E,#B0,#4E,#CD,#10 ; N
+ 415++1D75 CD 10
+ 416++1D77 B4 0E B0 54          db #B4,#0E,#B0,#54,#CD,#10 ; T
+ 416++1D7B CD 10
+ 417++1D7D B4 0E B0 31          db #B4,#0E,#B0,#31,#CD,#10 ; 1
+ 417++1D81 CD 10
+ 418++1D83 B4 0E B0 30          db #B4,#0E,#B0,#30,#CD,#10 ; 0
+ 418++1D87 CD 10
+ 419++1D89 B4 0E B0 20          db #B4,#0E,#B0,#20,#CD,#10 ; space
+ 419++1D8D CD 10
+ 420++1D8F B4 0E B0 50          db #B4,#0E,#B0,#50,#CD,#10 ; P
+ 420++1D93 CD 10
+ 421++1D95 B4 0E B0 41          db #B4,#0E,#B0,#41,#CD,#10 ; A
+ 421++1D99 CD 10
+ 422++1D9B B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
+ 422++1D9F CD 10
+ 423++1DA1 B4 0E B0 53          db #B4,#0E,#B0,#53,#CD,#10 ; S
+ 423++1DA5 CD 10
+ 424++1DA7                      ; AH=03h get cursor, then AH=0Fh get mode/columns.
+ 425++1DA7 B4 03 B0 00          db #B4,#03,#B0,#00,#BB,#00,#00,#CD,#10
+ 425++1DAB BB 00 00 CD
+ 425++1DAF 10
+ 426++1DB0 B4 0F B0 00          db #B4,#0F,#B0,#00,#CD,#10
+ 426++1DB4 CD 10
+ 427++1DB6 F4                   db #F4
+ 428++1DB7              x86_bios_video_test_image_end:
+ 429++1DB7
 # file closed: bios_video.asm
- 470+ 1DB5
- 471+ 1DB5                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
- 472+ 1DB5                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
- 473+ 1DB5
- 474+ 1DB5              neogs_firmware_end:
- 475+ 1DB5
+ 470+ 1DB7
+ 471+ 1DB7                      ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
+ 472+ 1DB7                      ASSERT X86_RAM_RUN_ADDR + NGS_X86_MAX_CODE_SIZE = #8000
+ 473+ 1DB7
+ 474+ 1DB7              neogs_firmware_end:
+ 475+ 1DB7
 # file closed: main.asm
-  10  1DB5
-  11  1DB5              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
-  12  1DB5              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
-  13  1DB5                      ASSERT neogs_firmware_end <= $3000
-  14  1DB5                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
-  15  1DB5                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
-  16  1DB5
-  17  1DB5              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
-  18  1DB5                      ORG     $4000
+  10  1DB7
+  11  1DB7              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
+  12  1DB7              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
+  13  1DB7                      ASSERT neogs_firmware_end <= $3000
+  14  1DB7                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+  15  1DB7                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+  16  1DB7
+  17  1DB7              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+  18  1DB7                      ORG     $4000
   19  4000                      INCLUDE "bootstrap.asm"
 # file opened: bootstrap.asm
    1+ 4000              ; =========================================================================

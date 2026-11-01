@@ -270,7 +270,7 @@
 118   60BE                      ; команда #13 запускает его, после чего он включает RAM-over-ROM,
 119   60BE                      ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
 120   60BE 21 48 87             ld      hl, neogs_binary_start
-121   60C1 11 B5 1D             ld      de, neogs_binary_end - neogs_binary_start
+121   60C1 11 B7 1D             ld      de, neogs_binary_end - neogs_binary_start
 122   60C4 CD 15 66             call    upload_firmware
 123   60C7 38 0B                jr      c, .firmware_upload_failed
 124   60C9                      MACRO_EF_STRING msg_stage2
@@ -4881,15 +4881,15 @@
 253   8748
 254   8748              neogs_binary_start:
 255   8748                      INCBIN "neogs_code.bin"
-256   A4FD              neogs_binary_end:
-257   A4FD
-258   A4FD              ProgramEnd:
-259   A4FD                      ; Keep at least 2 KiB between the loaded program and the application
-260   A4FD                      ; stack growing down from #AFFF. The TR-DOS buffer starts at #C000.
-261   A4FD                      ASSERT ProgramEnd <= #A800
-262   A4FD
-263   A4FD              ; Возвращаем базовый контекст компиляции для загрузчика
-264   A4FD                      ORG     #E000
+256   A4FF              neogs_binary_end:
+257   A4FF
+258   A4FF              ProgramEnd:
+259   A4FF                      ; Keep at least 2 KiB between the loaded program and the application
+260   A4FF                      ; stack growing down from #AFFF. The TR-DOS buffer starts at #C000.
+261   A4FF                      ASSERT ProgramEnd <= #A800
+262   A4FF
+263   A4FF              ; Возвращаем базовый контекст компиляции для загрузчика
+264   A4FF                      ORG     #E000
 265   E000                      INCLUDE "boot_loader.asm"
 # file opened: boot_loader.asm
   1+  E000              ; =========================================================================
