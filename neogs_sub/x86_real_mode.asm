@@ -143,8 +143,12 @@ x86_real_mode_test:
         call    x86_real_clear_vector
         jp      c, x86_real_test_fail_6
 
-        ; Run the independent 16-bit arithmetic regression.
+        ; Run the independent 16-bit register arithmetic regression.
         call    x86_real_alu_test
+        ret     c
+
+        ; Stage 3D: 16-bit arithmetic ModR/M memory operands and overrides.
+        call    x86_real_alu_memory_test
         ret     c
 
         ; Run byte arithmetic and 8/16-bit logical regression.
