@@ -488,7 +488,7 @@ x86_real_alu_memory_test:
         ld      (x86_reg_cx), hl
         ld      (x86_reg_dx), hl
         ld      (x86_reg_bp), hl
-        ld      ld      (x86_reg_si), hl
+        ld      (x86_reg_si), hl
         ld      (x86_reg_di), hl
         ld      hl, #0003
         ld      (x86_reg_ax), hl
