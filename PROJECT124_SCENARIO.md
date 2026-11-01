@@ -1,6 +1,6 @@
 # Project124 — рабочий сценарий и журнал реализации
 
-Обновлено: 2026-11-01
+Обновлено: 2026-11-02
 
 ## Цель текущего этапа
 
@@ -532,3 +532,40 @@ GitHub Actions run **41363938732** for source commit `54b89e1f22bc6b7b62002dc3a4
 **Build: PASS. Runtime: PENDING.** The new CPU-STR-02 regression has not yet been executed on the user's Pentagon/NeoGS runtime. Do not mark REP support complete until the user log contains `[CPU-STR-02] PASS` and the existing CPU-I/O, CPU-STR-01, INT, BIOS and STACK markers remain successful.
 
 This build leaves only 378 bytes below the firmware `#4000` ceiling. Avoid adding more firmware features before runtime validation; any required correction should first be evaluated against this remaining budget.
+
+
+### 2026-11-02 — CPU-STR-02: полный runtime PASS на Pentagon/NeoGS
+
+Пользователь предоставил полный runtime-лог пакета `neoprog.C` длиной `#3F4C` (64 TR-DOS sectors), соответствующего CI run **41363938732**, artifact ID **13106601153**.
+
+**Ключевое подтверждение новой функциональности:**
+
+- `[CPU-STR-02] PASS: REP MOVSB; REPE CMPSB; REPNE SCASB; CX=0; REP + SS override.`
+- Отдельный host marker выведен после выполнения полного guest regression, поэтому это подтверждение runtime, а не только успешной сборки.
+- Проверены повторные byte/word операции, остановка REPE/REPNE по ZF, обнулённый CX без выполнения тела, обновление CX/SI/DI и source segment override на всех итерациях.
+
+**Сохранность предыдущей регрессии в том же запуске:**
+
+- IPC HLT: PASS, AX=#BBAB; пять interpreter edge cases: PASS.
+- 64-page RAM, word access и segment/offset wrap: PASS.
+- BIOS IVT/BDA и INT Stage 2A stack frame / IRET: PASS.
+- CPU arithmetic, branches, stack/call/ret, MOV/ModR/M и I/O regression: PASS.
+- `[CPU-I/O] PASS`: IN/OUT E4-E7 и EC-EF; immediate/DX; byte/word; full DX; FLAGS.
+- `[CPU-STR] PASS`: все десять single-step MOVS/CMPS/STOS/LODS/SCAS форм byte/word, segment override, DF +/- и FLAGS.
+- `[INT] PASS`: guest INT 20h handler executed; IRET returned to caller.
+- `[BIOS] PASS`: INT 10h mode/cursor/teletype; 42-column stream.
+- Stage 5 TR-DOS task/file sectors/DMA: PASS; result status/AX=`0000 BBAB`.
+- `[STACK] PASS`: 128-byte WIN2 guard intact; stack stayed above #B880.
+- Финальная строка: `[HALT] Core task pipeline executed entirely. System suspended.`
+
+**Итоговые статусы:**
+
+- CPU-STR-01: Runtime PASS.
+- CPU-STR-02 (REP/REPE/REPNE): Runtime PASS.
+- CPU-I/O-02: Runtime PASS.
+- STACK-01: Runtime PASS.
+- Полный pipeline данного пакета: Runtime PASS.
+
+CI run и артефакт остаются теми же: build/verification PASS в run **41363938732**, пакет `#3F4C`, 64 сектора. Новый build после пользовательского runtime-лога не требуется: исходники и пакет не менялись. В логе нет CRC/побайтной проверки содержимого пакета, поэтому FW-10 не закрывать; стресс-тест загрузки пакета не менее 48 КБ (FW-09) также остаётся отдельной отложенной задачей.
+
+**Ближайшее действие:** зафиксировать эту сборку как новую runtime baseline; затем отдельно провести аудит firmware budget и плана расширения CPU core. В текущем образе до лимита #4000 оставалось 378 байт — не добавлять крупные функции без предварительного измерения размера и плана размещения.
