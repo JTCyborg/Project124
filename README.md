@@ -4,34 +4,28 @@ ZX Spectrum Pentagon 1024 project with a host Z80 and a NeoGS Z80 firmware core.
 
 ## Build
 
-Run `build.bat` from the repository root on Windows. The build requires
-`tools/sjasmplus.exe`, `nasm.exe` on `PATH`, and Windows PowerShell.
+Run `build.bat` from the repository root on Windows. The build uses the
+project's `tools/sjasmplus.exe`.
 
-The build order is intentional:
-
-1. `neogs_sub/build_firmware.asm` assembles the NeoGS firmware to
-   `neogs_code.bin` and the first-stage loader to `neogs_bootstrap.bin`.
-2. `zx_main/main.asm` assembles `proj124.C` and `boot.B`. It also exports
-   the exact bytes from `neogs_code.bin` into the TR-DOS image as
-   `neoprog.C`.
-3. `tools/verify_neoprog_trd.ps1` verifies the `neoprog.C` catalogue entry,
-   byte length, sector count, and every stored firmware byte against
-   `neogs_code.bin`.
-
-The build fails if the firmware is empty, exceeds 12 KiB, or the TR-DOS copy
-does not match the freshly assembled firmware.
+1. `neogs_sub/build_firmware.asm` builds `neogs_code.bin` and the small
+   first-stage loader `neogs_bootstrap.bin`.
+2. `zx_main/main.asm` builds the host image and exports the TR-DOS files:
+   `proj124.C`, `boot.B`, `neogs.C`, and `neoprog.C`.
+3. The large firmware is assembled in RAM bank 1 as a `SAVETRD` source block;
+   it is **not** embedded in the resident `proj124.C` image.
 
 ## Runtime loading model
 
-- `neoprog.C` is the **NeoGS firmware image**, not an x86 application.
-- The main Z80 finds `neoprog.C` in the TR-DOS catalogue and reads its sectors
-  into host RAM at `#C000`.
-- The existing GS105a ROM protocol loads the embedded first-stage bootstrap
-  at NeoGS RAM `#4000`. The bootstrap receives the firmware bytes from the
-  host buffer and installs the firmware at NeoGS RAM `#0000`.
-- The host waits for the firmware-ready ACK before proceeding.
-- Commander does not execute `neoprog.C` as a Spectrum code file. It is
-  reserved for the NeoGS firmware and is loaded automatically during startup.
+- The resident host image contains the 183-byte first-stage bootstrap.
+- At startup, `load_neogs_firmware_file` searches for `neogs.C`, fetches its
+  TR-DOS descriptor, checks the exact firmware byte length and sector count,
+  then reads its sectors into host RAM at `#C000`.
+- The GS105a ROM protocol loads the embedded bootstrap at NeoGS RAM `#4000`.
+  The bootstrap receives the firmware from the host buffer and installs it
+  at NeoGS RAM `#0000`.
+- The host proceeds only after the custom firmware returns its ready ACK.
+- `neoprog.C` is a separate six-byte x86 diagnostic payload used by Stage 5;
+  it is not the NeoGS firmware.
 
 ## NeoGS-to-host debug channel
 
@@ -60,27 +54,18 @@ test writes and verifies two boundary bytes (offsets `0000` and `3FFF`) on
 each of the 64 mapped 16 KiB pages. It verifies page mapping and boundary-byte
 retention; it is **not** a full byte-by-byte RAM test.
 
-All instruction-level x86 tests are external records in `TEST.C`; there are
-no embedded x86 test payload arrays in the host application. A diagnostic
-PASS message is emitted only after the host has received and checked the
-corresponding NeoGS result frame.
+The Stage 2B firmware self-test executes guest programs for 16-bit
+ADD/ADC/SUB/SBB/CMP, 8-bit ADD/ADC/SUB/SBB/CMP, and 8/16-bit
+AND/OR/XOR/TEST. The host reports PASS only after the firmware has checked
+the resulting registers and FLAGS.
 
-## External x86 test pipeline
+## Stage 5 x86 task file
 
-The external test source is `tests/TEST.ASM`. It is assembled on the PC by
-NASM into `TEST.BIN`; the Spectrum build exports that container to the TR-DOS
-disk as `TEST.C`. The test program is **not** embedded in the host Z80 source
-and is not part of the NeoGS firmware image.
-
-The build now requires:
-
-- `tools/sjasmplus.exe`
-- `nasm.exe` available through `PATH`
-- Windows PowerShell
-
-Run `build.bat`. It assembles the test source, builds the NeoGS firmware and
-Spectrum host, exports both `neoprog.C` and `TEST.C`, and verifies the stored
-test bytes against `TEST.BIN`.
+The host searches the selected TR-DOS `.C` file, validates its descriptor,
+reads the sectors into `#C000`, transfers the exact byte length through the
+NeoGS DMA window, executes the task, and checks the returned result frame.
+The current `neoprog.C` fixture is a six-byte diagnostic program
+(`MOV AX,BBAA / INC AX / NOP / HLT`), not a full x86 operating system.
 
 ### X86T container format, version 1
 
