@@ -6,7 +6,7 @@
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms, short Jcc,
 ; LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
-; 16-bit and byte arithmetic memory ModR/M operands are supported, including segment overrides. Logical memory ModR/M remains unsupported.
+; Arithmetic and 8/16-bit logical memory ModR/M operands support segment overrides.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -157,6 +157,10 @@ x86_real_mode_test:
 
         ; Stage 3E: byte arithmetic ModR/M memory operands and segment overrides.
         call    x86_real_alu8_memory_test
+        ret     c
+
+        ; Stage 3F: byte/word logical memory ModR/M and TEST no-writeback.
+        call    x86_real_logic_memory_test
         ret     c
 
         ; Stage 3B: 8086 MOV between register and memory operands.
