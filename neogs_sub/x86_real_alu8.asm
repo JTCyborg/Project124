@@ -592,7 +592,7 @@ x86_real_alu8_logic_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_bx)
-        ld      de, #0101
+        ld      de, #0100
         or      a
         sbc     hl, de
         jp      nz, .result_fail
@@ -731,7 +731,8 @@ x86_guest_alu8_logic_image:
         db #B7,#01                 ; MOV BH,01
         db #02,#F7                 ; ADD DH,BH -> 80
         db #B2,#7F                 ; MOV DL,7F
-        db #B3,#01                 ; MOV BL,01
-        db #02,#D3                 ; ADD DL,BL -> 80
+        db #B1,#01                 ; MOV CL,01
+        db #02,#D1                 ; ADD DL,CL -> 80
+        db #B1,#0F                 ; Restore CL; CX=0F0F
         db #F4
 x86_guest_alu8_logic_image_end:
