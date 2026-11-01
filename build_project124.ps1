@@ -38,6 +38,11 @@ try {
         throw "NeoGS firmware build failed (sjasmplus exit code $LASTEXITCODE)."
     }
 
+    & (Join-Path $Root 'pack_neogs.ps1')
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS package creation failed."
+    }
+
     $Generated = @(
         'neogs_code.bin',
         'neogs_bootstrap.bin',
