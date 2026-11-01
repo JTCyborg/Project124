@@ -1435,7 +1435,16 @@ EXECUTE_X86_FILE_STAGE::
         ; -------------------------------------------------------------
         MACRO_EF_STRING P124_msg_memtest_start
         call    neogs_mem_test_and_get_result
-        jp      c, .diag_extended_fail
+        jp      c, .memtest_transport_fail
+        MACRO_EF_STRING P124_msg_memtest_result
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
         ld      a, (P124_X86_RESULT_STATUS)
         or      a
         jp      nz, .diag_memtest_fail
@@ -1796,6 +1805,11 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.memtest_transport_fail:
+        MACRO_EF_STRING P124_msg_memtest_transport_fail
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -2057,8 +2071,19 @@ neogs_int_guest_test_and_get_result:
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
         out     (GSCOM), a
+        MACRO_EF_STRING P124_msg_memtest_command_sent
         call    neogs_wait_command_done_long
-        ret     c
+        jr      nc, .memtest_command_ack
+        MACRO_EF_STRING P124_msg_memtest_command_timeout
+        scf
+        ret
+.memtest_command_ack:
+        MACRO_EF_STRING P124_msg_memtest_command_ack
+        call    neogs_get_result_frame
+        ret     nc
+        MACRO_EF_STRING P124_msg_memtest_result_timeout
+        scf
+        ret
 
 neogs_get_result_frame:
         ld      a, CMD_GET_STATUS
@@ -2095,7 +2120,13 @@ neogs_get_result_frame:
         ret
 
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
-P124_msg_memtest_start: DEFB "[MEM] Testing x86 RAM pages and 8086 word/segment addressing...", 13, 0
+P124_msg_memtest_start: DEFB "[MEM] START: 64-page RAM map + word/segment tests.", 13, 0
+P124_msg_memtest_command_sent: DEFB "[MEM] CMD_MEM_TEST sent; waiting for NeoGS completion...", 13, 0
+P124_msg_memtest_command_ack: DEFB "[MEM] NeoGS command completed; requesting result frame.", 13, 0
+P124_msg_memtest_command_timeout: DEFB "[MEM] STOP: command completion timeout (NeoGS did not release CBIT).", 13, 0
+P124_msg_memtest_result_timeout: DEFB "[MEM] STOP: result-frame timeout after command completion.", 13, 0
+P124_msg_memtest_result: DEFB "[MEM] RESULT status/AX = ", 0
+P124_msg_memtest_transport_fail: DEFB "[MEM] FAIL: transport stopped before result frame.", 13, 0
 P124_msg_memtest_pass:  DEFB "[MEM] PASS: 64 pages + word access + segment/offset wrap verified.", 13, 0
 P124_msg_bios_post_start: DEFB "[BIOS] Stage 1: initialize IVT and BIOS Data Area...", 13, 0
 P124_msg_bios_post_pass: DEFB "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
@@ -3687,7 +3718,8 @@ File_Y: DB 0
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Current firmware image is kept below $3400; the stack grows down from $3FFF.
+; Current firmware image is kept below $3400; the stack grows down from $3FFE.
+; Keep the active Z80 stack in fixed WIN0: x86_mem_map_addr remaps WIN3 via MPAGEX.
 ; WIN1 remains on the documented default physical 16 KiB page #03.
 ; The DMA frame at logical $5000 therefore maps to physical $00D000.
 ; Firmware and its stack remain in the low 16 KiB page.
@@ -3714,7 +3746,7 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, $FFFE
+        ld      sp, $3FFE              ; stack stays in fixed WIN0; WIN3 is remapped by MPAGEX
 
         ; Set Z80 to the documented maximum guaranteed clock: 20 MHz.
         ; Do not select 24 MHz: the guide explicitly says it is not guaranteed.
@@ -4589,8 +4621,9 @@ x86_exit_status:     db 0
 ;
 ; x86 physical $00000-$FFFFF maps to NeoGS RAM pages 4..67
 ; (NeoGS physical base $010000, page size $4000 / 16 KiB).
-; Window C000-FFFF is switched through MPAGEX. This keeps firmware in
-; window 0 / page 0 and the current DMA frame in window 1 / page 3.
+; Window C000-FFFF is switched through MPAGEX. Firmware code AND the active
+; Z80 stack must remain in fixed window 0 / page 0; WIN3 is not stack-safe
+; during x86 RAM accesses. The current DMA frame is in window 1 / page 3.
 ;
 ; x86_mem_addr is a 20-bit little-endian address:
 ;   +0 = bits 7:0, +1 = bits 15:8, +2 = bits 19:16 (valid 0..0F).
@@ -4602,7 +4635,8 @@ x86_exit_status:     db 0
 ;   x86_mem_test: destructive test of the reserved 1 MiB x86 RAM region.
 ;                 status=0, AX=0001 on pass; status=5, AX=phase:page on fail.
 ;
-; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX.
+; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX;
+; callers must keep SP outside C000-FFFF for the entire test.
 ; =========================================================================
 
 X86_MEM_NGSPAGE_BASE EQU 4
@@ -10786,6 +10820,7 @@ x86_bios_video_test_image_end:
 ; The first firmware segment occupies the full low window $0000-$3FFF.
 ; The Z80 stack is in the reserved upper WIN3 area $F000-$FFFF.
         ASSERT neogs_firmware_end <= $4000
+        ASSERT neogs_firmware_end <= $3400 ; reserve $0C00 for fixed-WIN0 Z80 stack
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 
