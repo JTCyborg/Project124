@@ -435,7 +435,7 @@ neo_debug_dump_dma_frame:
         push    de
         ld      hl, neo_debug_dma_prefix
         call    neo_debug_send_string
-        in      a, (PG1)
+        ld      a, #44                 ; PG1 value programmed by CMD_LOAD_X86
         call    neo_debug_hex8
         ld      a, ' '
         call    neo_send_data_byte
