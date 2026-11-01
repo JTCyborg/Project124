@@ -332,12 +332,22 @@ x86_real_alu_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_dx)
-        ld      de, 2
+        ld      de, 4
         or      a
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_bx)
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, .result_fail
+        ld      hl, (x86_reg_bp)
         ld      de, 3
+        or      a
+        sbc     hl, de
+        jp      nz, .result_fail
+        ld      hl, (x86_reg_sp)
+        ld      de, #FFFF
         or      a
         sbc     hl, de
         jp      nz, .result_fail
@@ -393,27 +403,20 @@ x86_guest_alu_image:
         db #70,#01,#00             ; JO taken
         db #78,#01,#00             ; JS taken
         db #7A,#01,#00             ; JP taken
-        db #B8,#00,#00             ; MOV AX,0000
-        db #01,#C8                 ; ADD AX,CX -> 0001 (r/m destination)
-        db #B8,#00,#00             ; MOV AX,0000
-        db #2B,#C1                 ; SUB AX,CX -> FFFF, CF=1 (reg destination)
-        db #9C,#5E                 ; PUSHF / POP SI -> 0297
-        db #72,#01,#00             ; JB taken
-        db #71,#01,#00             ; JNO taken
+        db #BD,#02,#00             ; MOV BP,0002
+        db #01,#CD                 ; ADD BP,CX -> 0003 (r/m destination)
+        db #BC,#00,#00             ; MOV SP,0000
+        db #29,#CC                 ; SUB SP,CX -> FFFF, CF=1 (r/m destination)
         db #BA,#00,#00             ; MOV DX,0000
         db #13,#D1                 ; ADC DX,CX -> 0002 (reg destination)
         db #B8,#00,#00             ; MOV AX,0000
-        db #29,#C8                 ; SUB AX,CX -> FFFF, CF=1 (r/m destination)
-        db #BA,#00,#00             ; MOV DX,0000
-        db #11,#CA                 ; ADC DX,CX -> 0002 (r/m destination)
-        db #B8,#00,#00             ; MOV AX,0000
-        db #29,#C8                 ; SUB AX,CX -> CF=1
+        db #2B,#C1                 ; SUB AX,CX -> FFFF, CF=1 (reg destination)
+        db #11,#CA                 ; ADC DX,CX -> 0004 (r/m destination)
         db #BB,#05,#00             ; MOV BX,0005
         db #1B,#D9                 ; SBB BX,CX -> 0003 (reg destination)
         db #B8,#00,#00             ; MOV AX,0000
-        db #29,#C8                 ; SUB AX,CX -> CF=1
-        db #BB,#05,#00             ; MOV BX,0005
-        db #19,#CB                 ; SBB BX,CX -> 0003 (r/m destination)
+        db #2B,#C1                 ; SUB AX,CX -> CF=1
+        db #19,#CB                 ; SBB BX,CX -> 0001 (r/m destination)
         db #B8,#01,#00             ; MOV AX,0001
         db #3B,#C1                 ; CMP AX,CX -> ZF=1 (reg destination)
         db #39,#C8                 ; CMP AX,CX -> ZF=1 (r/m destination)
