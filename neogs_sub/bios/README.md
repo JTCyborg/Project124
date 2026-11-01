@@ -53,7 +53,7 @@ must preserve FLAGS.
 After the INT 20h handler changes AX to `1234h` and IRET returns, the test
 checks the post-HLT IP using the assembled guest-image length, FLAGS=`0B16h`,
 SP=`0100h`, and the retained register values. CX is expected to be `0000h`
-after LOOP. The expected return IP is computed at assembly time.
+after LOOP. The expected return IP is computed at assembly time. The final stack probes leave DX=`0100h` (8086 PUSH SP result) and BP=`00F0h` (POP SP result observed by a following PUSH SP); CX remains `0000h` after LOOP.
 Host command: `09h`. Expected result: status 0 / AX=`1A02h`.
 
 ## Stage 3A: BIOS INT 10h text services
