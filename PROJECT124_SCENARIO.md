@@ -500,3 +500,35 @@
 ### Примечание к следующему этапу
 
 Следующая работа остаётся REP/REPE/REPNE. Перед кодированием требуется измерить актуальный размер firmware из исходников/CI и оценить бюджет до лимита `#4000`. Реализацию и тесты префиксов вести отдельным этапом, сохраняя эту сборку как последнюю подтверждённую регрессионную точку.
+
+
+### 2026-11-02 — CPU-STR-02: REP/REPE/REPNE implementation and CI build
+
+Implemented the next string-instruction stage in `neogs_sub/x86_real_mode.asm` and `neogs_sub/x86_strings.asm`:
+
+- Prefix `F2` selects REPNE mode; prefix `F3` selects REPE/REP mode.
+- Prefix state is reset at the next guest instruction boundary. Segment override and REP prefixes can be combined in either order; source segment override remains active across all repeated iterations.
+- String opcode execution is split into a single-iteration worker and a repeat controller.
+- With REP and `CX=0`, no string memory access occurs and SI/DI/CX remain unchanged.
+- Each completed iteration decrements CX. MOVS/STOS/LODS repeat unconditionally for F2/F3. CMPS/SCAS with F3 continue while ZF=1; with F2 continue while ZF=0. The terminating comparison still updates FLAGS and advances SI/DI.
+- Every additional iteration consumes the existing `X86_REAL_STEP_LIMIT` budget; exhaustion returns the existing bounded-execution failure instead of looping indefinitely.
+
+Added CPU-STR-02 guest regression coverage:
+- REP MOVSB copies three bytes and checks CX/SI/DI and destination.
+- REPE CMPSB continues over an equal byte and stops at the first mismatch (ZF=0, CX=1).
+- REPNE SCASB continues until a match (ZF=1, CX=1).
+- REP with CX=0 leaves SI/DI and destination sentinel unchanged.
+- REP + SS segment override copies all bytes from SS:SI across repeated iterations.
+- REP MOVSW, REP STOSW and REP LODSW verify word width, destination bytes and final AX.
+
+Host output now emits a separate `[CPU-STR-02] PASS` marker only after the complete guest regression succeeds.
+
+GitHub Actions run **41363938732** for source commit `54b89e1f22bc6b7b62002dc3a4951590b672205e` completed successfully. Build, firmware/package size validation, TR-DOS verification and artifact upload all passed. Artifact `project124-build`, ID **13106601153**; checked archive contents:
+- `neogs_code.bin`: **16 006 bytes = #3E86**, free to `#4000`: **378 bytes = #017A**;
+- `neogs_bootstrap.bin`: **196 bytes = #00C4**;
+- `neoprog.bin`: **16 204 bytes = #3F4C**, 64 TR-DOS sectors;
+- `disk_A.trd`: **655 360 bytes**.
+
+**Build: PASS. Runtime: PENDING.** The new CPU-STR-02 regression has not yet been executed on the user's Pentagon/NeoGS runtime. Do not mark REP support complete until the user log contains `[CPU-STR-02] PASS` and the existing CPU-I/O, CPU-STR-01, INT, BIOS and STACK markers remain successful.
+
+This build leaves only 378 bytes below the firmware `#4000` ceiling. Avoid adding more firmware features before runtime validation; any required correction should first be evaluated against this remaining budget.
