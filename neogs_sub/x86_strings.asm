@@ -359,7 +359,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_1f
         ld      hl, (x86_reg_flags)
-        ld      de, #0246
+        ld      de, #0346             ; IF is preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_1g
@@ -378,7 +378,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
         ld      hl, (x86_reg_flags)
-        ld      de, #0212             ; AF=1: low-nibble borrow in 0080h-007Fh
+        ld      de, #0312             ; IF preserved; AF=1: low-nibble borrow in 0080h-007Fh
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
@@ -392,7 +392,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_3
         ld      hl, (x86_reg_flags)
-        ld      de, #0246
+        ld      de, #0346             ; IF preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_3
@@ -406,7 +406,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_4
         ld      hl, (x86_reg_flags)
-        ld      de, #0202
+        ld      de, #0302             ; IF preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_4
