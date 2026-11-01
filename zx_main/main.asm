@@ -117,8 +117,23 @@ START_APPLICATION:
         ; GS105a #14 загружает исполняемый bootstrap в RAM $4000;
         ; команда #13 запускает его, после чего он включает RAM-over-ROM,
         ; принимает образ в адрес $0000 и передаёт управление новой прошивке.
-        ; BASIC bootloader has already loaded neogs.C at #C000.
-        ; Keep the 9 KiB firmware outside the resident host image.
+        ; The 9 KiB firmware is a separate TR-DOS file, not resident host code.
+        MACRO_EF_STRING msg_stage2_file_start
+        call    load_neogs_firmware_file
+        jr      nc, .firmware_file_loaded
+        MACRO_EF_STRING msg_stage2_file_fail
+        ld      a, (neo_fw_file_error)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        di
+.firmware_file_halt:
+        halt
+        jr      .firmware_file_halt
+
+.firmware_file_loaded:
+        MACRO_EF_STRING msg_stage2_file_ok
         ld      hl, #C000
         ld      de, neogs_binary_end - neogs_binary_start
         call    upload_firmware
@@ -230,6 +245,12 @@ msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
 msg_stage2_bootstrap:
         DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
+msg_stage2_file_start:
+        DEFB "[FW] Loading neogs.C from TR-DOS into #C000...", 13, 0
+msg_stage2_file_ok:
+        DEFB "[FW] neogs.C verified and loaded into #C000.", 13, 0
+msg_stage2_file_fail:
+        DEFB "[FW] ERROR: neogs.C missing, corrupt or unreadable; code=#", 0
 
 ; =========================================================================
 ; СТРОГАЯ ПОСЛЕДОВАТЕЛЬНАЯ СБОРКА ИЗОЛИРОВАННЫХ МОДУЛЕЙ ИНТЕРФЕЙСА ХОСТА
