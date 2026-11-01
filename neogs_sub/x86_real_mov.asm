@@ -550,6 +550,11 @@ x86_mov_trace_event:
         push    de
         push    hl
         ld      (x86_mov_trace_stage), a
+        cp      'D'
+        jr      nz, .trace_keep_readback
+        ld      hl, #FFFF
+        ld      (x86_mov_trace_readback), hl
+.trace_keep_readback:
         ld      a, (x86_mov_trace_enable)
         or      a
         jr      z, .trace_done
