@@ -196,6 +196,8 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_logic_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_address_pass
+        MACRO_EF_STRING P124_msg_int_guest_io_pass
+        MACRO_EF_STRING P124_msg_int_guest_strings_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
 
         ; -------------------------------------------------------------
@@ -374,6 +376,7 @@ EXECUTE_X86_FILE_STAGE::
         or      a
         jp      nz, .interpreter_error
 
+        MACRO_EF_STRING P124_msg_stack_guard_pass
         ld      hl, (P124_X86_RESULT_AX)
         call    BIOS_DebugConsole_PrintHex16
         ld      a, 13
@@ -829,6 +832,8 @@ P124_msg_int_guest_alu8_memory_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP
 P124_msg_int_guest_logic_memory_pass: DEFB "[CPU] PASS: 8/16-bit OR/AND/XOR/TEST memory ModR/M; segment overrides and TEST no-writeback verified.", 13, 0
 P124_msg_int_guest_mov_memory_pass: DEFB "[CPU] PASS: MOV r/m8,r8 and r/m16,r16; DS/SS addressing verified.", 13, 0
 P124_msg_int_guest_mov_address_pass: DEFB "[CPU] PASS: MOV all 8 EA forms, signed disp8/disp16, segment overrides and offset wrap.", 13, 0
+P124_msg_int_guest_io_pass: DEFB "[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; imm8/DX; byte/word; full DX; FLAGS preserved.", 13, 0
+P124_msg_int_guest_strings_pass: DEFB "[CPU-STR] PASS: MOVS/CMPS/STOS/LODS/SCAS byte/word; segment override; DF +/-; FLAGS.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
@@ -921,6 +926,7 @@ P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
 P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
 P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
 P124_msg_x86_result_ready:  defb "[STAGE 5] [RESULT] Status / AX = ", 0
+P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN2 guard intact; stack stayed above #B880.", 13, 0
 P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0
 P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
 P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0

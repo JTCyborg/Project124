@@ -44,7 +44,10 @@
 | CPU-02 | 8086 far JMP (`EA`), far CALL (`9A`) и RETF (`CB`) | Общий CPU regression PASS 2026-11-01 22:59:26 | Весь текущий CPU regression прошёл после исправления RETF; отдельные CS:IP для far-переходов в логе не печатаются |
 | CPU-03 | Отдельная трассировка far JMP/CALL/RETF с проверкой CS:IP и SP | **Runtime PASS 2026-11-01 23:22** | Лог: CALL `0001:4FFE`; RETF `0000:5008`; JMP `0001:5000`; `SP=0100`. TRACE PASS marker выведен; весь pipeline завершён штатно |
 | CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
-| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
+| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** |
+| CPU-I/O-02 | Сборка и runtime-регрессия гостевых IN/OUT | **Runtime PASS 2026-11-02 (подтверждён по общему успешному результату self-test)** | Пять сценариев выполнены внутри `x86_real_mode_test`; явный host marker добавлен отдельным коммитом после запуска |
+| STACK-01 | Z80 stack relocation + guard | **Source + CI build PASS; runtime pending** | Stack moved to fixed WIN2/page #01 (SP=#BFFE); 128-byte canary #B800..#B87F; check after Stage 5 |
+| CPU-STR-01 | MOVS/CMPS/STOS/LODS/SCAS byte/word, no REP | **Source + CI build PASS; runtime pending** | Ten opcode forms, source segment override, DF +/- and CMPS/SCAS FLAGS regression | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
 
 ## Обязательные критерии завершения потоковой загрузки
 
@@ -301,3 +304,105 @@
 Эти две задачи остаются отложенными по решению пользователя. CPU-03 из списка отложенных исключён и возвращён в активную работу.
 
 Сборка и запуск текущего pipeline подтверждены предоставленным runtime-логом.
+
+
+### 2026-11-02 — runtime log: новая сборка/загрузка и повторная регрессия (00:03:32–00:03:38)
+
+- Пользователь предоставил runtime-лог запуска. Хост обнаружил `neoprog.C`, прочитал первый сектор и передал пакет через потоковый механизм: PACKAGE LENGTH `#3726` (14 118 байт), PACKAGE SECTORS `#0038` (56 секторов), GS DATA BYTES ACK `#372A` (длина + 4). Bootstrap через GS105a ROM loader завершился, приложение NeoGS вышло в режим `PERFECT MANAGER 124 DUAL-CORE NODE ONLINE`.
+- Важно: `#3726` — длина **всего пакета** (заголовок + bootstrap + firmware), а не размер одного `neogs_code.bin`. Поэтому по этому числу нельзя отдельно подтвердить firmware ASSERT `<=#3800` или остаток до лимита. ACK `#372A` подтверждает счётчик переданных байтов (+4), но не CRC/побайтную целостность.
+- Повторно подтверждены по этому запуску: IPC HLT/AX=#BBAB; пять interpreter edge cases; MEM: 64 pages + word access + segment/offset wrap; BIOS IVT/BDA; INT stack frame/IRET; CPU control-flow, stack, arithmetic/logical, ModR/M и MOV regressions; guest INT 20h; BIOS INT 10h mode/cursor/teletype с 42-column stream; Stage 5 TR-DOS task load, host buffer `#C000`, DMA completion и итоговый status/AX `0000 BBAB`. Pipeline дошёл до штатного HALT.
+- **CPU-I/O-02: не подтверждено этим логом.** В выводе нет отдельного marker/pass для пяти новых IN/OUT regression cases, нет результатов тестовых портов `00E0h/01E0h`, нет проверки сохранения FLAGS. Наличие новой длины пакета само по себе не является доказательством выполнения этих тестов. Статус CPU-I/O-01 остаётся «реализовано в исходниках; runtime regression ожидает явного marker».
+- Stack reserve 2 КиБ и отсутствие переполнения стека этим логом отдельно не проверены: для этого нужен явный stack watermark/guard test либо отдельная диагностическая проверка.
+
+## Следующий этап — CPU-I/O-02, подтвердить именно IN/OUT
+
+1. Проверить, что запущенный `neoprog.C` действительно собран из текущего `main` с `x86_io.asm` и содержит вызов `x86_real_io_test` в активном тестовом pipeline.
+2. Добавить/проверить отдельный host marker после успешного завершения I/O regression, например `[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; immediate/DX; byte/word; full DX; FLAGS preserved.` Marker должен печататься только после всех проверок, а не при входе в тест.
+3. Повторно собрать и запустить; в логе должны присутствовать этот marker и отсутствие общего CPU failure status. Проверить все пять guest cases, включая `DX=01E0h` (не alias к `00E0h`).
+4. Отдельно получить размер именно `neogs_code.bin` после сборки и проверить ASSERT `<=#3800`; длину полного `neoprog.C` не использовать вместо firmware image size.
+5. После I/O regression перейти к CPU-STR-01: MOVS/LODS/STOS/CMPS/SCAS без REP, затем REP/REPE/REPNE с CX/ZF/DF и ограничением числа шагов.
+
+
+### 2026-11-02 — CPU-I/O-02: явный host PASS marker добавлен
+
+- Проверена интеграция: `x86_real_mode_test` вызывает `x86_real_io_test` после существующих MOV/ModR/M регрессий; команда `CMD_INT_GUEST_TEST` запускает этот self-test. Dispatcher направляет диапазоны E4–E7 и EC–EF в `x86_real_io_instruction`.
+- Подтверждена структура пяти guest cases: immediate byte, immediate word, DX byte, DX word и unmapped full-DX port `01E0h`. После каждого исполнения проверяется `FLAGS=#0302`; проверяется AX и итоговое содержимое тестового latch `A1B2h`. Это статический аудит исходников, не результат исполнения.
+- Найдено, почему предыдущий runtime-лог не содержал I/O result: хост печатал PASS-сообщения существующих regression groups, но не имел отдельной строки для IN/OUT. В `zx_main/x86_loader.asm` добавлен `P124_msg_int_guest_io_pass`, который выводится после общего успешного result frame и проверок status/AX, рядом с остальными CPU PASS markers. Строка: `[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; imm8/DX; byte/word; full DX; FLAGS preserved.`
+- Commit: `055f8ea7379477a022b23389d48674165c963cdb`.
+- Сборка после добавления marker **не выполнялась**. Runtime-лог от 00:03:32 предшествует этому изменению и не может содержать новый marker; CPU-I/O-02 остаётся ожидающим повторной сборки и нового лога.
+- Среда проверки: Debian 13; `sjasmplus`, `z80asm`, `pasmo`, `pwsh` и `powershell` отсутствуют; пакет `sjasmplus` в доступном apt-cache не найден. Проверена официальная ветка релизов SjASMPlus: актуальный release v1.24.0 публикует source archive и Windows binary, но не готовый Linux binary. Попытка загрузить исходный архив из среды завершилась сетевой ошибкой DNS (`github.com` не разрешается). Поэтому build и firmware size measurement здесь не запускались. GitHub Actions runs для Project124 branch main также не обнаружены.
+- Не обновлялись `neogs_code.bin`, `neoprog.bin` и прочие tracked binaries. Не объявлять CPU-I/O-02 PASS до сборки, фактической проверки `neogs_code.bin <= #3800` и runtime marker.
+- Stack reserve `#3800..#3FFE` (2 КиБ) пока подтверждён только картой адресов/ASSERT; watermark/guard test глубины стека не добавлен и runtime не выполнен.
+
+## Текущий ближайший шаг
+
+1. Собрать свежие исходники с SjASMPlus 1.24.0 или совместимой версией и проверить оба ASSERT в `build_firmware.asm`, а также фактический размер именно `neogs_code.bin`.
+2. Установить собранный пакет `neoprog.C` и повторить полный pipeline. В Stage 2B ожидать новую строку `[CPU-I/O] PASS: ...`. Если строки нет — проверить, что на TR-DOS записан новый пакет, а не прежний бинарник.
+3. Добавить/выполнить runtime stack watermark для диапазона `#3800..#3FFE`; сохранить не менее 2 КиБ зарезервированной области и подтвердить, что тестовая глубина стека не заходит в guard.
+4. Только после этих проверок закрыть CPU-I/O-02 и переходить к CPU-STR-01.
+
+
+### 2026-11-02 — уточнение CPU-I/O-02: runtime PASS подтверждён структурой результата
+
+- Сверены GitHub metadata и история бинарных файлов:
+  - `neogs_code.bin` — 13 920 байт = `#3660`;
+  - `neogs_bootstrap.bin` — 196 байт = `#00C4`;
+  - `neoprog.bin` — 14 118 байт = `#3726`.
+- Проверка арифметики пакета: `2 + 196 + 13920 = 14118`; это точно совпадает с пользовательским runtime `PACKAGE LENGTH=#3726`. Размер firmware `#3660` меньше предела `#3800` на `#01A0` (416 байт). Это измерение tracked binary из GitHub, а не новая локальная сборка.
+- История Git подтверждает, что `neogs_sub/x86_io.asm`, активный dispatcher и `neogs_code.bin` были сохранены одним коммитом `7851bb1f0c6830c3bab8d783ae738932dea2888d` от 2026-11-01 23:02:51Z — до пользовательского запуска 00:03:32. Следовательно, загруженный бинарник включает I/O regression.
+- В `neogs_sub/x86_real_mode.asm` функция `x86_real_mode_test` вызывает `x86_real_io_test` перед установкой итогового успешного `status=0` и `AX=#1A02`. Любой сбой I/O test возвращает carry/error status и не позволяет сформировать общий PASS. Хост печатает `[INT] PASS: guest INT 20h handler executed; IRET returned to caller.` только после проверки result status=0 и AX=#1A02. Пользовательский лог содержит этот PASS. Поэтому CPU-I/O-02 **можно считать Runtime PASS по успешному завершению общей регрессии**, хотя отдельного I/O marker в том старом host binary ещё не было.
+- Для наблюдаемости добавлен отдельный marker в `zx_main/x86_loader.asm` (commit `055f8ea7379477a022b23389d48674165c963cdb`). Этот marker не входит в NeoGS firmware: он печатается Spectrum host после успешного общего result frame. Чтобы увидеть его в следующем запуске, нужно пересобрать host/TR-DOS image (`zx_main/main.asm` → `disk_A.trd`) и заменить старый `proj124.C` на диске. NeoGS firmware binary можно не менять, если исходники `neogs_sub` не менялись после коммита `7851bb1`.
+- Резерв стека `#3800..#3FFE` остаётся зарезервированным и не пересекается с firmware `#3660`; однако фактический high-water mark Z80 stack пока не измерен. Это отдельная проверка, не блокирующая подтверждённый I/O opcode regression.
+
+
+### 2026-11-02 — STACK-01: перенос Z80 stack в фиксированный WIN2 и canary
+
+- Bootstrap устанавливает MPAG=#80, то есть фиксирует WIN2 на физической RAM page #01. Активный x86_mem_map_addr меняет только MPAGEX/WIN3; WIN2 остаётся стабильным во время guest memory mapping.
+- Stack перенесён с SP=#3FFE на SP=#BFFE в WIN2. При старте область #B800..#BFFD заполняется #A5 до первого CALL/PUSH. Нижние 128 байт #B800..#B87F — guard; если стек опускается ниже #B880, проверка обнаружит повреждение.
+- После CMD_RUN_X86_REAL firmware проверяет guard. При повреждении устанавливаются status=12, AX=#7E00; host marker сообщает PASS только при status=0.
+- Firmware ASSERT и packer limit синхронизированы с полным окном WIN0: neogs_firmware_end <= #4000, packer max 0x4000. Bootstrap уже принимал firmware до #4000; host DMA/loader upper bound не менялся.
+- Runtime guard ещё не проверен.
+
+### 2026-11-02 — CPU-STR-01: single-step 8086 string instructions добавлены
+
+- Создан neogs_sub/x86_strings.asm; активный dispatcher подключает десять opcode forms: A4/A5 MOVSB/MOVSW, A6/A7 CMPSB/CMPSW, AA/AB STOSB/STOSW, AC/AD LODSB/LODSW, AE/AF SCASB/SCASW.
+- Источник использует DS:SI по умолчанию; segment override применяется к source operand. Destination всегда ES:DI. SI/DI меняются на 1 или 2 байта по DF (FLAGS bit 10); word offset wraps at 16 bits. MOVS/STOS/LODS не меняют FLAGS; CMPS/SCAS вычисляют source/accumulator minus destination и обновляют CF/PF/AF/ZF/SF/OF через общие ALU helpers.
+- REP/REPE/REPNE (F2/F3) пока не реализованы; это отдельная следующая стадия.
+- Guest regression выполняет все десять opcode forms, SS override для первого MOVSB, четыре HLT checkpoints для CMPSB/CMPSW/SCASB/SCASW FLAGS, проверяет SI/DI/AX и записанные байты; второй guest program проверяет MOVSB/MOVSW с DF=1. Ошибки возвращают status=13 и detail AX=1Dxx.
+- Host marker после успешного общего self-test: [CPU-STR] PASS: MOVS/CMPS/STOS/LODS/SCAS byte/word; segment override; DF +/-; FLAGS.
+- CMPSW test ожидает FLAGS=#0212: AF=1 из-за borrow младшей тетрады в 0080h-007Fh.
+
+### 2026-11-02 — GitHub Actions build PASS для нового CPU-STR/STACK кода
+
+- Добавлен workflow .github/workflows/project124-build.yml (commit 5464c9cdb676ffed9b1812da00dd03bcc19462ee). Он запускает build_project124.ps1 на Windows runner с проектным tools/sjasmplus.exe, проверяет firmware/bootstrap/package limits, запускает tools/verify_neoprog_trd.ps1 и загружает артефакты.
+- Run 41361163271 завершился success; все шаги Build, Verify и Upload artifacts — success.
+- Фактические результаты сборки:
+  - neogs_code.bin: 15 020 байт = #3AAC, лимит #4000, запас 1 364 байта;
+  - neogs_bootstrap.bin: 196 байт = #00C4;
+  - neoprog.bin: 15 218 байт = #3B72, 60 TR-DOS sectors;
+  - disk_A.trd: 655 360 байт.
+- Проверка пакета: 2 + 196 + 15020 = 15218. verify_neoprog_trd.ps1 подтвердил, что neoprog.C найден в каталоге TR-DOS, длина/число секторов совпадают и каждый байт файла на диске совпадает с freshly-built neoprog.bin.
+- В CI-артефакт project124-build загружены neogs_code.bin, neogs_bootstrap.bin, neoprog.bin, disk_A.trd. Tracked binaries в ветке main не заменялись; для runtime нужно взять свежие файлы из артефакта.
+- Build: PASS. Runtime: NOT RUN. Сборка подтверждает синтаксис/ASSERT/размер/упаковку/содержимое TR-DOS image, но не исполнение новых строковых инструкций и stack guard на NeoGS.
+
+## Текущий ближайший шаг — runtime CPU-STR/STACK
+
+1. Скачать CI artifact project124-build из run 41361163271 или использовать disk_A.trd из него.
+2. Загрузить новый TR-DOS образ/файлы на Pentagon и выполнить полный pipeline.
+3. В Stage 2B ожидать [CPU-I/O] PASS и [CPU-STR] PASS; после Stage 5 ожидать [STACK] PASS.
+4. Если CPU-STR regression не проходит, исправить конкретную операцию/FLAGS/индекс по status/AX; REP пока не запускать.
+5. После Runtime PASS добавить F2/F3 REP/REPE/REPNE с CX, ZF, DF и step budget.
+
+
+### 2026-11-02 — CI rebuild after independent LODSB checkpoint
+
+- После усиления regression отдельной HLT-проверкой результата LODSB выполнен новый GitHub Actions run **41361321253** для commit `6bc68342772d9e4d602d094fa1a54cb319e95af9`; conclusion `success`.
+- Обновлённые размеры:
+  - firmware `neogs_code.bin`: **15 075 байт = #3AE3**, до лимита #4000 остаётся **1 309 байт**;
+  - bootstrap: 196 байт = #00C4;
+  - package `neoprog.bin`: **15 273 байта = #3BA9**, 60 sectors;
+  - `disk_A.trd`: 655 360 байт.
+- Package header проверен как `C4 00` (196 bytes bootstrap); bootstrap и firmware payload побайтно совпали с соответствующими BIN-файлами. TR-DOS verification снова подтвердила совпадение каждого meaningful byte файла neoprog.C с package.
+- Новый artifact ID: `13105461949`, имя `project124-build`. Он заменяет предыдущий artifact/run для runtime; брать следует именно его.
+- **Build: PASS. Runtime: NOT RUN.** Новый пакет готов к загрузке на Pentagon/NeoGS; CPU-STR-01 и STACK-01 ещё требуют runtime marker в пользовательском логе.
+

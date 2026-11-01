@@ -1,0 +1,57 @@
+name: Project124 build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Project124
+        uses: actions/checkout@v4
+
+      - name: Build firmware, package, host and TR-DOS image
+        shell: pwsh
+        run: ./build_project124.ps1
+
+      - name: Verify firmware limits and TR-DOS package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $firmware = Get-Item 'neogs_code.bin'
+          $bootstrap = Get-Item 'neogs_bootstrap.bin'
+          $package = Get-Item 'neoprog.bin'
+
+          if ($firmware.Length -le 0 -or $firmware.Length -gt 0x4000) {
+            throw "Firmware size outside 1..16384 bytes: $($firmware.Length)"
+          }
+          if ($bootstrap.Length -le 0 -or $bootstrap.Length -gt 254) {
+            throw "Bootstrap size outside 1..254 bytes: $($bootstrap.Length)"
+          }
+          $expectedPackageLength = 2 + $bootstrap.Length + $firmware.Length
+          if ($package.Length -ne $expectedPackageLength) {
+            throw "Package length mismatch: got $($package.Length), expected $expectedPackageLength"
+          }
+          if ($package.Length -gt 0xFF00) {
+            throw "Package exceeds TR-DOS 255-sector limit: $($package.Length)"
+          }
+
+          Write-Host ("[CI] Firmware: {0} bytes (limit 16384)." -f $firmware.Length)
+          Write-Host ("[CI] Bootstrap: {0} bytes (limit 254)." -f $bootstrap.Length)
+          Write-Host ("[CI] Package: {0} bytes; sectors: {1}." -f $package.Length, [Math]::Ceiling($package.Length / 256.0))
+
+          ./tools/verify_neoprog_trd.ps1 -ImagePath 'disk_A.trd' -PackagePath 'neoprog.bin'
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: project124-build
+          if-no-files-found: error
+          path: |
+            neogs_code.bin
+            neogs_bootstrap.bin
+            neoprog.bin
+            disk_A.trd
