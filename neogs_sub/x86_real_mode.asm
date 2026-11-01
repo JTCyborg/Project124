@@ -4,8 +4,8 @@
 ; This bounded executable slice runs guest instructions through CS:IP and
 ; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
-; MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms, short Jcc,
-; LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
+; near CALL rel16 / RET, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
+; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
 ; Arithmetic and 8/16-bit logical memory ModR/M operands support segment overrides.
 ; It is intentionally not a general 8086 emulator.
 ;
@@ -108,7 +108,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_si)
-        ld      de, #8000
+        ld      de, #8001
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -400,6 +400,10 @@ x86_real_dispatch:
         cp      #E4
         jp      c, x86_real_loop_short
 .not_loop_short:
+        cp      #E8
+        jp      z, x86_real_call_near
+        cp      #C3
+        jp      z, x86_real_ret_near
         cp      #EB
         jp      z, x86_real_jmp_short
         cp      #F4
@@ -513,6 +517,35 @@ x86_real_stack_pop:
         ld      (x86_reg_sp), hl
         or      a
         ret
+
+; Near CALL rel16 / RET use the same checked SS:SP physical-memory path as
+; PUSH/POP. CALL stores the IP after its two-byte displacement; RET restores
+; that IP only after a successful stack read. Relative addition wraps at 16 bits.
+x86_real_call_near:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_low), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_imm_high), a
+        ld      de, (x86_reg_ip)        ; return address: IP after imm16
+        call    x86_real_stack_push
+        ret     c
+        ld      a, (x86_real_imm_low)
+        ld      e, a
+        ld      a, (x86_real_imm_high)
+        ld      d, a
+        ld      hl, (x86_reg_ip)
+        add     hl, de
+        ld      (x86_reg_ip), hl
+        jp      x86_real_next
+
+x86_real_ret_near:
+        call    x86_real_stack_pop
+        ret     c
+        ld      hl, (x86_real_stack_value)
+        ld      (x86_reg_ip), hl
+        jp      x86_real_next
 
 ; -------------------------------------------------------------------------
 ; Short relative control flow: 70-7F Jcc, E0-E3 LOOP/JCXZ, EB JMP.
@@ -1154,6 +1187,13 @@ x86_guest_jl_target:
         db #5C                      ; POP SP -> SP=00F0
         db #54,#5D                  ; PUSH SP / POP BP -> BP must receive 00F0
         db #BC,#00,#01              ; restore SP=0100
+
+        ; Exercise near CALL/RET using the guest SS:SP stack. The subroutine
+        ; increments SI; the short jump skips it after RET returns.
+        db #E8,#02,#00              ; CALL subroutine at return IP + 2
+        db #EB,#02                  ; skip the subroutine after RET
+        db #46,#C3                  ; subroutine: INC SI / RET
+        db #90                      ; continuation after the short jump
 
         ; Exercise a PUSH/POP word crossing SS:FFFF -> SS:0000 offset wrap.
         db #BC,#01,#00              ; MOV SP,0001
