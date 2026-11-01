@@ -352,17 +352,17 @@ x86_real_strings_test:
         ld      de, #0107
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1e
         ld      hl, (x86_reg_di)
         ld      de, #0207
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1f
         ld      hl, (x86_reg_flags)
         ld      de, #0246
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1g
 
         ; CMPSW -> HLT.
         call    x86_real_execute
@@ -498,8 +498,21 @@ x86_string_test_fail_execute:
         jr      x86_string_test_fail
 x86_string_test_fail_1:
 x86_string_test_fail_1a:
-        ; Preserve the observed AX so the host log reveals the actual LODSB result.
+        ; First checkpoint AX, or second checkpoint LODSW AX.
         ld      hl, (x86_reg_ax)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1e:
+        ; Second checkpoint SI after LODSW/STOSB/STOSW/CMPSB.
+        ld      hl, (x86_reg_si)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1f:
+        ; Second checkpoint DI after STOSB/STOSW/CMPSB.
+        ld      hl, (x86_reg_di)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1g:
+        ; Second checkpoint FLAGS after non-comparing string operations.
+        ld      hl, (x86_reg_flags)
+x86_string_test_fail_observed:
         ld      (saved_x86_ax), hl
         ld      a, 13
         ld      (x86_exit_status), a
