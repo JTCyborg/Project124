@@ -27,8 +27,8 @@ x86_real_mov_modrm:
         xor     1
         ld      (x86_mov_width), a
 
-        ld      a, 'D'
-        call    x86_mov_trace_event
+        ; ld      a, 'D'      ; diagnostic trace retained but disabled
+        ; call    x86_mov_trace_event
 
         ld      a, (x86_mov_opcode)
         and     2
@@ -39,8 +39,8 @@ x86_real_mov_modrm:
         call    x86_real_mov_read_reg
         ret     c
         ld      (x86_mov_value), hl
-        ld      a, 'S'
-        call    x86_mov_trace_event
+        ; ld      a, 'S'      ; diagnostic trace retained but disabled
+        ; call    x86_mov_trace_event
         jp      x86_real_mov_write_rm
 
 .register_destination:
@@ -48,8 +48,8 @@ x86_real_mov_modrm:
         call    x86_real_mov_read_rm
         ret     c
         ld      (x86_mov_value), hl
-        ld      a, 'S'
-        call    x86_mov_trace_event
+        ; ld      a, 'S'      ; diagnostic trace retained but disabled
+        ; call    x86_mov_trace_event
         ld      a, (x86_mov_reg)
         jp      x86_real_mov_write_reg
 
@@ -160,8 +160,7 @@ x86_real_mov_decode_modrm:
         jr      z, .disp8
         cp      2
         jr      z, .disp16
-        or      a
-        ret
+        jp      .apply_segment_override
 
 .disp8:
         call    x86_real_fetch8
@@ -175,8 +174,7 @@ x86_real_mov_decode_modrm:
         ld      hl, (x86_mov_offset)
         add     hl, de
         ld      (x86_mov_offset), hl
-        or      a
-        ret
+        jp      .apply_segment_override
 
 .disp16:
         call    x86_real_mov_fetch16
@@ -184,6 +182,15 @@ x86_real_mov_decode_modrm:
         ld      de, (x86_mov_offset)
         add     hl, de
         ld      (x86_mov_offset), hl
+        jp      .apply_segment_override
+
+.apply_segment_override:
+        ; BP selects SS by default; an explicit segment prefix overrides it.
+        ld      a, (x86_real_seg_override_active)
+        or      a
+        ret     z
+        ld      hl, (x86_real_seg_override)
+        ld      (x86_mov_segment), hl
         or      a
         ret
 
@@ -323,8 +330,8 @@ x86_real_mov_write_rm:
 .write_word_store:
         ld      hl, (x86_mov_value)
         ld      (x86_mem_word_value), hl
-        ld      a, 'W'
-        call    x86_mov_trace_event
+        ; ld      a, 'W'      ; diagnostic trace retained but disabled
+        ; call    x86_mov_trace_event
         call    x86_mem_write16
         ret     c
         ; Read the just-written word back immediately and trace it.
@@ -335,8 +342,8 @@ x86_real_mov_write_rm:
         call    x86_mem_read16
         ret     c
         ld      (x86_mov_trace_readback), hl
-        ld      a, 'R'
-        call    x86_mov_trace_event
+        ; ld      a, 'R'      ; diagnostic trace retained but disabled
+        ; call    x86_mov_trace_event
         jp      x86_real_next
 
 x86_mov_opcode:        db 0
@@ -557,167 +564,168 @@ x86_mov_memory_test_image:
         db #F4
 x86_mov_memory_test_image_end:
 
-; -------------------------------------------------------------------------
-; MOV trace to hardware debug port #EF.
-; Emits stage, opcode, ModR/M, decoded segment:offset, source value,
-; DX/SI/DI, and immediate post-store readback. Enabled only by MOV self-test.
-; -------------------------------------------------------------------------
-x86_mov_trace_event:
-        push    af
-        push    bc
-        push    de
-        push    hl
-        ld      (x86_mov_trace_stage), a
-        cp      'D'
-        jr      nz, .trace_keep_readback
-        ld      hl, #FFFF
-        ld      (x86_mov_trace_readback), hl
-.trace_keep_readback:
-        ld      a, (x86_mov_trace_enable)
-        or      a
-        jp      z, .trace_done
-
-        ld      a, 'M'
-        call    x86_mov_trace_putc
-        ld      a, (x86_mov_trace_stage)
-        call    x86_mov_trace_putc
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'I'
-        call    x86_mov_trace_putc
-        ld      a, 'P'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_ip)
-        call    x86_mov_trace_hex16
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'O'
-        call    x86_mov_trace_putc
-        ld      a, 'P'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      a, (x86_mov_opcode)
-        call    x86_mov_trace_hex8
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      a, (x86_mov_modrm)
-        call    x86_mov_trace_hex8
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'E'
-        call    x86_mov_trace_putc
-        ld      a, 'A'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      hl, (x86_mov_segment)
-        call    x86_mov_trace_hex16
-        ld      a, ':'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_mov_offset)
-        call    x86_mov_trace_hex16
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'V'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      hl, (x86_mov_value)
-        call    x86_mov_trace_hex16
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'R'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_ax)
-        call    x86_mov_trace_hex16
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_bx)
-        call    x86_mov_trace_hex16
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_cx)
-        call    x86_mov_trace_hex16
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_dx)
-        call    x86_mov_trace_hex16
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_si)
-        call    x86_mov_trace_hex16
-        ld      a, '/'
-        call    x86_mov_trace_putc
-        ld      hl, (x86_reg_di)
-        call    x86_mov_trace_hex16
-        ld      a, ' '
-        call    x86_mov_trace_putc
-
-        ld      a, 'B'
-        call    x86_mov_trace_putc
-        ld      a, '='
-        call    x86_mov_trace_putc
-        ld      hl, (x86_mov_trace_readback)
-        call    x86_mov_trace_hex16
-        ld      a, 13
-        call    x86_mov_trace_putc
-        ld      a, 10
-        call    x86_mov_trace_putc
-
-.trace_done:
-        pop     hl
-        pop     de
-        pop     bc
-        pop     af
-        ret
-
-x86_mov_trace_putc:
-        ; NeoGS local I/O is not the Spectrum printer port. Send each
-        ; trace byte through the existing DBIT stream; the host drains it
-        ; while CMD_INT_GUEST_TEST is active and mirrors it to port #EF.
-        push    bc
-        push    de
-        push    hl
-        call    neo_send_data_byte
-        pop     hl
-        pop     de
-        pop     bc
-        ret
-
-; IN A=byte.
-x86_mov_trace_hex8:
-        push    af
-        rra
-        rra
-        rra
-        rra
-        call    x86_mov_trace_nibble
-        pop     af
-        jp      x86_mov_trace_nibble
-
-x86_mov_trace_nibble:
-        and     #0F
-        cp      10
-        jr      c, .trace_digit
-        add     a, 7
-.trace_digit:
-        add     a, '0'
-        jp      x86_mov_trace_putc
-
-; IN HL=word.
-x86_mov_trace_hex16:
-        ld      a, h
-        call    x86_mov_trace_hex8
-        ld      a, l
-        jp      x86_mov_trace_hex8
-
+; ; -------------------------------------------------------------------------
+; ; MOV trace to hardware debug port #EF.
+; ; Emits stage, opcode, ModR/M, decoded segment:offset, source value,
+; ; DX/SI/DI, and immediate post-store readback. Enabled only by MOV self-test.
+; ; -------------------------------------------------------------------------
+; x86_mov_trace_event:
+;         push    af
+;         push    bc
+;         push    de
+;         push    hl
+;         ld      (x86_mov_trace_stage), a
+;         cp      'D'
+;         jr      nz, .trace_keep_readback
+;         ld      hl, #FFFF
+;         ld      (x86_mov_trace_readback), hl
+; .trace_keep_readback:
+;         ld      a, (x86_mov_trace_enable)
+;         or      a
+;         jp      z, .trace_done
+;
+;         ld      a, 'M'
+;         call    x86_mov_trace_putc
+;         ld      a, (x86_mov_trace_stage)
+;         call    x86_mov_trace_putc
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'I'
+;         call    x86_mov_trace_putc
+;         ld      a, 'P'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_ip)
+;         call    x86_mov_trace_hex16
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'O'
+;         call    x86_mov_trace_putc
+;         ld      a, 'P'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      a, (x86_mov_opcode)
+;         call    x86_mov_trace_hex8
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      a, (x86_mov_modrm)
+;         call    x86_mov_trace_hex8
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'E'
+;         call    x86_mov_trace_putc
+;         ld      a, 'A'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_mov_segment)
+;         call    x86_mov_trace_hex16
+;         ld      a, ':'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_mov_offset)
+;         call    x86_mov_trace_hex16
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'V'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_mov_value)
+;         call    x86_mov_trace_hex16
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'R'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_ax)
+;         call    x86_mov_trace_hex16
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_bx)
+;         call    x86_mov_trace_hex16
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_cx)
+;         call    x86_mov_trace_hex16
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_dx)
+;         call    x86_mov_trace_hex16
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_si)
+;         call    x86_mov_trace_hex16
+;         ld      a, '/'
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_reg_di)
+;         call    x86_mov_trace_hex16
+;         ld      a, ' '
+;         call    x86_mov_trace_putc
+;
+;         ld      a, 'B'
+;         call    x86_mov_trace_putc
+;         ld      a, '='
+;         call    x86_mov_trace_putc
+;         ld      hl, (x86_mov_trace_readback)
+;         call    x86_mov_trace_hex16
+;         ld      a, 13
+;         call    x86_mov_trace_putc
+;         ld      a, 10
+;         call    x86_mov_trace_putc
+;
+; .trace_done:
+;         pop     hl
+;         pop     de
+;         pop     bc
+;         pop     af
+;         ret
+;
+; x86_mov_trace_putc:
+;         ; NeoGS local I/O is not the Spectrum printer port. Send each
+;         ; trace byte through the existing DBIT stream; the host drains it
+;         ; while CMD_INT_GUEST_TEST is active and mirrors it to port #EF.
+;         push    bc
+;         push    de
+;         push    hl
+;         call    neo_send_data_byte
+;         pop     hl
+;         pop     de
+;         pop     bc
+;         ret
+;
+; ; IN A=byte.
+; x86_mov_trace_hex8:
+;         push    af
+;         rra
+;         rra
+;         rra
+;         rra
+;         call    x86_mov_trace_nibble
+;         pop     af
+;         jp      x86_mov_trace_nibble
+;
+; x86_mov_trace_nibble:
+;         and     #0F
+;         cp      10
+;         jr      c, .trace_digit
+;         add     a, 7
+; .trace_digit:
+;         add     a, '0'
+;         jp      x86_mov_trace_putc
+;
+; ; IN HL=word.
+; x86_mov_trace_hex16:
+;         ld      a, h
+;         call    x86_mov_trace_hex8
+;         ld      a, l
+;         jp      x86_mov_trace_hex8
+;
+;
