@@ -22,13 +22,5 @@
         SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
         SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
 
-; One deployable file: [WORD bootstrap_length][bootstrap][firmware].
-; The host reads this package once from TR-DOS as neoprog.C.
-        ORG     #8000
-neoprog_package_start:
-        DEFW    neogs_bootstrap_end - neogs_bootstrap_start
-        INCBIN  "neogs_bootstrap.bin"
-        INCBIN  "neogs_code.bin"
-neoprog_package_end:
-        SAVEBIN "neoprog.bin", neoprog_package_start, neoprog_package_end - neoprog_package_start
-        SAVEBIN "zx_main/neoprog.bin", neoprog_package_start, neoprog_package_end - neoprog_package_start
+; neoprog.bin is assembled by the build scripts after both intermediate
+; binaries have been written. It is the only NeoGS payload exported to TR-DOS.
