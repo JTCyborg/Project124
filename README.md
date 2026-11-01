@@ -7,25 +7,27 @@ ZX Spectrum Pentagon 1024 project with a host Z80 and a NeoGS Z80 firmware core.
 Run `build.bat` from the repository root on Windows. The build uses the
 project's `tools/sjasmplus.exe`.
 
-1. `neogs_sub/build_firmware.asm` builds `neogs_code.bin` and the small
-   first-stage loader `neogs_bootstrap.bin`.
-2. `zx_main/main.asm` builds the host image and exports the TR-DOS files:
-   `proj124.C`, `boot.B`, `neogs.C`, and `neoprog.C`.
-3. The large firmware is assembled in RAM bank 1 as a `SAVETRD` source block;
-   it is **not** embedded in the resident `proj124.C` image.
+1. `neogs_sub/build_firmware.asm` builds the firmware and bootstrap, then
+   packages them into `neoprog.bin` as
+   `[WORD bootstrap_length][bootstrap][firmware]`.
+2. `zx_main/main.asm` builds the host image and exports
+   `proj124.C`, `boot.B`, `neoprog.C`, and `x86task.C`.
+3. The complete NeoGS package is staged in RAM bank 1 only as a `SAVETRD`
+   source block. It is **not** included in the resident `proj124.C` image.
 
 ## Runtime loading model
 
-- The resident host image contains the 183-byte first-stage bootstrap.
-- At startup, `load_neogs_firmware_file` searches for `neogs.C`, fetches its
-  TR-DOS descriptor, checks the exact firmware byte length and sector count,
-  then reads its sectors into host RAM at `#C000`.
-- The GS105a ROM protocol loads the embedded bootstrap at NeoGS RAM `#4000`.
-  The bootstrap receives the firmware from the host buffer and installs it
-  at NeoGS RAM `#0000`.
+- `proj124.C` contains only the resident host Z80 program; no NeoGS bootstrap
+  or firmware bytes are embedded in it.
+- At startup, the existing Stage 2 routine `load_neogs_firmware_file` searches
+  for `neoprog.C`, reads its TR-DOS sectors once into host RAM at `#C000`,
+  and records the exact package length.
+- The existing GS105a handshake streams the bootstrap section to NeoGS RAM
+  `#4000`, starts it, then streams the firmware section to NeoGS RAM `#0000`.
+  Both sections come from that one already-loaded file; no second file loader
+  or second TR-DOS read is introduced.
 - The host proceeds only after the custom firmware returns its ready ACK.
-- `neoprog.C` is a separate six-byte x86 diagnostic payload used by Stage 5;
-  it is not the NeoGS firmware.
+- Stage 5's separate x86 diagnostic fixture is now `x86task.C`.
 
 ## NeoGS-to-host debug channel
 
@@ -64,7 +66,7 @@ the resulting registers and FLAGS.
 The host searches the selected TR-DOS `.C` file, validates its descriptor,
 reads the sectors into `#C000`, transfers the exact byte length through the
 NeoGS DMA window, executes the task, and checks the returned result frame.
-The current `neoprog.C` fixture is a six-byte diagnostic program
+The current `x86task.C` fixture is a six-byte diagnostic program
 (`MOV AX,BBAA / INC AX / NOP / HLT`), not a full x86 operating system.
 
 ### X86T container format, version 1
