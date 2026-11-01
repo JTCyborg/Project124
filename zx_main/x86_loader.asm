@@ -89,7 +89,7 @@ EXECUTE_X86_FILE_STAGE::
         ld      hl, x86_diag_unsupported
         ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
         ld      a, 2
-        ld      de, #0000
+        ld      de, #00CC
         call    neogs_run_diag_case
         jp      c, .diag_extended_fail
 
