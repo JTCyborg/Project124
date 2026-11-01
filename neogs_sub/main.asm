@@ -584,7 +584,7 @@ neo_debug_hex_nibble:
         jp      neo_send_data_byte
 
 neo_debug_dma_prefix:
-        defb    "[NGS DMA] PG1=", 0
+        defb    "[NGS DMA] PG1I=", 0
 neo_debug_map_label:
         defb    " MAP=", 0
 
@@ -629,23 +629,15 @@ neo_send_data_byte:
         ret
 
 ; -------------------------------------------------------------------------
-; Set PG1 using the NeoGS FPGA port decoder.
-; Z80 OUT (C),r places A on address A15:A8, not B from BC.
-; The FPGA enables ports $00-$3F only when A7:A6 are zero, so A MUST be 0
-; during the I/O cycle. The requested page value is sent from D instead.
-; Input: A = PG1 page value. All registers are preserved.
+; Set PG1 through the immediate-port Z80 instruction.
+; OUT (n),A forms the 16-bit I/O address as A:n. Here n=#21, so the
+; low six address bits decode PG1. The FPGA port-enable logic checks
+; address bits A7:A6 (from n), not the high byte containing page data.
+; Thus #44 and #03 are both valid data values for this port.
+; Input: A = PG1 page value. Preserves A and all other registers.
 ; -------------------------------------------------------------------------
 neo_set_pg1:
-        push    af
-        push    bc
-        push    de
-        ld      d, a
-        xor     a
-        ld      bc, PG1
-        out     (c), d
-        pop     de
-        pop     bc
-        pop     af
+        out     (PG1), a
         ret
 
 neo_command:       db 0
