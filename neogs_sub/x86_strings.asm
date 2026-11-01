@@ -81,7 +81,7 @@ x86_string_movs:
         ret     c
         call    x86_string_advance_si
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_cmps:
         call    x86_string_read_source
@@ -93,7 +93,7 @@ x86_string_cmps:
         call    x86_string_compare
         call    x86_string_advance_si
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_stos:
         ld      a, (x86_string_opcode)
@@ -112,7 +112,7 @@ x86_string_stos:
         call    x86_string_write_dest
         ret     c
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_lods:
         call    x86_string_read_source
@@ -132,7 +132,7 @@ x86_string_lods:
         call    x86_alu_write_reg16
 .advance:
         call    x86_string_advance_si
-        jp      x86_real_next
+        ret
 
 x86_string_scas:
         call    x86_string_read_dest
@@ -153,7 +153,7 @@ x86_string_scas:
         ld      (x86_string_value), hl
         call    x86_string_compare
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 ; Read DS:SI or the active source-segment override. OUT HL=value.
 x86_string_read_source:
