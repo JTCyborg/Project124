@@ -450,21 +450,10 @@ x86_real_mov_memory_test:
         ld      hl, #1D33
         jp      .fail
 .fail_di:
-        ; Diagnostic: inspect the source word independently. This separates
-        ; a failed DS:0206 write/read from a failed MOV destination register.
-        ld      hl, (x86_reg_ds)
-        ld      (x86_mem_segment), hl
-        ld      hl, #0206
-        ld      (x86_mem_offset), hl
-        call    x86_mem_read16
-        jr      c, .fail_di_memory_error
-        ld      (saved_x86_ax), hl
-        ld      a, 11
-        ld      (x86_exit_status), a
-        scf
-        ret
-.fail_di_memory_error:
-        ld      hl, #EEEE
+        ; Diagnostic: expose the value captured from DX by the preceding
+        ; MOV [0206],DX. The memory readback is currently known to be zero.
+        ; This distinguishes a bad source value from a failed memory write.
+        ld      hl, (x86_mov_value)
         ld      (saved_x86_ax), hl
         ld      a, 11
         ld      (x86_exit_status), a
