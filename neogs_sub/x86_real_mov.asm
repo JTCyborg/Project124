@@ -410,11 +410,13 @@ x86_real_mov_addressing_test:
 
         ; Table records are segment, offset, expected word (little-endian).
         ld      hl, x86_mov_address_test_table
+        ld      (x86_mov_address_test_ptr), hl
         ld      a, x86_mov_address_test_count
         ld      (x86_mov_address_test_remaining), a
         xor     a
         ld      (x86_mov_address_test_index), a
 .verify_loop:
+        ld      hl, (x86_mov_address_test_ptr)
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
