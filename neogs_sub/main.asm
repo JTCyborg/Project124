@@ -107,6 +107,8 @@ main_loop:
 ; reset vector. Leave CBIT asserted: the ROM's cold-start path clears it when
 ; the standard firmware is ready, so the host's long wait is a real handshake.
 command_return_to_gsrom:
+        ld      a, 3
+        out     (PG1), a                ; restore trampoline's physical page
         jp      ROM_RETURN_TRAMPOLINE_ADDR
 
 command_reset:
