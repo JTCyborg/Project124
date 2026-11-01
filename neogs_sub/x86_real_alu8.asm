@@ -1243,46 +1243,74 @@ x86_real_logic_memory_test:
         jp      nz, .fail_register
 
         ; Byte DS/SS/ES/CS results and TEST no-writeback.
+        ; Each verification branch has a unique AX detail code. This keeps
+        ; the diagnostic useful when a logical-memory regression reaches the
+        ; final readback stage but one specific byte/word is incorrect.
         ld      hl, #1000
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v40
         call    x86_mem_read8
-        jp      c, .fail_verify
+        jp      c, .fail_v40
         cp      #13
-        jp      nz, .fail_verify
+        jp      nz, .fail_v40
         ld      hl, #7000
         ld      (x86_mem_segment), hl
         ld      hl, #0100
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v41
         call    x86_mem_read8
-        jp      c, .fail_verify
+        jp      c, .fail_v41
         cp      #FF
-        jp      nz, .fail_verify
+        jp      nz, .fail_v41
         ld      hl, #3000
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v42
         call    x86_mem_read8
-        jp      c, .fail_verify
+        jp      c, .fail_v42
         cp      #23
-        jp      nz, .fail_verify
+        jp      nz, .fail_v42
         ld      hl, #0800
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v43
         call    x86_mem_read8
-        jp      c, .fail_verify
+        jp      c, .fail_v43
         cp      #43
-        jp      nz, .fail_verify
+        jp      nz, .fail_v43
         ld      hl, #1000
         ld      (x86_mem_segment), hl
         ld      hl, #0100
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v44
         call    x86_mem_read8
-        jp      c, .fail_verify
+        jp      c, .fail_v44
         cp      #63
-        jp      nz, .fail_verify
+        jp      nz, .fail_v44
 
         ; Word OR, XOR, AND results; final TEST must not change DS:0300.
         ld      hl, #1000
@@ -1290,31 +1318,31 @@ x86_real_logic_memory_test:
         ld      hl, #0300
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_verify
+        jp      c, .fail_v45
         ld      de, #10F0
         or      a
         sbc     hl, de
-        jp      nz, .fail_verify
+        jp      nz, .fail_v45
         ld      hl, #3000
         ld      (x86_mem_segment), hl
         ld      hl, #0300
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_verify
+        jp      c, .fail_v46
         ld      de, #AA5A
         or      a
         sbc     hl, de
-        jp      nz, .fail_verify
+        jp      nz, .fail_v46
         ld      hl, #1000
         ld      (x86_mem_segment), hl
         ld      hl, #0302
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_verify
+        jp      c, .fail_v47
         ld      de, #00F0
         or      a
         sbc     hl, de
-        jp      nz, .fail_verify
+        jp      nz, .fail_v47
         ld      hl, #1F31
         ld      (saved_x86_ax), hl
         xor     a
@@ -1335,6 +1363,30 @@ x86_real_logic_memory_test:
         jp      .fail
 .fail_verify:
         ld      hl, #1F34
+        jr      .fail
+.fail_v40:
+        ld      hl, #1F40             ; DS:0200 byte OR
+        jr      .fail
+.fail_v41:
+        ld      hl, #1F41             ; SS:0100 byte XOR
+        jr      .fail
+.fail_v42:
+        ld      hl, #1F42             ; ES:0200 byte OR
+        jr      .fail
+.fail_v43:
+        ld      hl, #1F43             ; CS:0200 byte OR
+        jr      .fail
+.fail_v44:
+        ld      hl, #1F44             ; DS override on BP-based byte OR
+        jr      .fail
+.fail_v45:
+        ld      hl, #1F45             ; DS:0300 word OR / final TEST no-write
+        jr      .fail
+.fail_v46:
+        ld      hl, #1F46             ; ES:0300 word XOR
+        jr      .fail
+.fail_v47:
+        ld      hl, #1F47             ; DS:0302 word AND
 .fail:
         ld      (saved_x86_ax), hl
         ld      a, 11
