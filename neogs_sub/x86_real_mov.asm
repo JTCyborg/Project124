@@ -438,39 +438,40 @@ x86_real_mov_memory_test:
         sbc     hl, de
         jp      nz, .fail_si
 
-        ; Verify DS:0200, DS:0004 and DS:0206 word writes.
+        ; Verify each memory destination independently. Distinct failure
+        ; codes identify the exact location without changing test semantics.
         ld      hl, 0
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_memory
+        jp      c, .fail_mem_0
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_memory
+        jp      nz, .fail_mem_0
 
         ld      hl, 0
         ld      (x86_mem_segment), hl
         ld      hl, #0004
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_memory
+        jp      c, .fail_mem_1
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_memory
+        jp      nz, .fail_mem_1
 
         ld      hl, 0
         ld      (x86_mem_segment), hl
         ld      hl, #0206
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_memory
+        jp      c, .fail_mem_2
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_memory
+        jp      nz, .fail_mem_2
 
         ; BP-based forms must default to SS rather than DS.
         ld      hl, #7000
@@ -478,11 +479,11 @@ x86_real_mov_memory_test:
         ld      hl, #0100
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jp      c, .fail_memory
+        jp      c, .fail_mem_3
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_memory
+        jp      nz, .fail_mem_3
 
         ld      hl, #1D01
         ld      (saved_x86_ax), hl
@@ -514,6 +515,18 @@ x86_real_mov_memory_test:
         ret
 .fail_si:
         ld      hl, #1D35
+        jp      .fail
+.fail_mem_0:
+        ld      hl, #1D40
+        jp      .fail
+.fail_mem_1:
+        ld      hl, #1D41
+        jp      .fail
+.fail_mem_2:
+        ld      hl, #1D42
+        jp      .fail
+.fail_mem_3:
+        ld      hl, #1D43
         jp      .fail
 .fail_memory:
         ld      hl, #1D04
