@@ -241,6 +241,10 @@ x86_real_execute:
         ld      hl, X86_REAL_STEP_LIMIT
         ld      (x86_real_steps), hl
 x86_real_next:
+        ; A segment override applies to exactly one following instruction.
+        xor     a
+        ld      (x86_real_seg_override_active), a
+x86_real_dispatch:
         ld      hl, (x86_real_steps)
         ld      a, h
         or      l
@@ -250,6 +254,17 @@ x86_real_next:
 
         call    x86_real_fetch8
         ret     c
+
+        ; 8086 segment-override prefixes. Multiple prefixes are accepted;
+        ; the last segment prefix before the instruction takes effect.
+        cp      #26
+        jp      z, x86_real_prefix_es
+        cp      #2E
+        jp      z, x86_real_prefix_cs
+        cp      #36
+        jp      z, x86_real_prefix_ss
+        cp      #3E
+        jp      z, x86_real_prefix_ds
 
         cp      #90
         jp      z, x86_real_nop
@@ -383,6 +398,24 @@ x86_real_next:
         ld      (x86_exit_status), a
         scf
         ret
+
+; Prefix handlers continue dispatch without consuming a second step.
+x86_real_prefix_es:
+        ld      hl, (x86_reg_es)
+        jp      x86_real_prefix_set
+x86_real_prefix_cs:
+        ld      hl, (x86_reg_cs)
+        jp      x86_real_prefix_set
+x86_real_prefix_ss:
+        ld      hl, (x86_reg_ss)
+        jp      x86_real_prefix_set
+x86_real_prefix_ds:
+        ld      hl, (x86_reg_ds)
+x86_real_prefix_set:
+        ld      (x86_real_seg_override), hl
+        ld      a, 1
+        ld      (x86_real_seg_override_active), a
+        jp      x86_real_dispatch
 
 x86_real_nop:
         jp      x86_real_next
@@ -1017,6 +1050,8 @@ x86_real_reg_ptr: dw 0
 x86_real_result: dw 0
 x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
+x86_real_seg_override_active: db 0
+x86_real_seg_override: dw 0
 
 x86_guest_main_image:
         db #B8,#00,#00             ; MOV AX,0000
