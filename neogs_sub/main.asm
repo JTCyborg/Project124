@@ -106,12 +106,12 @@ main_loop:
 ; the standard firmware is ready, so the host's long wait is a real handshake.
 command_return_to_gsrom:
         ld      a, 3
-        out     (PG1), a                ; restore trampoline's physical page
+        call    neo_set_pg1             ; restore trampoline's physical page
         jp      ROM_RETURN_TRAMPOLINE_ADDR
 
 command_reset:
         ld      a, #03
-        out     (PG1), a                ; ensure firmware page 1 is visible
+        call    neo_set_pg1             ; ensure firmware page 1 is visible
         xor     a
         ld      (neo_dma_error), a
         ld      (x86_exit_status), a
@@ -137,8 +137,7 @@ command_load_x86:
         ; PG1 is a direct page register: value #44 maps physical page 68.
         ; The DMA engine writes physical $110000; Z80 sees the same bytes at $4000.
         ld      a, #44
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
 
         ; Robust PG1 test: use different markers in both physical pages.
         ; Save and restore the original byte at $4000 in each page.
@@ -152,15 +151,13 @@ command_load_x86:
 
         ; Save original byte from normal page #03.
         ld      a, #03
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (X86_DMA_HEADER_ADDR)
         ld      (neo_pg1_saved_page03), a
 
         ; Select page #44 and save its original byte.
         ld      a, #44
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (X86_DMA_HEADER_ADDR)
         ld      (neo_pg1_saved_page44), a
 
@@ -177,8 +174,7 @@ command_load_x86:
 .pg1_test_page03:
         ; Switch to page #03, write a different marker and verify it.
         ld      a, #03
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, #5A
         ld      (X86_DMA_HEADER_ADDR), a
         ld      a, (X86_DMA_HEADER_ADDR)
@@ -191,8 +187,7 @@ command_load_x86:
 .pg1_test_check_page44:
         ; Page #44 must retain #A5 despite the write to page #03.
         ld      a, #44
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
         jr      nz, .pg1_test_check_page03
@@ -203,8 +198,7 @@ command_load_x86:
 .pg1_test_check_page03:
         ; Page #03 must retain #5A after switching away and back.
         ld      a, #03
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #5A
         jr      nz, .pg1_test_restore_pages
@@ -215,14 +209,12 @@ command_load_x86:
 .pg1_test_restore_pages:
         ; Restore the original page #44 byte, then the original page #03 byte.
         ld      a, #44
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (neo_pg1_saved_page44)
         ld      (X86_DMA_HEADER_ADDR), a
 
         ld      a, #03
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      a, (neo_pg1_saved_page03)
         ld      (X86_DMA_HEADER_ADDR), a
 
@@ -232,8 +224,7 @@ command_load_x86:
 
         ; On failure keep the standard page selected and restore trampoline.
         ld      a, #03
-        ld      bc, PG1
-        out     (c), a
+        call    neo_set_pg1
         ld      hl, rom_return_trampoline_code
         ld      de, ROM_RETURN_TRAMPOLINE_ADDR
         ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
@@ -275,7 +266,7 @@ command_load_x86:
         out     (DMA_CST), a
         out     (CLRCBIT), a
         ld      a, #03
-        out     (PG1), a                ; restore page 1 on DMA timeout
+        call    neo_set_pg1             ; restore page 1 on DMA timeout
         ld      a, 1
         ld      (neo_dma_error), a
         ld      a, 3
@@ -297,7 +288,7 @@ neogs_dma_handler_end:
 command_run_x86:
         call    execute_neogs_x86
         ld      a, #03
-        out     (PG1), a                ; restore firmware/trampoline page
+        call    neo_set_pg1             ; restore firmware/trampoline page
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -488,7 +479,7 @@ command_bios_video_test:
 command_run_x86_real:
         call    execute_neogs_x86_real
         ld      a, 3
-        out     (PG1), a                ; restore physical firmware page 1
+        call    neo_set_pg1             ; restore physical firmware page 1
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -635,6 +626,26 @@ neo_send_data_byte:
 
 .tx_host_read:
         or      a
+        ret
+
+; -------------------------------------------------------------------------
+; Set PG1 using the NeoGS FPGA port decoder.
+; Z80 OUT (C),r places A on address A15:A8, not B from BC.
+; The FPGA enables ports $00-$3F only when A7:A6 are zero, so A MUST be 0
+; during the I/O cycle. The requested page value is sent from D instead.
+; Input: A = PG1 page value. All registers are preserved.
+; -------------------------------------------------------------------------
+neo_set_pg1:
+        push    af
+        push    bc
+        push    de
+        ld      d, a
+        xor     a
+        ld      bc, PG1
+        out     (c), d
+        pop     de
+        pop     bc
+        pop     af
         ret
 
 neo_command:       db 0
