@@ -99,6 +99,7 @@ NGS_RESULT_SIGNATURE   EQU #A5
 NGS_STATUS_CBIT EQU M_CBIT
 NGS_STATUS_DBIT EQU M_DBIT
 
-; The x86 task is executed in logical $5002..$7FFF (12 KB window less header).
-NGS_X86_DMA_WINDOW_SIZE EQU #3000
-NGS_X86_MAX_CODE_SIZE   EQU #2FFE
+; The x86 DMA frame is mapped temporarily at logical $4000..$7FFF (page 68).
+; The two-byte length header leaves #3FFE bytes for the guest image.
+NGS_X86_DMA_WINDOW_SIZE EQU #4000
+NGS_X86_MAX_CODE_SIZE   EQU #3FFE
