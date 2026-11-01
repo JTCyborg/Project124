@@ -20,6 +20,9 @@
         INCLUDE "bootstrap.asm"
         ASSERT neogs_bootstrap_start = $4000
         ASSERT neogs_bootstrap_end <= $7FFF
+; The host keeps the first TR-DOS sector in its reusable #C000 buffer while
+; it installs and starts this bootstrap. Header + bootstrap must fit in 256 bytes.
+        ASSERT neogs_bootstrap_end - neogs_bootstrap_start <= 254
         SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
         SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
 
