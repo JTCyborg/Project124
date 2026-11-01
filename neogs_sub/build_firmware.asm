@@ -8,9 +8,10 @@
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; Low RAM is used by the firmware and its stack. Keep the image below $3000;
-; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
-        ASSERT neogs_firmware_end <= $3000
+; Firmware occupies $0000-$33FF at most. Keep at least $0C00 bytes below SP=$3FFF
+; for the Z80 stack; x86 DMA payload remains at $5000.
+        ASSERT neogs_firmware_end <= $3400
+        ASSERT $4000 - neogs_firmware_end >= $0C00
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 
