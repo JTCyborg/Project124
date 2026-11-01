@@ -140,50 +140,97 @@ command_load_x86:
         ld      bc, PG1
         out     (c), a
 
-        ; Three independent PG1 tests:
-        ; bit 0: page #44 accepts a write/read at $4000
-        ; bit 1: switching to page #03 isolates that marker
-        ; bit 2: switching back to page #44 preserves the marker
+        ; Robust PG1 test: use different markers in both physical pages.
+        ; Save and restore the original byte at $4000 in each page.
+        ; MAP bits:
+        ; bit 0: page #44 write/read (#A5)
+        ; bit 1: page #03 write/read (#5A)
+        ; bit 2: page #44 still contains #A5 after writing page #03
+        ; bit 3: page #03 still contains #5A after returning from page #44
         xor     a
         ld      (neo_pg1_map_verified), a
 
-        ld      a, #A5
-        ld      (X86_DMA_HEADER_ADDR), a
-        ld      a, (X86_DMA_HEADER_ADDR)
-        cp      #A5
-        jr      nz, .pg1_test_switch_away
-        ld      a, (neo_pg1_map_verified)
-        or      1
-        ld      (neo_pg1_map_verified), a
-
-.pg1_test_switch_away:
+        ; Save original byte from normal page #03.
         ld      a, #03
         ld      bc, PG1
         out     (c), a
         ld      a, (X86_DMA_HEADER_ADDR)
+        ld      (neo_pg1_saved_page03), a
+
+        ; Select page #44 and save its original byte.
+        ld      a, #44
+        ld      bc, PG1
+        out     (c), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        ld      (neo_pg1_saved_page44), a
+
+        ; Write and verify marker on page #44.
+        ld      a, #A5
+        ld      (X86_DMA_HEADER_ADDR), a
+        ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
-        jr      z, .pg1_test_switch_back
+        jr      nz, .pg1_test_page03
+        ld      a, (neo_pg1_map_verified)
+        or      1
+        ld      (neo_pg1_map_verified), a
+
+.pg1_test_page03:
+        ; Switch to page #03, write a different marker and verify it.
+        ld      a, #03
+        ld      bc, PG1
+        out     (c), a
+        ld      a, #5A
+        ld      (X86_DMA_HEADER_ADDR), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        cp      #5A
+        jr      nz, .pg1_test_check_page44
         ld      a, (neo_pg1_map_verified)
         or      2
         ld      (neo_pg1_map_verified), a
 
-.pg1_test_switch_back:
+.pg1_test_check_page44:
+        ; Page #44 must retain #A5 despite the write to page #03.
         ld      a, #44
         ld      bc, PG1
         out     (c), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
-        jr      nz, .pg1_test_restore_normal
+        jr      nz, .pg1_test_check_page03
         ld      a, (neo_pg1_map_verified)
         or      4
         ld      (neo_pg1_map_verified), a
 
+.pg1_test_check_page03:
+        ; Page #03 must retain #5A after switching away and back.
+        ld      a, #03
+        ld      bc, PG1
+        out     (c), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        cp      #5A
+        jr      nz, .pg1_test_restore_pages
         ld      a, (neo_pg1_map_verified)
-        cp      7
+        or      8
+        ld      (neo_pg1_map_verified), a
+
+.pg1_test_restore_pages:
+        ; Restore the original page #44 byte, then the original page #03 byte.
+        ld      a, #44
+        ld      bc, PG1
+        out     (c), a
+        ld      a, (neo_pg1_saved_page44)
+        ld      (X86_DMA_HEADER_ADDR), a
+
+        ld      a, #03
+        ld      bc, PG1
+        out     (c), a
+        ld      a, (neo_pg1_saved_page03)
+        ld      (X86_DMA_HEADER_ADDR), a
+
+        ld      a, (neo_pg1_map_verified)
+        cp      15
         jr      z, .pg1_map_test_done
 
-.pg1_test_restore_normal:
-        ; On any failed test, restore the normal page and trampoline.
+        ; On failure keep the standard page selected and restore trampoline.
         ld      a, #03
         ld      bc, PG1
         out     (c), a
@@ -594,6 +641,8 @@ neo_command:       db 0
 neo_tx_byte:       db 0
 neo_dma_error:     db 0
 neo_pg1_map_verified: db 0
+neo_pg1_saved_page03: db 0
+neo_pg1_saved_page44: db 0
 saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
 
