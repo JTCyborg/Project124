@@ -144,12 +144,29 @@ command_load_x86:
         ; by the host's length prefix once DMA starts.
         ld      a, #A5
         ld      (X86_DMA_HEADER_ADDR), a
+
+        ; Switch away and back: this distinguishes page 68 from the
+        ; trampoline page. A simple write/read without paging would not.
+        ld      a, #03
+        out     (PG1), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
-        jr      z, .pg1_map_verified
+        jr      z, .pg1_map_failed
 
-        ; PG1 did not expose the requested page. Restore the trampoline
-        ; because the failed mapping may have left the write in page 3.
+        ld      a, #44
+        out     (PG1), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        cp      #A5
+        jr      nz, .pg1_map_failed
+
+.pg1_map_verified:
+        ld      a, 1
+        ld      (neo_pg1_map_verified), a
+        jr      .pg1_map_test_done
+
+.pg1_map_failed:
+        ; Restore normal page and rewrite the trampoline in case the
+        ; failed PG1 switch caused the marker to overwrite its first byte.
         ld      a, #03
         out     (PG1), a
         ld      hl, rom_return_trampoline_code
@@ -157,11 +174,6 @@ command_load_x86:
         ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
         ldir
         ld      a, 0
-        ld      (neo_pg1_map_verified), a
-        jr      .pg1_map_test_done
-
-.pg1_map_verified:
-        ld      a, 1
         ld      (neo_pg1_map_verified), a
 
 .pg1_map_test_done:
