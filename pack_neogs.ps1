@@ -19,10 +19,10 @@ if ($Bootstrap.Length -eq 0 -or $Bootstrap.Length -gt 254) {
 }
 # Must match neogs_sub/build_firmware.asm and the runtime checks in
 # neogs_sub/bootstrap.asm and zx_main/neogs_driver.asm.
-# Firmware must fit below #3400; #3400-#3FFE is reserved for the Z80 stack
+# Firmware must fit below #3800; #3800-#3FFE is reserved for at least 2 KiB of Z80 stack
 # in fixed WIN0. Keep this check aligned with build_firmware.asm's ASSERT.
-if ($Firmware.Length -eq 0 -or $Firmware.Length -gt 0x3400) {
-    throw "Invalid NeoGS firmware length: $($Firmware.Length) (maximum 13312 bytes / 0x3400)"
+if ($Firmware.Length -eq 0 -or $Firmware.Length -gt 0x3800) {
+    throw "Invalid NeoGS firmware length: $($Firmware.Length) (maximum 14336 bytes / 0x3800)"
 }
 
 $PackageLength = 2 + $Bootstrap.Length + $Firmware.Length

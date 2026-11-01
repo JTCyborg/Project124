@@ -2,7 +2,7 @@
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
+; the physical-memory backend. Supported: IN/OUT byte/word, NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; near/far CALL and RET, far JMP, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
 ; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
@@ -194,6 +194,11 @@ x86_real_mode_test:
         ; four segment overrides and word access across offset FFFFh.
         call    x86_real_mov_addressing_test
         ret     c
+
+        ; CPU-I/O-02: all eight immediate/DX IN/OUT opcode forms.
+        call    x86_real_io_test
+        ret     c
+
 
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
@@ -423,6 +428,16 @@ x86_real_dispatch:
         cp      #E4
         jp      c, x86_real_loop_short
 .not_loop_short:
+        cp      #E4
+        jp      c, .not_io_immediate
+        cp      #E8
+        jp      c, x86_real_io_instruction
+.not_io_immediate:
+        cp      #EC
+        jp      c, .not_io_dx
+        cp      #F0
+        jp      c, x86_real_io_instruction
+.not_io_dx:
         cp      #E8
         jp      z, x86_real_call_near
         cp      #C3

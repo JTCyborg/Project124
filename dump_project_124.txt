@@ -3720,7 +3720,7 @@ File_Y: DB 0
 ; MEMORY MAP / BOOT:
 ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Current firmware image is kept below $3400; the stack grows down from $3FFE.
+; Current firmware image is kept below $3800; the stack grows down from $3FFE, reserving at least $0800 bytes for stack.
 ; Keep the active Z80 stack in fixed WIN0: x86_mem_map_addr remaps WIN3 via MPAGEX.
 ; WIN1 remains on the documented default physical 16 KiB page #03.
 ; The DMA frame at logical $5000 therefore maps to physical $00D000.
@@ -4277,6 +4277,7 @@ rom_return_trampoline_end:
         INCLUDE "x86_real_alu.asm"
         INCLUDE "x86_real_alu8.asm"
         INCLUDE "x86_real_mov.asm"
+        INCLUDE "x86_io.asm"
         INCLUDE "bios/bios_video.asm"
 
 ; The return trampoline occupies $4000; the DMA frame starts at $5000.
@@ -5578,7 +5579,7 @@ x86_int_target_cs: dw 0
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
+; the physical-memory backend. Supported: IN/OUT byte/word, NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; near/far CALL and RET, far JMP, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
 ; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
@@ -5770,6 +5771,11 @@ x86_real_mode_test:
         ; four segment overrides and word access across offset FFFFh.
         call    x86_real_mov_addressing_test
         ret     c
+
+        ; CPU-I/O-02: all eight immediate/DX IN/OUT opcode forms.
+        call    x86_real_io_test
+        ret     c
+
 
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
@@ -5999,6 +6005,16 @@ x86_real_dispatch:
         cp      #E4
         jp      c, x86_real_loop_short
 .not_loop_short:
+        cp      #E4
+        jp      c, .not_io_immediate
+        cp      #E8
+        jp      c, x86_real_io_instruction
+.not_io_immediate:
+        cp      #EC
+        jp      c, .not_io_dx
+        cp      #F0
+        jp      c, x86_real_io_instruction
+.not_io_dx:
         cp      #E8
         jp      z, x86_real_call_near
         cp      #C3
@@ -10859,10 +10875,10 @@ x86_bios_video_test_image_end:
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; Firmware code is linked at $0000 and must end at or below $3400.
+; Firmware code is linked at $0000 and must end at or below $3800.
 ; The Z80 stack starts at $3FFE in fixed WIN0; do not place it in remappable WIN3.
         ASSERT neogs_firmware_end <= $4000
-        ASSERT neogs_firmware_end <= $3400 ; reserve $0C00 for fixed-WIN0 Z80 stack
+        ASSERT neogs_firmware_end <= $3800 ; reserve at least $0800 for fixed-WIN0 Z80 stack
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
 
