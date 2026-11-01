@@ -60,6 +60,16 @@
 
 ## Журнал изменений
 
+### 2026-11-01 — аудит active 8086 core и уточнение memory map комментария
+
+- Проверен порядок включения в `neogs_sub/main.asm`: активная команда `CMD_RUN_X86_REAL` вызывает `x86_real_mode_test`; активный decoder/step loop находится в `x86_real_mode.asm`, затем подключаются `x86_real_alu.asm`, `x86_real_alu8.asm`, `x86_real_mov.asm` и BIOS video. Не следует путать его с legacy `x86_interpreter.asm`.
+- Проверены реальные заголовки модулей: 16-bit ALU реализует ADD/ADC/SBB/SUB/CMP register+memory ModR/M; byte ALU покрывает ADD/ADC/SBB/SUB/CMP, logical/TEST subsets; MOV покрывает 88h–8Bh и 16-bit EA forms, displacement и segment overrides.
+- Сверка dispatcher с PCem показывает, что наиболее полезный следующий этап — не переписывание ядра, а последовательное расширение существующего dispatcher и общих operand/flags helpers. Первоочередные группы-кандидаты: immediate ALU (04/05 и 80/81/83), XCHG/LEA, сегментные MOV/PUSH/POP, direct accumulator memory MOV, string instructions + REP, shifts/rotates, MUL/DIV и flag-control.
+- `PCem/808x.c` содержит 8086/8088 prefetch queue и cycle accounting. Эти детали не нужно автоматически переносить в Project124: сначала функциональная семантика инструкций и корректные FLAGS/EA/stack, timing/prefetch — отдельный будущий уровень точности.
+- В `neogs_sub/build_firmware.asm` исправлен устаревший комментарий, который ошибочно указывал стек в верхнем WIN3; теперь документация соответствует фактическому `SP=$3FFE` в fixed WIN0 и ASSERT `neogs_firmware_end <= $3400`.
+- Изменение только документации и комментариев; opcode implementation не менялась, runtime regression не запускался.
+
+
 ### 2026-11-01 — перенос отложенных задач и начало аудита PCem 8086 reference
 
 - По решению пользователя отложены три задачи: потоковый стресс-тест пакета ≥48 КБ с пересечением 16/32 КБ; отдельная трассировка far JMP/CALL/RETF с CS:IP; CRC/контрольная сумма содержимого пакета. Добавлены как FW-09, CPU-03 и FW-10 со статусом ОТЛОЖЕНО; ближайший план больше не ставит их перед развитием CPU.
