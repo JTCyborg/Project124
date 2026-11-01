@@ -311,10 +311,10 @@ x86_real_alu8_update_flags:
         and     #0F
         ld      c, a
         ld      a, (x86_alu8_carry_in)
-        or      a
-        jr      z, .subtract_no_borrow_in
-        inc     c
-.subtract_no_borrow_in:
+        add     a, c
+        cp      #10
+        jr      nc, .set_af
+        ld      c, a
         ld      a, b
         cp      c
         jr      nc, .overflow
