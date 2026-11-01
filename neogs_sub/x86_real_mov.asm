@@ -453,7 +453,7 @@ x86_real_mov_memory_test:
 
         ld      hl, 0
         ld      (x86_mem_segment), hl
-        ld      hl, #0004
+        ld      hl, #0000
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
         jp      c, .fail_mem_1
