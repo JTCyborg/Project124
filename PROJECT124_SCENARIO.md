@@ -476,3 +476,27 @@
 2. Перед реализацией REP проверить текущий остаток firmware до лимита `#4000` и оценить размер/архитектуру prefix decoder.
 3. Реализовывать REP/REPE/REPNE отдельным этапом с CX, ZF, DF, source segment override и ограничением числа итераций на один execution step; добавить regression для CX=0, CX=1, повторов, остановки REPE/REPNE по ZF и корректного SI/DI/CX.
 4. Не смешивать эту работу с новыми BIOS-функциями или другими подсистемами до завершения и runtime-проверки REP.
+
+
+### 2026-11-02 — повторный runtime прогон базовой регрессии
+
+Пользователь повторно запустил тот же пакет `neoprog.C` длиной `#3BD4` (60 секторов). Второй запуск независимо подтвердил тот же полный результат:
+
+- IPC HLT: PASS, AX=#BBAB.
+- Пять interpreter edge cases: PASS.
+- 64-page RAM + word access + segment/offset wrap: PASS.
+- IVT/BDA и INT Stage 2A: PASS.
+- Полный CPU regression: PASS.
+- CPU-I/O-02: PASS.
+- CPU-STR-01: PASS.
+- Guest INT 20h handler + IRET: PASS.
+- BIOS INT 10h mode/cursor/teletype и 42-column stream: PASS.
+- Stage 5 TR-DOS file load и DMA completion: PASS; result status/AX=`0000 BBAB`.
+- STACK-01: PASS; 128-byte WIN2 guard intact, stack stayed above #B880.
+- Финальный `[HALT]`: pipeline executed entirely; system suspended.
+
+Это второй успешный runtime прогон одного и того же CI-пакета, подтверждающий воспроизводимость базовой регрессии. Сборка не менялась; новых исходных изменений по результату этого прогона не требуется. Статусы CPU-I/O-02, CPU-STR-01 и STACK-01 остаются закрытыми как Runtime PASS.
+
+### Примечание к следующему этапу
+
+Следующая работа остаётся REP/REPE/REPNE. Перед кодированием требуется измерить актуальный размер firmware из исходников/CI и оценить бюджет до лимита `#4000`. Реализацию и тесты префиксов вести отдельным этапом, сохраняя эту сборку как последнюю подтверждённую регрессионную точку.
