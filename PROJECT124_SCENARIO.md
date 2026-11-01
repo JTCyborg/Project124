@@ -46,8 +46,8 @@
 | CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
 | CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** |
 | CPU-I/O-02 | Сборка и runtime-регрессия гостевых IN/OUT | **Runtime PASS 2026-11-02 (подтверждён по общему успешному результату self-test)** | Пять сценариев выполнены внутри `x86_real_mode_test`; явный host marker добавлен отдельным коммитом после запуска |
-| STACK-01 | Z80 stack relocation + guard | **Source + CI build PASS; runtime pending** | Stack moved to fixed WIN2/page #01 (SP=#BFFE); 128-byte canary #B800..#B87F; check after Stage 5 |
-| CPU-STR-01 | MOVS/CMPS/STOS/LODS/SCAS byte/word, no REP | **Source + CI build PASS; runtime pending** | Ten opcode forms, source segment override, DF +/- and CMPS/SCAS FLAGS regression | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
+| STACK-01 | Z80 stack relocation + guard | **Runtime PASS 2026-11-02** | WIN2 guard #B800..#B87F intact; stack stayed above #B880 after Stage 5. Stack moved to fixed WIN2/page #01 (SP=#BFFE); 128-byte canary #B800..#B87F; check after Stage 5 |
+| CPU-STR-01 | MOVS/CMPS/STOS/LODS/SCAS byte/word, no REP | **Runtime PASS 2026-11-02** | All ten forms; source segment override; DF +/-; compare FLAGS checkpoints passed. Ten opcode forms, source segment override, DF +/- and CMPS/SCAS FLAGS regression | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
 
 ## Обязательные критерии завершения потоковой загрузки
 
@@ -437,3 +437,98 @@
 - Commits: `6c22bb801c2fb59d257015e653a165b07368bd28` (разделение SI/DI/FLAGS второго checkpoint) и `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` (разделение AX первого/второго checkpoint).
 - Изменена только диагностика self-test; реализация string instructions не менялась. GitHub Actions run `41362495956` для commit `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` завершился success: Build, Verify и Upload artifacts — PASS. Artifact ID `13105633891` (`project124-build`): firmware `neogs_code.bin` 15 118 байт (`#3B0E`, запас 1 266 байт до `#4000`), bootstrap 196 байт (`#00C4`), package `neoprog.bin` 15 316 байт (`#3BD4`, 60 TR-DOS sectors), `disk_A.trd` 655 360 байт. Это подтверждает сборку/упаковку, но не runtime. Сценарий обновлён после получения runtime лога; свежий пакет готов для следующего запуска. Следующий лог должен различить первый AX checkpoint (`1D01`), второй AX mismatch (фактический AX), второй SI mismatch (фактический SI), второй DI mismatch (фактический DI) и второй FLAGS mismatch (фактические FLAGS).
 - CPU-STR-01 и STACK-01 остаются runtime NOT PASS; REP/REPE/REPNE по-прежнему заблокированы до полного прохождения regression.
+
+
+### 2026-11-02 — fourth CPU-STR runtime: обнаружен неверный expected FLAGS, исправлен тест
+
+- User ran package `neoprog.bin #3BD4` (60 sectors). All stages through INT Stage 2A passed. Guest INT 20h returned `status/detail = 000D 0346`.
+- Новый обработчик однозначно показывает, что сбой — FLAGS на втором string checkpoint (после LODSW/STOSB/STOSW/CMPSB), фактические FLAGS=`#0346`.
+- Это не дефект реализации сохранения FLAGS. Начальное FLAGS=`#0302` содержит IF=1. Общий `x86_alu_update_flags` намеренно сохраняет control bits, включая IF; результат CMPSB должен быть `#0346`, а не `#0246`. Аналогично ожидаемые значения последующих compare checkpoints должны сохранять IF: CMPSW `#0312`, SCASB `#0346`, SCASW `#0302`.
+- Исправлены четыре ожидаемых FLAGS значения в regression и комментарии. Изменён только self-test expected state; код выполнения CMPS/SCAS и общий ALU не менялся. Source commit: `1dc37b59bf2d19fb0e1eec314c563889be7c848e`.
+- Следующая сборка должна проверить, пройдёт ли второй checkpoint и выявятся ли более поздние проверки. CI/runtime для нового commit пока не подтверждены. CPU-STR и STACK остаются runtime NOT PASS; REP остаётся заблокирован.
+
+
+### 2026-11-02 — CPU-STR-01 и STACK-01: полный runtime PASS
+
+Пользовательский runtime log для пакета `neoprog.C` длиной `#3BD4` (60 секторов) подтверждает завершение полного pipeline до штатного `[HALT]`.
+
+Подтверждено непосредственно по runtime markers:
+
+- `[CPU-I/O] PASS`: IN/OUT E4-E7 и EC-EF; immediate port и DX; byte/word; полный DX; FLAGS сохранены.
+- `[CPU-STR] PASS`: MOVS/CMPS/STOS/LODS/SCAS byte/word; segment override; DF +/-; FLAGS.
+- `[INT] PASS`: гостевой INT 20h handler выполнен, IRET вернулся вызывающему коду.
+- `[BIOS] PASS`: INT 10h mode/cursor/teletype; 42-column stream.
+- `[STACK] PASS`: 128-byte WIN2 guard intact; stack stayed above #B880.
+- Ранее в том же запуске также PASS: IPC HLT AX=#BBAB, пять interpreter edge cases, 64-page RAM + word access + segment/offset wrap, IVT/BDA, INT Stage 2A, CPU arithmetic/logical/MOV/control-flow regression.
+- Финальная строка: `[HALT] Core task pipeline executed entirely. System suspended.`
+
+Пакет соответствует CI run **41362819615**, commit `1dc37b59bf2d19fb0e1eec314c563889be7c848e`; workflow conclusion **success**. Artifact `project124-build`, ID `13104999197`. Проверенное содержимое ZIP:
+- `neogs_code.bin`: 15 118 байт = `#3B0E`;
+- `neogs_bootstrap.bin`: 196 байт = `#00C4`;
+- `neoprog.bin`: 15 316 байт = `#3BD4`, 60 TR-DOS sectors;
+- `disk_A.trd`: 655 360 байт.
+
+Итог: CPU-STR-01, STACK-01 и CPU-I/O-02 имеют подтверждённый runtime PASS. Это закрывает базовую регрессию single-step string instructions без REP. REP/REPE/REPNE ещё не реализованы и остаются отдельной задачей.
+
+## Следующий этап
+
+1. Зафиксировать этот runtime PASS как базовую контрольную точку.
+2. Перед реализацией REP проверить текущий остаток firmware до лимита `#4000` и оценить размер/архитектуру prefix decoder.
+3. Реализовывать REP/REPE/REPNE отдельным этапом с CX, ZF, DF, source segment override и ограничением числа итераций на один execution step; добавить regression для CX=0, CX=1, повторов, остановки REPE/REPNE по ZF и корректного SI/DI/CX.
+4. Не смешивать эту работу с новыми BIOS-функциями или другими подсистемами до завершения и runtime-проверки REP.
+
+
+### 2026-11-02 — повторный runtime прогон базовой регрессии
+
+Пользователь повторно запустил тот же пакет `neoprog.C` длиной `#3BD4` (60 секторов). Второй запуск независимо подтвердил тот же полный результат:
+
+- IPC HLT: PASS, AX=#BBAB.
+- Пять interpreter edge cases: PASS.
+- 64-page RAM + word access + segment/offset wrap: PASS.
+- IVT/BDA и INT Stage 2A: PASS.
+- Полный CPU regression: PASS.
+- CPU-I/O-02: PASS.
+- CPU-STR-01: PASS.
+- Guest INT 20h handler + IRET: PASS.
+- BIOS INT 10h mode/cursor/teletype и 42-column stream: PASS.
+- Stage 5 TR-DOS file load и DMA completion: PASS; result status/AX=`0000 BBAB`.
+- STACK-01: PASS; 128-byte WIN2 guard intact, stack stayed above #B880.
+- Финальный `[HALT]`: pipeline executed entirely; system suspended.
+
+Это второй успешный runtime прогон одного и того же CI-пакета, подтверждающий воспроизводимость базовой регрессии. Сборка не менялась; новых исходных изменений по результату этого прогона не требуется. Статусы CPU-I/O-02, CPU-STR-01 и STACK-01 остаются закрытыми как Runtime PASS.
+
+### Примечание к следующему этапу
+
+Следующая работа остаётся REP/REPE/REPNE. Перед кодированием требуется измерить актуальный размер firmware из исходников/CI и оценить бюджет до лимита `#4000`. Реализацию и тесты префиксов вести отдельным этапом, сохраняя эту сборку как последнюю подтверждённую регрессионную точку.
+
+
+### 2026-11-02 — CPU-STR-02: REP/REPE/REPNE implementation and CI build
+
+Implemented the next string-instruction stage in `neogs_sub/x86_real_mode.asm` and `neogs_sub/x86_strings.asm`:
+
+- Prefix `F2` selects REPNE mode; prefix `F3` selects REPE/REP mode.
+- Prefix state is reset at the next guest instruction boundary. Segment override and REP prefixes can be combined in either order; source segment override remains active across all repeated iterations.
+- String opcode execution is split into a single-iteration worker and a repeat controller.
+- With REP and `CX=0`, no string memory access occurs and SI/DI/CX remain unchanged.
+- Each completed iteration decrements CX. MOVS/STOS/LODS repeat unconditionally for F2/F3. CMPS/SCAS with F3 continue while ZF=1; with F2 continue while ZF=0. The terminating comparison still updates FLAGS and advances SI/DI.
+- Every additional iteration consumes the existing `X86_REAL_STEP_LIMIT` budget; exhaustion returns the existing bounded-execution failure instead of looping indefinitely.
+
+Added CPU-STR-02 guest regression coverage:
+- REP MOVSB copies three bytes and checks CX/SI/DI and destination.
+- REPE CMPSB continues over an equal byte and stops at the first mismatch (ZF=0, CX=1).
+- REPNE SCASB continues until a match (ZF=1, CX=1).
+- REP with CX=0 leaves SI/DI and destination sentinel unchanged.
+- REP + SS segment override copies all bytes from SS:SI across repeated iterations.
+- REP MOVSW, REP STOSW and REP LODSW verify word width, destination bytes and final AX.
+
+Host output now emits a separate `[CPU-STR-02] PASS` marker only after the complete guest regression succeeds.
+
+GitHub Actions run **41363938732** for source commit `54b89e1f22bc6b7b62002dc3a4951590b672205e` completed successfully. Build, firmware/package size validation, TR-DOS verification and artifact upload all passed. Artifact `project124-build`, ID **13106601153**; checked archive contents:
+- `neogs_code.bin`: **16 006 bytes = #3E86**, free to `#4000`: **378 bytes = #017A**;
+- `neogs_bootstrap.bin`: **196 bytes = #00C4**;
+- `neoprog.bin`: **16 204 bytes = #3F4C**, 64 TR-DOS sectors;
+- `disk_A.trd`: **655 360 bytes**.
+
+**Build: PASS. Runtime: PENDING.** The new CPU-STR-02 regression has not yet been executed on the user's Pentagon/NeoGS runtime. Do not mark REP support complete until the user log contains `[CPU-STR-02] PASS` and the existing CPU-I/O, CPU-STR-01, INT, BIOS and STACK markers remain successful.
+
+This build leaves only 378 bytes below the firmware `#4000` ceiling. Avoid adding more firmware features before runtime validation; any required correction should first be evaluated against this remaining budget.

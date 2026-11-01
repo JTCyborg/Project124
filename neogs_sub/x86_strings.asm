@@ -1,13 +1,67 @@
 ; =========================================================================
-; PROJECT124 — 8086 string instructions, single-iteration forms (no REP yet)
+; PROJECT124 — 8086 string instructions and REP prefix execution
 ;
 ; A4/A5 MOVS, A6/A7 CMPS, AA/AB STOS, AC/AD LODS, AE/AF SCAS.
 ; Source uses DS:SI or the active segment override; destination is ES:DI.
-; DF controls index direction. REP/REPE/REPNE are a separate next stage.
+; DF controls index direction. F2/F3 repeat with CX and compare ZF semantics.
 ; =========================================================================
 
 x86_real_string_instruction:
         ld      (x86_string_opcode), a
+        ld      a, (x86_real_rep_mode)
+        or      a
+        jr      z, .single
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      z, x86_real_next       ; CX=0: no memory access, no index change
+.single:
+        call    x86_string_iteration
+        ret     c
+.after_iteration:
+        ld      a, (x86_real_rep_mode)
+        or      a
+        jp      z, x86_real_next
+        ld      hl, (x86_reg_cx)
+        dec     hl
+        ld      (x86_reg_cx), hl
+        ld      a, h
+        or      l
+        jp      z, x86_real_next
+
+        ; F2/F3 test ZF only for CMPS and SCAS; other string forms repeat
+        ; unconditionally. F3 continues while ZF=1, F2 while ZF=0.
+        ld      a, (x86_string_opcode)
+        and     #FE
+        cp      #A6
+        jr      z, .check_zf
+        cp      #AE
+        jr      nz, .repeat
+.check_zf:
+        ld      a, (x86_real_rep_mode)
+        cp      3
+        jr      z, .repe
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      nz, x86_real_next
+        jr      .repeat
+.repe:
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      z, x86_real_next
+.repeat:
+        ld      hl, (x86_real_steps)
+        ld      a, h
+        or      l
+        jp      z, x86_real_budget_fail
+        dec     hl
+        ld      (x86_real_steps), hl
+        call    x86_string_iteration
+        ret     c
+        jr      .after_iteration
+
+x86_string_iteration:
+        ld      a, (x86_string_opcode)
         and     #FE
         cp      #A4
         jp      z, x86_string_movs
@@ -27,7 +81,7 @@ x86_string_movs:
         ret     c
         call    x86_string_advance_si
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_cmps:
         call    x86_string_read_source
@@ -39,7 +93,7 @@ x86_string_cmps:
         call    x86_string_compare
         call    x86_string_advance_si
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_stos:
         ld      a, (x86_string_opcode)
@@ -58,7 +112,7 @@ x86_string_stos:
         call    x86_string_write_dest
         ret     c
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 x86_string_lods:
         call    x86_string_read_source
@@ -78,7 +132,7 @@ x86_string_lods:
         call    x86_alu_write_reg16
 .advance:
         call    x86_string_advance_si
-        jp      x86_real_next
+        ret
 
 x86_string_scas:
         call    x86_string_read_dest
@@ -99,7 +153,7 @@ x86_string_scas:
         ld      (x86_string_value), hl
         call    x86_string_compare
         call    x86_string_advance_di
-        jp      x86_real_next
+        ret
 
 ; Read DS:SI or the active source-segment override. OUT HL=value.
 x86_string_read_source:
@@ -359,7 +413,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_1f
         ld      hl, (x86_reg_flags)
-        ld      de, #0246
+        ld      de, #0346             ; IF is preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_1g
@@ -378,7 +432,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
         ld      hl, (x86_reg_flags)
-        ld      de, #0212             ; AF=1: low-nibble borrow in 0080h-007Fh
+        ld      de, #0312             ; IF preserved; AF=1: low-nibble borrow in 0080h-007Fh
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
@@ -392,7 +446,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_3
         ld      hl, (x86_reg_flags)
-        ld      de, #0246
+        ld      de, #0346             ; IF preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_3
@@ -406,7 +460,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_4
         ld      hl, (x86_reg_flags)
-        ld      de, #0202
+        ld      de, #0302             ; IF preserved from initial FLAGS=#0302
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_4
@@ -473,8 +527,298 @@ x86_real_strings_test:
         call    x86_string_check_byte
         jp      c, x86_string_test_fail_6
 
+        ; CPU-STR-02: REP/REPE/REPNE, CX termination and prefix composition.
+        call    x86_real_rep_strings_test
+        ret     c
+
         or      a
         ret
+
+; REP MOVSB copies three bytes; REPE CMPSB consumes all equal bytes;
+; REPNE SCASB stops on the second byte (ZF=1); CX=0 must not touch memory.
+; A final REP MOVSB uses SS override across all iterations.
+x86_real_rep_strings_test:
+        ld      hl, x86_rep_guest_image
+        ld      de, #5260
+        ld      bc, x86_rep_guest_image_end - x86_rep_guest_image
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+
+        ld      hl, x86_rep_source_data
+        ld      de, #4100
+        ld      bc, x86_rep_source_data_end - x86_rep_source_data
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_dest_data
+        ld      de, #8200
+        ld      bc, x86_rep_dest_data_end - x86_rep_dest_data
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_word_source
+        ld      de, #4120
+        ld      bc, x86_rep_word_source_end - x86_rep_word_source
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_word_dest
+        ld      de, #8220
+        ld      bc, x86_rep_word_dest_end - x86_rep_word_dest
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_ss_data
+        ld      de, #7100
+        ld      bc, x86_rep_ss_data_end - x86_rep_ss_data
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+
+        ld      hl, 0
+        ld      (x86_reg_cs), hl
+        ld      hl, #0400
+        ld      (x86_reg_ds), hl
+        ld      hl, #0800
+        ld      (x86_reg_es), hl
+        ld      hl, #0700
+        ld      (x86_reg_ss), hl
+        ld      hl, #0302
+        ld      (x86_reg_flags), hl
+        ld      hl, #0022
+        ld      (x86_reg_ax), hl
+        ld      hl, #0100
+        ld      (x86_reg_si), hl
+        ld      hl, #0200
+        ld      (x86_reg_di), hl
+        ld      hl, 3
+        ld      (x86_reg_cx), hl
+        ld      hl, #5260
+        ld      (x86_reg_ip), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+        ld      (x86_real_rep_mode), a
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+
+        ; REP MOVSB: CX=0, SI/DI advanced by three.
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_si)
+        ld      de, #0103
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_di)
+        ld      de, #0203
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, #8200
+        ld      a, #22
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8201
+        ld      a, #33
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8202
+        ld      a, #44
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ; Force a mismatch on byte two; REPE must stop there with CX=1.
+        ld      hl, x86_rep_mismatch_byte
+        ld      de, #8201
+        ld      bc, 1
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+
+        ; REPE CMPSB: first byte equal, second differs; stop with ZF=0.
+        ld      hl, #0100
+        ld      (x86_reg_si), hl
+        ld      hl, #0200
+        ld      (x86_reg_di), hl
+        ld      hl, 3
+        ld      (x86_reg_cx), hl
+        ld      hl, #5263
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_cx)
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_si)
+        ld      de, #0102
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_di)
+        ld      de, #0202
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      nz, x86_rep_test_fail
+
+        ; REPNE SCASB: AL=99 matches byte two; stop with CX=1 and ZF=1.
+        ld      hl, #0099
+        ld      (x86_reg_ax), hl
+        ld      hl, #0200
+        ld      (x86_reg_di), hl
+        ld      hl, 3
+        ld      (x86_reg_cx), hl
+        ld      hl, #5266
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_cx)
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_di)
+        ld      de, #0202
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      a, (x86_reg_flags)
+        bit     6, a
+        jp      z, x86_rep_test_fail
+
+        ; REP with CX=0: no read/write and no SI/DI modification.
+        ld      hl, #0100
+        ld      (x86_reg_si), hl
+        ld      hl, #0210
+        ld      (x86_reg_di), hl
+        ld      hl, 0
+        ld      (x86_reg_cx), hl
+        ld      hl, #5269
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_si)
+        ld      de, #0100
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_di)
+        ld      de, #0210
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, #8210
+        ld      a, #AA
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ; REP + SS override: the source segment remains overridden on repeats.
+        ld      hl, #0100
+        ld      (x86_reg_si), hl
+        ld      hl, #0210
+        ld      (x86_reg_di), hl
+        ld      hl, 3
+        ld      (x86_reg_cx), hl
+        ld      hl, #526C
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, #8210
+        ld      a, #51
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8211
+        ld      a, #52
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8212
+        ld      a, #53
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      nz, x86_rep_test_fail
+
+        ; REP MOVSW copies two words and advances both indices by four.
+        ld      hl, #0120
+        ld      (x86_reg_si), hl
+        ld      hl, #0220
+        ld      (x86_reg_di), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5270
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, #8220
+        ld      a, #34
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8221
+        ld      a, #12
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8222
+        ld      a, #78
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8223
+        ld      a, #56
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ; REP STOSW writes AX twice; REP LODSW leaves the last word in AX.
+        ld      hl, #BEEF
+        ld      (x86_reg_ax), hl
+        ld      hl, #0230
+        ld      (x86_reg_di), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5273
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, #8230
+        ld      a, #EF
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8231
+        ld      a, #BE
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8232
+        ld      a, #EF
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8233
+        ld      a, #BE
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ld      hl, #0120
+        ld      (x86_reg_si), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5276
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_ax)
+        ld      de, #5678
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      nz, x86_rep_test_fail
+
+        or      a
+        ret
+x86_rep_test_fail:
+        ld      hl, #1E01
+        jp      x86_string_test_fail
 
 x86_string_check_byte:
         ld      (x86_string_expected), a
@@ -555,6 +899,28 @@ x86_string_opcode:   db 0
 x86_string_value:    dw 0
 x86_string_other:    dw 0
 x86_string_expected: db 0
+
+x86_rep_guest_image:
+        db #F3,#A4,#F4,#F3,#A6,#F4,#F2,#AE,#F4,#F3,#A4,#F4
+        db #F3,#36,#A4,#F4,#F3,#A5,#F4,#F3,#AB,#F4,#F3,#AD,#F4
+x86_rep_guest_image_end:
+x86_rep_source_data:
+        db #22,#33,#44
+x86_rep_source_data_end:
+x86_rep_mismatch_byte:
+        db #99
+x86_rep_word_source:
+        db #34,#12,#78,#56
+x86_rep_word_source_end:
+x86_rep_dest_data:
+        db #AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA
+x86_rep_dest_data_end:
+x86_rep_word_dest:
+        db #AA,#AA,#AA,#AA
+x86_rep_word_dest_end:
+x86_rep_ss_data:
+        db #51,#52,#53
+x86_rep_ss_data_end:
 
 x86_string_guest_image:
         db #36,#A4,#A5,#AC,#F4,#AD,#AA,#AB,#A6,#F4,#A7,#F4,#AE,#F4,#AF,#F4

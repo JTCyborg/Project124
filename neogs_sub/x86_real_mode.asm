@@ -199,7 +199,7 @@ x86_real_mode_test:
         call    x86_real_io_test
         ret     c
 
-        ; CPU-STR-01: MOVS/CMPS/STOS/LODS/SCAS byte and word forms, no REP.
+        ; CPU-STR-01/02: single-step and REP/REPE/REPNE string regression.
         call    x86_real_strings_test
         ret     c
 
@@ -289,9 +289,10 @@ x86_real_execute:
         ld      hl, X86_REAL_STEP_LIMIT
         ld      (x86_real_steps), hl
 x86_real_next:
-        ; A segment override applies to exactly one following instruction.
+        ; Segment and REP prefixes apply to exactly one following instruction.
         xor     a
         ld      (x86_real_seg_override_active), a
+        ld      (x86_real_rep_mode), a
 x86_real_dispatch:
         ld      hl, (x86_real_steps)
         ld      a, h
@@ -313,6 +314,10 @@ x86_real_dispatch:
         jp      z, x86_real_prefix_ss
         cp      #3E
         jp      z, x86_real_prefix_ds
+        cp      #F2
+        jp      z, x86_real_prefix_repne
+        cp      #F3
+        jp      z, x86_real_prefix_repe
 
         cp      #90
         jp      z, x86_real_nop
@@ -503,6 +508,16 @@ x86_real_prefix_set:
         ld      (x86_real_seg_override), hl
         ld      a, 1
         ld      (x86_real_seg_override_active), a
+        jp      x86_real_dispatch
+
+; F2=REPNE, F3=REPE/REP. The string opcode decides whether ZF is tested.
+x86_real_prefix_repne:
+        ld      a, 2
+        jr      x86_real_prefix_rep_set
+x86_real_prefix_repe:
+        ld      a, 3
+x86_real_prefix_rep_set:
+        ld      (x86_real_rep_mode), a
         jp      x86_real_dispatch
 
 x86_real_nop:
@@ -1261,6 +1276,7 @@ x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 x86_real_seg_override_active: db 0
 x86_real_seg_override: dw 0
+x86_real_rep_mode: db 0
 x86_real_far_ip: dw 0
 x86_real_far_cs: dw 0
 
