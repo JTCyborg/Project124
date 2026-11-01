@@ -279,7 +279,7 @@
 
 ## Следующий этап — развитие 8086 для XT BIOS
 
-1. **CPU-I/O-02 — сборка и runtime-регрессия:** собрать SjASMPlus, проверить ASSERT #3800 и размер прошивки, затем запустить команду `RUN_X86_REAL`; ожидать прохождение четырёх IN/OUT сценариев и проверки FLAGS/DX. До этого исходники CPU-I/O-01 не считать runtime PASS.
+1. **CPU-I/O-02 — сборка и runtime-регрессия:** собрать SjASMPlus, проверить ASSERT #3800 и размер прошивки, затем запустить команду `RUN_X86_REAL`; ожидать прохождение пяти IN/OUT сценариев и проверки FLAGS/DX. До этого исходники CPU-I/O-01 не считать runtime PASS.
 2. **CPU-STR-01 — строковые инструкции:** MOVS/LODS/STOS/CMPS/SCAS без REP, затем отдельный REP/REPE/REPNE с CX, ZF, DF и step limit.
 3. **CPU-ARITH-01:** immediate ALU и группы F6/F7.
 4. **CPU-SHIFT-01:** shifts/rotates.
