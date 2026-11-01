@@ -14,8 +14,8 @@ foreach ($Path in @($BootstrapPath, $FirmwarePath)) {
 $Bootstrap = [IO.File]::ReadAllBytes($BootstrapPath)
 $Firmware = [IO.File]::ReadAllBytes($FirmwarePath)
 
-if ($Bootstrap.Length -eq 0 -or $Bootstrap.Length -gt 0x3FFF) {
-    throw "Invalid NeoGS bootstrap length: $($Bootstrap.Length)"
+if ($Bootstrap.Length -eq 0 -or $Bootstrap.Length -gt 254) {
+    throw "Invalid NeoGS bootstrap length: $($Bootstrap.Length) (maximum 254 bytes: 2-byte package header + bootstrap must fit in the first 256-byte TR-DOS sector)"
 }
 # Must match neogs_sub/build_firmware.asm and the runtime checks in
 # neogs_sub/bootstrap.asm and zx_main/neogs_driver.asm.
