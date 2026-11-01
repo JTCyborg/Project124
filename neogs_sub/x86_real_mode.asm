@@ -144,7 +144,7 @@ x86_real_mode_test:
 
         ; Run the independent 16-bit register ALU guest regression.
         call    x86_real_alu_test
-        jp      c, x86_real_test_fail_7
+        ret     c
 
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
@@ -927,9 +927,6 @@ x86_real_test_fail_5:
         jr      x86_real_test_fail
 x86_real_test_fail_6:
         ld      a, 6
-        jr      x86_real_test_fail
-x86_real_test_fail_7:
-        ld      a, 7
 x86_real_test_fail:
         ld      l, a
         ld      h, #1B
