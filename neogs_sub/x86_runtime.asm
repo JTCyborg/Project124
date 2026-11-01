@@ -16,15 +16,15 @@ execute_neogs_x86:
         ret
 
 .dma_ok:
-        ; DMA frame begins with a little-endian x86 byte length at $4000.
+        ; DMA frame begins with a little-endian x86 byte length at $5000.
         ld      hl, (X86_DMA_HEADER_ADDR)
         ld      a, h
         or      l
         jp      z, .invalid_x86_length
 
-        ; Maximum code length is $3FFE: $4002 + length must not exceed $8000.
+        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
         ld      a, h
-        cp      #3F
+        cp      #2F
         jr      c, .x86_length_valid
         jp      nz, .invalid_x86_length
         ld      a, l
