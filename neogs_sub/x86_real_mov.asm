@@ -27,6 +27,9 @@ x86_real_mov_modrm:
         xor     1
         ld      (x86_mov_width), a
 
+        ld      a, 'D'
+        call    x86_mov_trace_event
+
         ld      a, (x86_mov_opcode)
         and     2
         jr      nz, .register_destination
@@ -36,12 +39,17 @@ x86_real_mov_modrm:
         call    x86_real_mov_read_reg
         ret     c
         ld      (x86_mov_value), hl
+        ld      a, 'S'
+        call    x86_mov_trace_event
         jp      x86_real_mov_write_rm
 
 .register_destination:
         ; 8A/8B: read r/m source, then write reg field.
         call    x86_real_mov_read_rm
         ret     c
+        ld      (x86_mov_value), hl
+        ld      a, 'S'
+        call    x86_mov_trace_event
         ld      a, (x86_mov_reg)
         jp      x86_real_mov_write_reg
 
@@ -311,8 +319,20 @@ x86_real_mov_write_rm:
 .write_word_store:
         ld      hl, (x86_mov_value)
         ld      (x86_mem_word_value), hl
+        ld      a, 'W'
+        call    x86_mov_trace_event
         call    x86_mem_write16
         ret     c
+        ; Read the just-written word back immediately and trace it.
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_read16
+        ret     c
+        ld      (x86_mov_trace_readback), hl
+        ld      a, 'R'
+        call    x86_mov_trace_event
         jp      x86_real_next
 
 x86_mov_opcode:        db 0
@@ -329,6 +349,9 @@ x86_mov_value:         dw 0
 x86_mov_diag_value:    dw 0
 x86_mov_diag_offset:   dw 0
 x86_mov_diag_segment:  dw 0
+x86_mov_trace_readback: dw 0
+x86_mov_trace_enable:  db 0
+x86_mov_trace_stage:   db 0
 x86_mov_reg_temp:      db 0
 
 ; -------------------------------------------------------------------------
@@ -356,6 +379,8 @@ x86_real_mov_memory_test:
         ld      (x86_reg_ds), hl
         ld      (x86_reg_es), hl
         ld      (x86_reg_cs), hl
+        ld      a, 1
+        ld      (x86_mov_trace_enable), a
         ld      hl, #FFFF
         ld      (x86_mov_diag_value), hl
         ld      hl, #FFFF
@@ -370,6 +395,8 @@ x86_real_mov_memory_test:
         ld      (x86_reg_flags), hl
 
         call    x86_real_execute
+        xor     a
+        ld      (x86_mov_trace_enable), a
         jr      nc, .execution_ok
         ld      hl, #1D02
         jp      .fail
@@ -511,3 +538,105 @@ x86_mov_memory_test_image:
         db #8B,#76,#00             ; MOV SI,[BP+00] (SS default)
         db #F4
 x86_mov_memory_test_image_end:
+
+; -------------------------------------------------------------------------
+; MOV trace to hardware debug port #EF.
+; Emits stage, opcode, ModR/M, decoded segment:offset, source value,
+; DX/SI/DI, and immediate post-store readback. Enabled only by MOV self-test.
+; -------------------------------------------------------------------------
+x86_mov_trace_event:
+        push    af
+        push    bc
+        push    de
+        push    hl
+        ld      (x86_mov_trace_stage), a
+        ld      a, (x86_mov_trace_enable)
+        or      a
+        jr      z, .trace_done
+
+        ld      a, 'M'
+        call    x86_mov_trace_putc
+        ld      a, (x86_mov_trace_stage)
+        call    x86_mov_trace_putc
+        ld      a, ' '
+        call    x86_mov_trace_putc
+        ld      a, (x86_mov_opcode)
+        call    x86_mov_trace_hex8
+        ld      a, '/'
+        call    x86_mov_trace_putc
+        ld      a, (x86_mov_modrm)
+        call    x86_mov_trace_hex8
+        ld      a, ' '
+        call    x86_mov_trace_putc
+        ld      hl, (x86_mov_segment)
+        call    x86_mov_trace_hex16
+        ld      a, ':'
+        call    x86_mov_trace_putc
+        ld      hl, (x86_mov_offset)
+        call    x86_mov_trace_hex16
+        ld      a, ' '
+        call    x86_mov_trace_putc
+        ld      hl, (x86_mov_value)
+        call    x86_mov_trace_hex16
+        ld      a, ' '
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_dx)
+        call    x86_mov_trace_hex16
+        ld      a, '/'
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_si)
+        call    x86_mov_trace_hex16
+        ld      a, '/'
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_di)
+        call    x86_mov_trace_hex16
+        ld      a, ' '
+        call    x86_mov_trace_putc
+        ld      hl, (x86_mov_trace_readback)
+        call    x86_mov_trace_hex16
+        ld      a, 13
+        call    x86_mov_trace_putc
+        ld      a, 10
+        call    x86_mov_trace_putc
+
+.trace_done:
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+x86_mov_trace_putc:
+        push    bc
+        ld      bc, #00EF
+        out     (c), a
+        pop     bc
+        ret
+
+; IN A=byte.
+x86_mov_trace_hex8:
+        push    af
+        rra
+        rra
+        rra
+        rra
+        call    x86_mov_trace_nibble
+        pop     af
+        jp      x86_mov_trace_nibble
+
+x86_mov_trace_nibble:
+        and     #0F
+        cp      10
+        jr      c, .trace_digit
+        add     a, 7
+.trace_digit:
+        add     a, '0'
+        jp      x86_mov_trace_putc
+
+; IN HL=word.
+x86_mov_trace_hex16:
+        ld      a, h
+        call    x86_mov_trace_hex8
+        ld      a, l
+        jp      x86_mov_trace_hex8
+
