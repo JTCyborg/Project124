@@ -323,22 +323,22 @@ x86_real_strings_test:
         ld      de, #AB55
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1a
         ld      hl, (x86_reg_si)
         ld      de, #0104
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1b
         ld      hl, (x86_reg_di)
         ld      de, #0203
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1c
         ld      hl, (x86_reg_flags)
         ld      de, #0302
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1d
 
         ; LODSW/STOSB/STOSW/CMPSB -> HLT.
         call    x86_real_execute
@@ -497,7 +497,17 @@ x86_string_test_fail_execute:
         ld      hl, #1D11
         jr      x86_string_test_fail
 x86_string_test_fail_1:
-        ld      hl, #1D01
+x86_string_test_fail_1a:
+        ld      hl, #1D01             ; AX after LODSB
+        jr      x86_string_test_fail
+x86_string_test_fail_1b:
+        ld      hl, #1D07             ; SI after MOVSB/MOVSW/LODSB
+        jr      x86_string_test_fail
+x86_string_test_fail_1c:
+        ld      hl, #1D08             ; DI after MOVSB/MOVSW
+        jr      x86_string_test_fail
+x86_string_test_fail_1d:
+        ld      hl, #1D09             ; FLAGS preserved by MOVS/LODS
         jr      x86_string_test_fail
 x86_string_test_fail_2:
         ld      hl, #1D02
