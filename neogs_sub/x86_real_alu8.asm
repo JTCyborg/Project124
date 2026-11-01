@@ -67,6 +67,9 @@ x86_real_alu8_modrm:
 .memory_operand:
         ; This stage adds arithmetic memory forms only. TEST/logic memory
         ; forms remain on the unsupported path until their own regression.
+        xor     a
+        ld      (x86_alu8_no_write), a
+        ld      (x86_alu8_is_logic), a
         ld      a, (x86_real_opcode)
         cp      #84
         jp      z, x86_real_alu_unsupported
@@ -809,7 +812,7 @@ x86_real_alu8_memory_test:
         sbc     hl, de
         jp      nz, .fail_register
         ld      hl, (x86_reg_cx)
-        ld      de, #1A15
+        ld      de, #0215
         or      a
         sbc     hl, de
         jp      nz, .fail_register
@@ -928,6 +931,9 @@ x86_alu8_memory_guest_image:
         db #BA,#00,#00             ; MOV DX,0000
         db #2A,#D1                 ; SUB DL,CL -> CF=1
         db #18,#46,#00             ; SBB SS:[BP],AL -> 19
+        db #BA,#00,#00             ; MOV DX,0000
+        db #2A,#D1                 ; SUB DL,CL -> CF=1
+        db #1A,#2F                 ; SBB CH,DS:[BX] -> 02
         db #B4,#30                 ; MOV AH,30
         db #2A,#27                 ; SUB AH,DS:[BX] -> 19
         db #26,#00,#07             ; ADD ES:[BX],AL -> 33
