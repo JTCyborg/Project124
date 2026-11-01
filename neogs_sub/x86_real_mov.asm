@@ -103,7 +103,7 @@ x86_real_mov_decode_modrm:
         jr      z, .base_di
         cp      6
         jr      z, .base_bp
-        jr      .base_bx
+        jp      .base_bx
 
 .base_bx_si:
         ld      hl, (x86_reg_bx)
@@ -386,7 +386,7 @@ x86_real_mov_memory_test:
         ld      de, #1234
         or      a
         sbc     hl, de
-        jr      nz, .fail_memory
+        jp      nz, .fail_memory
 
         ld      hl, 0
         ld      (x86_mem_segment), hl
@@ -397,7 +397,7 @@ x86_real_mov_memory_test:
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jr      nz, .fail_memory
+        jp      nz, .fail_memory
 
         ld      hl, 0
         ld      (x86_mem_segment), hl
@@ -408,7 +408,7 @@ x86_real_mov_memory_test:
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jr      nz, .fail_memory
+        jp      nz, .fail_memory
 
         ; BP-based forms must default to SS rather than DS.
         ld      hl, #7000
@@ -420,7 +420,7 @@ x86_real_mov_memory_test:
         ld      de, #1234
         or      a
         sbc     hl, de
-        jr      nz, .fail_memory
+        jp      nz, .fail_memory
 
         ld      hl, #1D01
         ld      (saved_x86_ax), hl
