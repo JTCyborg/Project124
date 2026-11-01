@@ -299,7 +299,7 @@ x86_real_alu_test:
         call    x86_real_copy_image
         jr      nc, .image_ready
         ld      hl, #1B07
-        jr      .set_failure
+        jp      .set_failure
 .image_ready:
         ld      hl, 0
         ld      (x86_reg_ax), hl
@@ -324,7 +324,7 @@ x86_real_alu_test:
         call    x86_real_execute
         jr      nc, .execution_ok
         ld      hl, #1B07
-        jr      .set_failure
+        jp      .set_failure
 .execution_ok:
         ld      hl, (x86_reg_ax)
         ld      de, 1
