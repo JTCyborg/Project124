@@ -38,10 +38,10 @@
 
 | Инструкция/группа | Opcode | Статус |
 |---|---|---|
-| IN AL/AX,imm8 | E4/E5 | NO |
-| OUT imm8,AL/AX | E6/E7 | NO |
-| IN AL/AX,DX | EC/ED | NO |
-| OUT DX,AL/AX | EE/EF | NO |
+| IN AL/AX,imm8 | E4/E5 | PARTIAL | Decoder implemented; test-port backend only; build/runtime pending |
+| OUT imm8,AL/AX | E6/E7 | PARTIAL | Decoder implemented; test-port backend only; build/runtime pending |
+| IN AL/AX,DX | EC/ED | PARTIAL | Full 16-bit DX decode; test-port backend only; build/runtime pending |
+| OUT DX,AL/AX | EE/EF | PARTIAL | Full 16-bit DX decode; test-port backend only; build/runtime pending |
 | MOVSB/MOVSW | A4/A5 | NO |
 | CMPSB/CMPSW | A6/A7 | NO |
 | STOSB/STOSW | AA/AB | NO |
@@ -71,6 +71,13 @@
 | RET imm16 / RETF imm16 | C2/CA | NO |
 
 Исходный BIOS содержит мнемоники IN/OUT, строковые операции с REP, XLAT, MUL/DIV, LES/LDS, XCHG, PUSHF/POPF, WAIT, shifts/rotates, DAA, LOCK, INTO и flag-control. Это подтверждает потребность в перечисленных группах, но не утверждает, что каждая из них выполняется на каждом POST path.
+
+### CPU-I/O-01 implementation note (2026-11-01)
+
+- Added active decoder routes for E4-E7 and EC-EF and new `neogs_sub/x86_io.asm` backend.
+- Current backend models only guest port 00E0h as a deterministic 16-bit test register. Unmapped IN returns FFh/FFFFh; unmapped OUT is ignored. This is a CPU test device, not a model of PC/XT PIC/PIT/PPI/CRT/FDC/UART.
+- Added guest regression programs for all eight IN/OUT forms, full 16-bit DX non-aliasing (01E0h differs from 00E0h), and preservation of guest FLAGS.
+- Source integration is committed, but assembler build and NeoGS runtime have not been run. Opcode rows remain PARTIAL until build and runtime evidence exists.
 
 ## C. Аппаратные зависимости PC/XT I/O
 
