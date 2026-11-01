@@ -50,16 +50,23 @@ words are accessed through SS:SP and the physical-memory backend; a PUSH/POP
 pair also crosses the SS:FFFFh-to-SS:0000h offset boundary. Stack instructions
 must preserve FLAGS.
 
-The separate `x86_real_alu.asm` module adds register-direct 16-bit
-`ADD`, `ADC`, `SUB`, `SBB`, and `CMP` forms (ModR/M `mod=11`), plus
-`PUSHF` for guest-side FLAGS snapshots. The ALU regression checks signed
-overflow, carry/borrow, auxiliary carry/borrow, parity, sign and zero flags;
-it also checks ADC/SBB carry-in behavior and that CMP does not write its
-destination. Memory ModR/M operands and 8-bit ALU operations are not yet
-supported. The guest program exercises both ModR/M operand directions for
-all five operations and chains the results into final AX/BX/BP/DX/SP checks.
-A dedicated `[CPU] PASS` line is emitted only after the host verifies those
-registers and the saved FLAGS.
+The `x86_real_alu.asm` module implements register-direct 16-bit
+`ADD`, `ADC`, `SUB`, `SBB`, and `CMP` forms (ModR/M `mod=11`).
+The additional `x86_real_alu8.asm` module implements register-direct 8-bit
+`ADD`, `ADC`, `SUB`, `SBB`, and `CMP`, plus 8-bit and 16-bit
+`AND`, `OR`, `XOR`, and `TEST`. Both ModR/M register operand directions
+are covered by the guest regression. Byte register encoding follows the 8086
+order AL, CL, DL, BL, AH, CH, DH, BH. Arithmetic flags CF/PF/AF/ZF/SF/OF
+are checked, including ADC/SBB carry-in and CMP/TEST destination preservation.
+For logical instructions CF and OF are cleared; AF is undefined by the 8086,
+so this implementation deterministically clears it. Logical PF/ZF/SF are
+calculated from the result. Memory ModR/M operands remain unsupported.
+
+The Stage 2B host emits separate 16-bit arithmetic and byte/logical
+`[CPU] PASS` lines only after the guest image completes and the host verifies
+the saved FLAGS and final AX/BX/BP/DX/SI/DI/SP register values. The byte and
+logical test reports failure detail `1C07` for guest copy/execution failure,
+`1C08` for result-register mismatch, and `1C09` for FLAGS/snapshot mismatch.
 
 After the INT 20h handler changes AX to `1234h` and IRET returns, the test
 checks the post-HLT IP using the assembled guest-image length, FLAGS=`0B16h`,
