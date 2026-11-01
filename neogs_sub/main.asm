@@ -158,7 +158,8 @@ command_load_x86:
 
 .pg1_test_switch_away:
         ld      a, #03
-        out     (PG1), a
+        ld      bc, PG1
+        out     (c), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
         jr      z, .pg1_test_switch_back
@@ -184,7 +185,8 @@ command_load_x86:
 .pg1_test_restore_normal:
         ; On any failed test, restore the normal page and trampoline.
         ld      a, #03
-        out     (PG1), a
+        ld      bc, PG1
+        out     (c), a
         ld      hl, rom_return_trampoline_code
         ld      de, ROM_RETURN_TRAMPOLINE_ADDR
         ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
