@@ -195,6 +195,11 @@ x86_real_mode_test:
         call    x86_real_mov_addressing_test
         ret     c
 
+        ; CPU-I/O-02: all eight immediate/DX IN/OUT opcode forms.
+        call    x86_real_io_test
+        ret     c
+
+
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
         xor     a
@@ -423,6 +428,16 @@ x86_real_dispatch:
         cp      #E4
         jp      c, x86_real_loop_short
 .not_loop_short:
+        cp      #E4
+        jp      c, .not_io_immediate
+        cp      #E8
+        jp      c, x86_real_io_instruction
+.not_io_immediate:
+        cp      #EC
+        jp      c, .not_io_dx
+        cp      #F0
+        jp      c, x86_real_io_instruction
+.not_io_dx:
         cp      #E8
         jp      z, x86_real_call_near
         cp      #C3
