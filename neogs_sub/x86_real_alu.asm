@@ -437,6 +437,202 @@ x86_real_alu_test:
         scf
         ret
 
+; -------------------------------------------------------------------------
+; 16-bit arithmetic ModR/M memory regression.
+; Exercises both operand directions, BP default SS and all four explicit
+; segment overrides. The effective-address calculation is shared with MOV.
+; -------------------------------------------------------------------------
+x86_real_alu_memory_test:
+        ld      hl, x86_alu_memory_guest_image
+        ld      de, #D800
+        ld      bc, x86_alu_memory_guest_image_end - x86_alu_memory_guest_image
+        call    x86_real_copy_image
+        jp      c, .fail_copy
+
+        ; Seed DS:0200, SS:0100, ES:0200, CS:0200, SS:0200, DS:0100.
+        ld      hl, #0005
+        ld      de, #1000
+        ld      bc, #0200
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #0020
+        ld      de, #7000
+        ld      bc, #0100
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #0010
+        ld      de, #3000
+        ld      bc, #0200
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #0030
+        ld      de, #0800
+        ld      bc, #0200
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #0040
+        ld      de, #7000
+        ld      bc, #0200
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #0050
+        ld      de, #1000
+        ld      bc, #0100
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+
+        ; Initialize guest registers and segments.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      hl, #0003
+        ld      (x86_reg_ax), hl
+        ld      hl, #0200
+        ld      (x86_reg_bx), hl
+        ld      hl, #0002
+        ld      (x86_reg_cx), hl
+        ld      hl, #0100
+        ld      (x86_reg_bp), hl
+        ld      hl, #1000
+        ld      (x86_reg_ds), hl
+        ld      hl, #3000
+        ld      (x86_reg_es), hl
+        ld      hl, #0800
+        ld      (x86_reg_cs), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #5800
+        ld      (x86_reg_ip), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+
+        call    x86_real_execute
+        jp      c, .fail_execute
+
+        ; Register-destination form: CX = 2 + DS:[BX] (5 + 3) = 10.
+        ld      hl, (x86_reg_cx)
+        ld      de, #000A
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+
+        ; Verify each memory destination independently.
+        ld      hl, x86_alu_memory_expected_table
+        ld      (x86_alu_mem_table_ptr), hl
+        ld      a, x86_alu_memory_expected_count
+        ld      (x86_alu_mem_remaining), a
+        xor     a
+        ld      (x86_alu_mem_index), a
+.verify_loop:
+        ld      hl, (x86_alu_mem_table_ptr)
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_segment), de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_offset), de
+        ld      (x86_alu_mem_table_ptr), hl
+        call    x86_mem_read16
+        jp      c, .fail_verify
+        ld      (x86_alu_mem_actual), hl
+        ld      hl, (x86_alu_mem_table_ptr)
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_alu_mem_table_ptr), hl
+        ld      hl, (x86_alu_mem_actual)
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_verify
+        ld      a, (x86_alu_mem_index)
+        inc     a
+        ld      (x86_alu_mem_index), a
+        ld      a, (x86_alu_mem_remaining)
+        dec     a
+        ld      (x86_alu_mem_remaining), a
+        jp      nz, .verify_loop
+
+        ld      hl, #1F01
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+.fail_copy:
+        ld      hl, #1F10
+        jp      .fail
+.fail_seed:
+        ld      hl, #1F11
+        jp      .fail
+.fail_execute:
+        ld      hl, #1F12
+        jp      .fail
+.fail_register:
+        ld      hl, #1F13
+        jp      .fail
+.fail_verify:
+        ld      a, (x86_alu_mem_index)
+        ld      l, a
+        ld      h, #1F
+        jp      .fail
+.fail:
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+; IN: HL=value, DE=segment, BC=offset.
+x86_real_alu_memory_seed:
+        ld      (x86_mem_word_value), hl
+        ld      (x86_mem_segment), de
+        ld      (x86_mem_offset), bc
+        jp      x86_mem_write16
+
+x86_alu_mem_table_ptr: dw 0
+x86_alu_mem_actual:    dw 0
+x86_alu_mem_remaining: db 0
+x86_alu_mem_index:     db 0
+
+; Guest at 0800:5800:
+; ADD [BX],AX; ADD CX,[BX]; SUB [BP],AX;
+; ADD ES:[BX],AX; ADD CS:[BX],AX; ADD SS:[BX],AX; ADD DS:[BP],AX.
+x86_alu_memory_guest_image:
+        db #01,#07                 ; ADD DS:[BX],AX -> 0008
+        db #03,#0F                 ; ADD CX,DS:[BX] -> 000A
+        db #29,#46,#00             ; SUB SS:[BP],AX -> 001D
+        db #26,#01,#07             ; ADD ES:[BX],AX -> 0013
+        db #2E,#01,#07             ; ADD CS:[BX],AX -> 0033
+        db #36,#01,#07             ; ADD SS:[BX],AX -> 0043
+        db #3E,#01,#46,#00         ; ADD DS:[BP],AX -> 0053
+        db #F4
+x86_alu_memory_guest_image_end:
+
+; segment, offset, expected word
+x86_alu_memory_expected_table:
+        dw #1000,#0200,#0008       ; DS:[BX]
+        dw #7000,#0100,#001D       ; BP default SS
+        dw #3000,#0200,#0013       ; ES override
+        dw #0800,#0200,#0033       ; CS override
+        dw #7000,#0200,#0043       ; SS override
+        dw #1000,#0100,#0053       ; DS override on BP
+x86_alu_memory_expected_count EQU 6
+
 x86_alu_dst_is_mem:  db 0
 x86_alu_modrm:       db 0
 x86_alu_mode:        db 0
