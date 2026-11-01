@@ -61,6 +61,27 @@ ADD/ADC/SUB/SBB/CMP, 8-bit ADD/ADC/SUB/SBB/CMP, and 8/16-bit
 AND/OR/XOR/TEST. The host reports PASS only after the firmware has checked
 the resulting registers and FLAGS.
 
+## Current 8086 real-mode execution scope
+
+The NeoGS real-mode executor is an incremental 8086-compatible instruction
+slice, not a complete 8086 emulator. It currently includes register-direct
+arithmetic/logical groups, selected stack and control-flow instructions,
+software INT/IRET, the project INT 10h text services, and the MOV
+register/memory forms 88h-8Bh.
+
+The MOV 88h-8Bh implementation decodes all eight 8086 16-bit effective
+address combinations, direct [disp16], signed disp8 and disp16, with DS as
+the default segment and SS for BP-based addressing. It supports byte and word
+register/memory transfers. Segment-override prefixes and memory operands for
+the arithmetic/logical groups are not yet implemented.
+
+A Stage 3B self-test now executes all four MOV opcodes through the real
+CS:IP interpreter and checks register-direct transfers, DS-based memory
+writes/reads, direct addressing, byte transfers, and BP/SS default-segment
+behavior. On success, the host debug log prints a dedicated MOV memory PASS
+line. This regression is part of the existing Stage 2B guest CPU test and
+does not add a separate TR-DOS file read or a new runtime loader.
+
 ## Stage 5 x86 task file
 
 The host searches the selected TR-DOS `.C` file, validates its descriptor,
