@@ -50,6 +50,15 @@ words are accessed through SS:SP and the physical-memory backend; a PUSH/POP
 pair also crosses the SS:FFFFh-to-SS:0000h offset boundary. Stack instructions
 must preserve FLAGS.
 
+The separate `x86_real_alu.asm` module adds register-direct 16-bit
+`ADD`, `ADC`, `SUB`, `SBB`, and `CMP` forms (ModR/M `mod=11`), plus
+`PUSHF` for guest-side FLAGS snapshots. The ALU regression checks signed
+overflow, carry/borrow, auxiliary carry/borrow, parity, sign and zero flags;
+it also checks ADC/SBB carry-in behavior and that CMP does not write its
+destination. Memory ModR/M operands and 8-bit ALU operations are not yet
+supported. A dedicated `[CPU] PASS` line is emitted only after the host
+verifies the saved FLAGS and final AX/DX/BX results.
+
 After the INT 20h handler changes AX to `1234h` and IRET returns, the test
 checks the post-HLT IP using the assembled guest-image length, FLAGS=`0B16h`,
 SP=`0100h`, and the retained register values. CX is expected to be `0000h`
