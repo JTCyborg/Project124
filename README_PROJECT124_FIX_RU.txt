@@ -48,10 +48,13 @@ PROJECT 124 — ПАКЕТ ИСПРАВЛЕНИЙ ИЗ ИСХОДНИКОВ
    Ссылки приведены в конце файла.
 
 2. Размещение NeoGS Z80 firmware
-   - Основная прошивка теперь собирается с ORG $0000, а не $4000.
-   - Размер ограничен $3000; стек расположен на $3FFF.
-   - Build script создаёт два файла: neogs_code.bin и neogs_bootstrap.bin,
-     а также копии в zx_main/.
+   - Основная прошивка собирается с ORG $0000; стек расположен на $3FFF.
+   - Bootstrap собирается отдельно для загрузки в RAM NeoGS по адресу $4000.
+   - Build script создаёт промежуточные neogs_code.bin и neogs_bootstrap.bin,
+     затем объединяет их в один пакет neoprog.bin:
+       [WORD bootstrap_length][bootstrap][firmware].
+   - В TR-DOS экспортируется только единый NeoGS-файл neoprog.C.
+   - Ни bootstrap, ни основная прошивка не входят в proj124.C.
 
 3. DMA и x86-пayload
    - DMA frame имеет вид: [length_lo][length_hi][x86 bytes].
@@ -111,8 +114,10 @@ neogs_sub/build_firmware.asm. После этого собирается zx_main
 Ожидаемые результаты:
   neogs_code.bin
   neogs_bootstrap.bin
+  neoprog.bin
   zx_main/neogs_code.bin
   zx_main/neogs_bootstrap.bin
+  zx_main/neoprog.bin
   disk_A.trd
 
 font88.bin и font68.bin уже включены в пакет в корне и zx_main/.
@@ -122,7 +127,7 @@ font88.bin и font68.bin уже включены в пакет в корне и 
 
 Важное ограничение x86
 ----------------------
-В текущем проекте нет исходника полноценного x86-ядра. Файл neoprog.C по-прежнему
+В текущем проекте нет исходника полноценного x86-ядра. Файл x86task.C
 собирается из шестибайтного диагностического теста:
   B8 AA BB 40 90 F4
 Интерпретатор поддерживает только NOP, INC AX, MOV AX,imm16 и HLT.
@@ -133,7 +138,7 @@ font88.bin и font68.bin уже включены в пакет в корне и 
 --------------------------------
 1. Убедиться, что Stage 2 проходит все фазы и появляется ACK #A2.
 2. Убедиться, что диагностический x86-тест возвращает STATUS=0, AX=#BBAB.
-3. Только после этого проверять чтение neoprog.C с TR-DOS.
+3. После этого проверять Stage 5 и чтение x86task.C с TR-DOS.
 4. При сбое сохранить полный лог порта #EF, особенно BOOT PHASE и GSSTAT.
 
 Статусы x86 interpreter:
