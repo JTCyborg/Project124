@@ -294,6 +294,21 @@ x86_real_mov_write_rm:
         ret     c
         jp      x86_real_next
 .write_memory_word:
+        ; Diagnostic: capture the exact source value and effective address
+        ; for the direct DS:0206 store used by this regression test.
+        ld      a, (x86_mov_opcode)
+        cp      #89
+        jr      nz, .write_word_store
+        ld      hl, (x86_mov_offset)
+        ld      de, #0206
+        or      a
+        sbc     hl, de
+        jr      nz, .write_word_store
+        ld      hl, (x86_mov_value)
+        ld      (x86_mov_diag_value), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mov_diag_segment), hl
+.write_word_store:
         ld      hl, (x86_mov_value)
         ld      (x86_mem_word_value), hl
         call    x86_mem_write16
@@ -311,6 +326,8 @@ x86_mov_width:         db 0
 x86_mov_offset:        dw 0
 x86_mov_segment:       dw 0
 x86_mov_value:         dw 0
+x86_mov_diag_value:    dw 0
+x86_mov_diag_segment:  dw 0
 x86_mov_reg_temp:      db 0
 
 ; -------------------------------------------------------------------------
@@ -450,10 +467,9 @@ x86_real_mov_memory_test:
         ld      hl, #1D33
         jp      .fail
 .fail_di:
-        ; Diagnostic: expose the value captured from DX by the preceding
-        ; MOV [0206],DX. The memory readback is currently known to be zero.
-        ; This distinguishes a bad source value from a failed memory write.
-        ld      hl, (x86_mov_value)
+        ; Report the source word captured at the exact MOV [DS:0206],DX
+        ; write site, before the following MOV DI,[0206] can overwrite it.
+        ld      hl, (x86_mov_diag_value)
         ld      (saved_x86_ax), hl
         ld      a, 11
         ld      (x86_exit_status), a
