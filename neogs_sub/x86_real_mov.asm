@@ -354,27 +354,27 @@ x86_real_mov_memory_test:
         ld      de, #1234
         or      a
         sbc     hl, de
-        jr      nz, .fail_registers
+        jp      nz, .fail_registers
         ld      hl, (x86_reg_dx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jr      nz, .fail_registers
+        jp      nz, .fail_registers
         ld      hl, (x86_reg_bx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jr      nz, .fail_registers
+        jp      nz, .fail_registers
         ld      hl, (x86_reg_di)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jr      nz, .fail_registers
+        jp      nz, .fail_registers
         ld      hl, (x86_reg_si)
         ld      de, #1234
         or      a
         sbc     hl, de
-        jr      nz, .fail_registers
+        jp      nz, .fail_registers
 
         ; Verify DS:0200, DS:0004 and DS:0206 word writes.
         ld      hl, 0
