@@ -42,9 +42,9 @@
 | MEM-01 | RAM-страницы и 8086 word/segment addressing | Runtime PASS 2026-11-01 22:59:26 | Получен result `status/AX=0000 0001`; подтверждены 64 страницы RAM, word access и segment/offset wrap после переноса Z80 SP в фиксированный WIN0 (`SP=3FFE`) |
 | CPU-01 | 8086 near CALL rel16 / RET через SS:SP | Runtime PASS 2026-11-01 22:59:26 | Guest regression: `PUSH/POP, near CALL/RET, PUSH SP, POP SP and SS:FFFF wrap` прошёл |
 | CPU-02 | 8086 far JMP (`EA`), far CALL (`9A`) и RETF (`CB`) | Общий CPU regression PASS 2026-11-01 22:59:26 | Весь текущий CPU regression прошёл после исправления RETF; отдельные CS:IP для far-переходов в логе не печатаются |
-| CPU-03 | Отдельная трассировка far JMP/CALL/RETF с проверкой CS:IP и SP | Реализовано в исходниках; сборка/runtime ожидают | Три контрольные точки: CALL entry `0001:4FFE`, RETF return `0000:5008`, JMP target `0001:5000`; финальная точка после INT/IRET `0001:5003`, SP=`0100`. Host marker добавлен; требуется SjASMPlus build и runtime-log |
-| CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит начат | Изучить `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; адаптировать семантику под Z80/SjASMPlus, не переносить C-код напрямую |
-| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | Запланировано | Первая группа расширения после завершения opcode coverage matrix; использовать существующие ALU/ModR/M/FLAGS helpers и добавить независимые guest regression cases |
+| CPU-03 | Отдельная трассировка far JMP/CALL/RETF с проверкой CS:IP и SP | **Runtime PASS 2026-11-01 23:22** | Лог: CALL `0001:4FFE`; RETF `0000:5008`; JMP `0001:5000`; `SP=0100`. TRACE PASS marker выведен; весь pipeline завершён штатно |
+| CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
+| CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе — анализ и проектирование** | Следующий этап после Runtime PASS CPU-03. Сначала проверить decoder, ALU helpers, operand/FLAGS контракты и подготовить тестовую матрицу; затем реализовать и добавить guest regression |
 
 ## Обязательные критерии завершения потоковой загрузки
 
@@ -60,6 +60,16 @@
 10. Только после полного лога фиксировать PASS.
 
 ## Журнал изменений
+
+### 2026-11-01 — runtime PASS CPU-03 и запуск CPU-05 (23:22)
+
+- Пользователь предоставил полный runtime-лог 23:22. Пакет `neoprog.C`: `#34C3` = 13 507 байт, `#0035` = 53 сектора; GS ACK `#34C7` = длина + 4. ACK подтверждает счётчик, не CRC.
+- CPU-03 получил **Runtime PASS**: точный host marker `[CPU] TRACE PASS: CALL 0001:4FFE; RETF 0000:5008; JMP 0001:5000; SP=0100.`. Он выводится только после прохождения трёх CS:IP checkpoints и финальной проверки SP.
+- Повторно подтверждены IPC-01/02, MEM-01 (`0000 0001`), BIOS IVT/BDA, INT stack/IRET, все текущие ALU/MOV/ModR/M CPU regression cases, INT 20h, BIOS INT 10h и Stage 5 DMA result `0000 BBAB`. Завершение `[HALT] Core task pipeline executed entirely. System suspended.`
+- CPU-04 первичный аудит PCem зафиксирован как выполненный: использовать PCem для сверки семантики и opcode coverage, не переносить C-код напрямую без проверки лицензии.
+- CPU-05 переведён в работу: immediate ALU (accumulator-immediate и группы `80/81/83`). Следующий шаг — анализ точного контракта активного decoder, ALU/operand/FLAGS helpers, затем реализация и независимые guest regression cases.
+- FW-09 (пакет ≥48 КБ) и FW-10 (CRC содержимого) остаются отложенными.
+
 
 ### 2026-11-01 — реализация CPU-03: отдельные far-control CS:IP checkpoints
 
