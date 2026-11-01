@@ -582,7 +582,7 @@ x86_real_alu8_logic_test:
         jp      .set_failure
 .execution_ok:
         ld      hl, (x86_reg_ax)
-        ld      de, #F0F0
+        ld      de, #80F0
         or      a
         sbc     hl, de
         jp      nz, .result_fail
@@ -592,12 +592,12 @@ x86_real_alu8_logic_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_bx)
-        ld      de, 0
+        ld      de, #0101
         or      a
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_si)
-        ld      de, #0A92
+        ld      de, #0246
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
@@ -612,7 +612,7 @@ x86_real_alu8_logic_test:
         sbc     hl, de
         jp      nz, .flags_fail
         ld      hl, (x86_reg_dx)
-        ld      de, #0286
+        ld      de, #8080
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
@@ -622,7 +622,7 @@ x86_real_alu8_logic_test:
         sbc     hl, de
         jp      nz, .result_fail
         ld      hl, (x86_reg_flags)
-        ld      de, #0246
+        ld      de, #0A92
         or      a
         sbc     hl, de
         jp      nz, .flags_fail
@@ -674,7 +674,6 @@ x86_guest_alu8_logic_image:
         db #00,#C8                 ; ADD AL,CL (r/m destination) -> 11
         db #B0,#7F                 ; MOV AL,7F
         db #02,#C1                 ; ADD AL,CL (reg destination) -> 80
-        db #9C,#5E                 ; PUSHF/POP SI -> 0A92
         db #B0,#00                 ; MOV AL,00
         db #2A,#C1                 ; SUB AL,CL -> FF, CF=1
         db #9C,#5F                 ; PUSHF/POP DI -> 0297
@@ -723,5 +722,16 @@ x86_guest_alu8_logic_image:
         db #33,#C1                 ; XOR AX,CX (reg destination) -> FFFF
         db #B8,#F0,#F0             ; MOV AX,F0F0 for final TEST/no-write check
         db #85,#C1                 ; TEST AX,CX -> flags only, AX stays F0F0
+        db #9C,#5E                 ; PUSHF/POP SI -> 0246
+        db #B4,#7F                 ; MOV AH,7F
+        db #B5,#01                 ; MOV CH,01
+        db #02,#E5                 ; ADD AH,CH -> 80 (high-byte register pair)
+        db #B5,#0F                 ; Restore CH; CX=0F0F
+        db #B6,#7F                 ; MOV DH,7F
+        db #B7,#01                 ; MOV BH,01
+        db #02,#F7                 ; ADD DH,BH -> 80
+        db #B2,#7F                 ; MOV DL,7F
+        db #B3,#01                 ; MOV BL,01
+        db #02,#D3                 ; ADD DL,BL -> 80
         db #F4
 x86_guest_alu8_logic_image_end:
