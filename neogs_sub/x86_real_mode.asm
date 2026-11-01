@@ -1189,10 +1189,10 @@ x86_guest_jl_target:
         db #BC,#00,#01              ; restore SP=0100
 
         ; Exercise near CALL/RET using the guest SS:SP stack. The subroutine
-        ; increments SI; the short jump skips it after RET returns.
+        ; changes SI without changing FLAGS; the short jump skips it on return.
         db #E8,#02,#00              ; CALL subroutine at return IP + 2
-        db #EB,#02                  ; skip the subroutine after RET
-        db #46,#C3                  ; subroutine: INC SI / RET
+        db #EB,#04                  ; skip the subroutine after RET
+        db #BE,#01,#80,#C3          ; subroutine: MOV SI,8001 / RET
         db #90                      ; continuation after the short jump
 
         ; Exercise a PUSH/POP word crossing SS:FFFF -> SS:0000 offset wrap.
