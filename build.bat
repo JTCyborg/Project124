@@ -45,6 +45,14 @@ if not exist "zx_main\neoprog.bin" (
     echo ERROR: zx_main\neoprog.bin was not created.
     goto BUILD_NEOGS_FAILED
 )
+if not exist "zx_main\neoprog_chunks.inc" (
+    echo ERROR: generated NeoGS chunk include was not created.
+    goto BUILD_NEOGS_FAILED
+)
+if not exist "zx_main\neoprog_part0.bin" (
+    echo ERROR: first NeoGS package chunk was not created.
+    goto BUILD_NEOGS_FAILED
+)
 
 echo [2/2] Building Spectrum host and TR-DOS image...
 "tools\sjasmplus.exe" --dirbol -I "zx_main" -I "shared" -I "neogs_sub" --lst="zx_list.txt" --sym="zx_map.txt" "zx_main/main.asm"
@@ -54,6 +62,10 @@ if not exist "disk_A.trd" (
     echo ERROR: disk_A.trd was not created.
     goto BUILD_ZX_FAILED
 )
+
+echo [VERIFY] Checking complete neoprog.C contents in TR-DOS...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools\verify_neoprog_trd.ps1" -ImagePath "disk_A.trd" -PackagePath "neoprog.bin"
+if errorlevel 1 goto BUILD_VERIFY_FAILED
 
 echo.
 echo ================================================================
@@ -84,6 +96,13 @@ exit /b 1
 echo.
 echo ERROR: Spectrum build failed.
 echo Check zx_list.txt and the messages above.
+pause
+exit /b 1
+
+:BUILD_VERIFY_FAILED
+echo.
+echo ERROR: neoprog.C verification failed.
+echo Check the TR-DOS package chunk export and tools\verify_neoprog_trd.ps1.
 pause
 exit /b 1
 
