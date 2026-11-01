@@ -498,9 +498,9 @@ x86_mov_address_test_image:
         db #89,#40,#FB             ; [BX+SI-5] negative disp8 -> DS:020B
         db #89,#80,#34,#12         ; [BX+SI+1234] disp16 -> DS:1444
 
-        db #26,#89,#46,#00         ; ES:[BP] -> ES:0100
-        db #2E,#89,#46,#00         ; CS:[BP] -> CS:0100
-        db #36,#89,#46,#00         ; SS:[BP] -> SS:0100
+        db #26,#89,#07             ; ES:[BX] -> ES:0200
+        db #2E,#89,#07             ; CS:[BX] -> CS:0200
+        db #36,#89,#07             ; SS:[BX] -> SS:0200
         db #3E,#89,#46,#00         ; DS:[BP] -> DS:0100
 
         db #BB,#FF,#FF             ; BX=FFFF
@@ -521,10 +521,10 @@ x86_mov_address_test_table:
         dw #1000,#0215,#1234       ; positive disp8
         dw #1000,#020B,#1234       ; negative disp8
         dw #1000,#1444,#1234       ; disp16
-        dw #3000,#0100,#1234       ; ES override
-        dw #0800,#0100,#1234       ; CS override
-        dw #7000,#0100,#1234       ; SS override
-        dw #1000,#0100,#1234       ; DS override
+        dw #3000,#0200,#1234       ; ES override on DS-default [BX]
+        dw #0800,#0200,#1234       ; CS override on DS-default [BX]
+        dw #7000,#0200,#1234       ; SS override on DS-default [BX]
+        dw #1000,#0100,#1234       ; DS override on SS-default [BP]
         dw #1000,#FFFF,#1234       ; word wraps within same segment
 x86_mov_address_test_count EQU 16
 
