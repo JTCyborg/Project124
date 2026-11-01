@@ -521,10 +521,10 @@ x86_real_alu_memory_test:
         call    x86_real_execute
         jp      c, .fail_execute
 
-        ; Register-destination arithmetic forms leave CX = 11 after ADD,
-        ; ADC and SUB against DS:[BX].
+        ; Register-destination forms finish with SBB CX,[BX] = FFFEh.
+        ; The following CMP must preserve CX.
         ld      hl, (x86_reg_cx)
-        ld      de, #000B
+        ld      de, #FFFE
         or      a
         sbc     hl, de
         jp      nz, .fail_register
@@ -630,6 +630,10 @@ x86_alu_memory_guest_image:
         db #2B,#D1                 ; SUB DX,CX: set CF for ADC
         db #13,#0F                 ; ADC CX,DS:[BX]: 10 + 12 + 1 = 23
         db #2B,#0F                 ; SUB CX,DS:[BX]: 23 - 12 = 11
+        db #BA,#00,#00             ; MOV DX,0
+        db #2B,#D1                 ; SUB DX,CX: set CF
+        db #1B,#0F                 ; SBB CX,DS:[BX]: 11 - 12 - 1 = FFFE
+        db #3B,#0F                 ; CMP CX,DS:[BX]: flags only
         db #26,#01,#07             ; ADD ES:[BX],AX -> 13
         db #2E,#01,#07             ; ADD CS:[BX],AX -> 33
         db #36,#01,#07             ; ADD SS:[BX],AX -> 43
