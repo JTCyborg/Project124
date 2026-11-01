@@ -4,7 +4,7 @@
 ; This bounded executable slice runs guest instructions through CS:IP and
 ; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
-; near CALL rel16 / RET, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
+; near/far CALL and RET, far JMP, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
 ; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
 ; Arithmetic and 8/16-bit logical memory ModR/M operands support segment overrides.
 ; It is intentionally not a general 8086 emulator.
@@ -404,6 +404,12 @@ x86_real_dispatch:
         jp      z, x86_real_call_near
         cp      #C3
         jp      z, x86_real_ret_near
+        cp      #EA
+        jp      z, x86_real_jmp_far
+        cp      #9A
+        jp      z, x86_real_call_far
+        cp      #CB
+        jp      z, x86_real_ret_far
         cp      #EB
         jp      z, x86_real_jmp_short
         cp      #F4
@@ -546,6 +552,82 @@ x86_real_ret_near:
         ld      hl, (x86_real_stack_value)
         ld      (x86_reg_ip), hl
         jp      x86_real_next
+
+; EA ptr16:16 — far JMP. Fetch the complete pointer before changing CS:IP.
+x86_real_jmp_far:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_ip), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_ip+1), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_cs), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_cs+1), a
+        ld      hl, (x86_real_far_cs)
+        ld      (x86_reg_cs), hl
+        ld      hl, (x86_real_far_ip)
+        ld      (x86_reg_ip), hl
+        jp      x86_real_next
+
+; 9A ptr16:16 — far CALL. Push old CS, then return IP, so RETF sees IP first.
+; If the second push fails, restore SP to its original value.
+x86_real_call_far:
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_ip), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_ip+1), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_cs), a
+        call    x86_real_fetch8
+        ret     c
+        ld      (x86_real_far_cs+1), a
+        ld      hl, (x86_reg_sp)
+        ld      (x86_real_old_sp), hl
+        ld      de, (x86_reg_cs)
+        call    x86_real_stack_push
+        ret     c
+        ld      de, (x86_reg_ip)
+        call    x86_real_stack_push
+        jr      c, .rollback
+        ld      hl, (x86_real_far_cs)
+        ld      (x86_reg_cs), hl
+        ld      hl, (x86_real_far_ip)
+        ld      (x86_reg_ip), hl
+        jp      x86_real_next
+.rollback:
+        ld      hl, (x86_real_old_sp)
+        ld      (x86_reg_sp), hl
+        scf
+        ret
+
+; CB — RETF. Pop return IP then CS; publish both only after both reads work.
+; Restore the original SP if the second word cannot be read.
+x86_real_ret_far:
+        ld      hl, (x86_reg_sp)
+        ld      (x86_real_old_sp), hl
+        call    x86_real_stack_pop
+        ret     c
+        ld      (x86_real_far_ip), hl
+        call    x86_real_stack_pop
+        jr      c, .rollback
+        ld      (x86_real_far_cs), hl
+        ld      hl, (x86_real_far_cs)
+        ld      (x86_reg_cs), hl
+        ld      hl, (x86_real_far_ip)
+        ld      (x86_reg_ip), hl
+        jp      x86_real_next
+.rollback:
+        ld      hl, (x86_real_old_sp)
+        ld      (x86_reg_sp), hl
+        scf
+        ret
 
 ; -------------------------------------------------------------------------
 ; Short relative control flow: 70-7F Jcc, E0-E3 LOOP/JCXZ, EB JMP.
@@ -1102,6 +1184,8 @@ x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
 x86_real_seg_override_active: db 0
 x86_real_seg_override: dw 0
+x86_real_far_ip: dw 0
+x86_real_far_cs: dw 0
 
 x86_guest_main_image:
         db #B8,#00,#00             ; MOV AX,0000
@@ -1200,6 +1284,16 @@ x86_guest_jl_target:
         db #50,#58                  ; PUSH AX / POP AX, SP wraps back to 0001
         db #BC,#00,#01              ; restore SP=0100
 
+        ; Far CALL enters a RETF subroutine; return address then executes FAR JMP.
+        db #9A
+        dw #5002 + (x86_guest_far_subroutine - x86_guest_main_image)
+        dw 0
+        db #EA
+        dw #5002 + (x86_guest_far_target - x86_guest_main_image)
+        dw 0
+x86_guest_far_subroutine:
+        db #CB                      ; RETF restores IP and CS
+x86_guest_far_target:
         db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
