@@ -124,8 +124,8 @@ command_reset:
 
 ; -------------------------------------------------------------------------
 ; CMD_LOAD_X86
-; 1) Map physical page 68 at logical $4000-$7FFF through PG1=#44.
-; 2) Select ZX DMA module and set physical DMA target $110000.
+; 1) Keep default WIN1 page #03 selected; logical $5000 maps to $00D000.
+; 2) Select ZX DMA module and set physical DMA target $00D000.
 ; 3) Enable DMA by setting DMA_CST bit 7.
 ; 4) Clear CBIT: this is the READY indication to the host.
 ; 5) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
