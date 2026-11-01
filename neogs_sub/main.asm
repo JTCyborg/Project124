@@ -137,7 +137,8 @@ command_load_x86:
         ; PG1 is a direct page register: value #44 maps physical page 68.
         ; The DMA engine writes physical $110000; Z80 sees the same bytes at $4000.
         ld      a, #44
-        out     (PG1), a
+        ld      bc, PG1
+        out     (c), a
 
         ; Three independent PG1 tests:
         ; bit 0: page #44 accepts a write/read at $4000
@@ -167,7 +168,8 @@ command_load_x86:
 
 .pg1_test_switch_back:
         ld      a, #44
-        out     (PG1), a
+        ld      bc, PG1
+        out     (c), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
         jr      nz, .pg1_test_restore_normal
