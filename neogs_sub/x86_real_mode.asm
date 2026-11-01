@@ -79,6 +79,28 @@ x86_real_mode_test:
         call    x86_real_execute
         jp      c, x86_real_test_fail_3
 
+        ; CPU-03 far-control trace. Each HLT deliberately returns control to
+        ; the Z80 harness so CS:IP can be asserted at the CALL, RETF and JMP
+        ; boundaries. The final assertion below verifies the IRET destination
+        ; and the original SP, proving the far-call stack was balanced.
+        ld      de, 1
+        ld      bc, #4FF2 + (x86_guest_far_subroutine - x86_guest_main_image) + 1
+        call    x86_real_far_trace_check_cs_ip
+        call    x86_real_execute
+        jp      c, x86_real_test_fail_5
+
+        ld      de, 0
+        ld      bc, #5002 + (x86_guest_far_return_halt - x86_guest_main_image) + 1
+        call    x86_real_far_trace_check_cs_ip
+        call    x86_real_execute
+        jp      c, x86_real_test_fail_5
+
+        ld      de, 1
+        ld      bc, #4FF2 + (x86_guest_far_target - x86_guest_main_image) + 1
+        call    x86_real_far_trace_check_cs_ip
+        call    x86_real_execute
+        jp      c, x86_real_test_fail_5
+
         ; Handler's MOV AX,1234 must execute before guest IRET returns to HLT.
         ld      hl, (x86_reg_ax)
         ld      de, #1234
@@ -1142,6 +1164,18 @@ x86_real_clear_vector:
         ld      (x86_mem_word_value), hl
         jp      x86_mem_write16
 
+; DE=expected CS, BC=expected IP. A mismatch enters the guest regression
+; failure path; carry is cleared by the first successful 16-bit comparison.
+x86_real_far_trace_check_cs_ip:
+        ld      hl, (x86_reg_cs)
+        or      a
+        sbc     hl, de
+        jp      nz, x86_real_test_fail_5
+        ld      hl, (x86_reg_ip)
+        sbc     hl, bc
+        jp      nz, x86_real_test_fail_5
+        ret
+
 x86_real_test_fail_1:
         ld      a, 1
         jr      x86_real_test_fail
@@ -1289,17 +1323,23 @@ x86_guest_jl_target:
         db #50,#58                  ; PUSH AX / POP AX, SP wraps back to 0001
         db #BC,#00,#01              ; restore SP=0100
 
-        ; Far CALL enters a RETF subroutine; return address then executes FAR JMP.
+        ; CPU-03: pause at each far-control boundary so the Z80 harness can
+        ; verify the live CS:IP. CALL enters CS=1, RETF returns to CS=0,
+        ; then FAR JMP enters CS=1 again before INT 20h / IRET.
         db #9A
         dw #4FF2 + (x86_guest_far_subroutine - x86_guest_main_image)
-        dw 1                       ; same physical image at CS:IP = 0001:4FF2+offset
+        dw 1
+x86_guest_far_return_halt:
+        db #F4                      ; HLT after RETF returns to the caller
         db #EA
         dw #4FF2 + (x86_guest_far_target - x86_guest_main_image)
         dw 1
 x86_guest_far_subroutine:
-        db #CB                      ; RETF restores IP and CS
+        db #F4                      ; HLT on far CALL entry; next byte is RETF
+        db #CB
 x86_guest_far_target:
-        db #CD,#20,#F4             ; INT 20h / HLT
+        db #F4                      ; HLT on far JMP entry; resume at INT 20h
+        db #CD,#20,#F4             ; INT 20h / IRET / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
         db #B8,#34,#12,#CF

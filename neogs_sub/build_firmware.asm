@@ -8,8 +8,8 @@
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; The first firmware segment occupies the full low window $0000-$3FFF.
-; The Z80 stack is in the reserved upper WIN3 area $F000-$FFFF.
+; Firmware code is linked at $0000 and must end at or below $3400.
+; The Z80 stack starts at $3FFE in fixed WIN0; do not place it in remappable WIN3.
         ASSERT neogs_firmware_end <= $4000
         ASSERT neogs_firmware_end <= $3400 ; reserve $0C00 for fixed-WIN0 Z80 stack
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end

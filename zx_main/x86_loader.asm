@@ -188,6 +188,7 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_mov_flags_pass
         MACRO_EF_STRING P124_msg_int_guest_flow_pass
         MACRO_EF_STRING P124_msg_int_guest_stack_pass
+        MACRO_EF_STRING P124_msg_int_guest_far_trace_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_alu8_logic_pass
@@ -820,6 +821,7 @@ P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler 
 P124_msg_int_guest_mov_flags_pass: DEFB "[CPU] PASS: MOV r16, INC/DEC and OF/SF/ZF/AF/PF; CF preservation verified.", 13, 0
 P124_msg_int_guest_flow_pass: DEFB "[CPU] PASS: LOOP/JCXZ/JMP and taken/not-taken Jcc paths; FLAGS preserved.", 13, 0
 P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP, near CALL/RET, PUSH SP, POP SP and SS:FFFF wrap.", 13, 0
+P124_msg_int_guest_far_trace_pass: DEFB "[CPU] TRACE PASS: CALL 0001:4FFE; RETF 0000:5008; JMP 0001:5000; SP=0100.", 13, 0
 P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP register ModR/M; all six flags verified.", 13, 0
 P124_msg_int_guest_alu_memory_pass: DEFB "[CPU] PASS: 16-bit arithmetic memory ModR/M; DS/SS and ES/CS/SS/DS overrides verified.", 13, 0
 P124_msg_int_guest_alu8_logic_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP; 8/16-bit AND/OR/XOR/TEST; flags verified.", 13, 0
