@@ -70,6 +70,18 @@ x86_real_alu8_modrm:
         ld      a, (x86_real_opcode)
         cp      #84
         jp      z, x86_real_alu_unsupported
+        and     #38
+        cp      #00
+        jr      z, .memory_opcode_ok
+        cp      #10
+        jr      z, .memory_opcode_ok
+        cp      #18
+        jr      z, .memory_opcode_ok
+        cp      #28
+        jr      z, .memory_opcode_ok
+        cp      #38
+        jp      nz, x86_real_alu_unsupported
+.memory_opcode_ok:
         ld      a, (x86_alu8_modrm)
         call    x86_real_mov_decode_modrm
         ret     c
@@ -918,12 +930,12 @@ x86_alu8_memory_guest_image:
         db #18,#46,#00             ; SBB SS:[BP],AL -> 19
         db #B4,#30                 ; MOV AH,30
         db #2A,#27                 ; SUB AH,DS:[BX] -> 19
-        db #38,#07                 ; CMP DS:[BX],AL (no memory write)
-        db #3A,#07                 ; CMP AL,DS:[BX] (no register write)
         db #26,#00,#07             ; ADD ES:[BX],AL -> 33
         db #2E,#00,#07             ; ADD CS:[BX],AL -> 43
         db #36,#00,#07             ; ADD SS:[BX],AL -> 53
         db #3E,#00,#46,#00         ; ADD DS:[BP],AL -> 63
+        db #38,#07                 ; CMP DS:[BX],AL (no memory write)
+        db #3A,#07                 ; CMP AL,DS:[BX] (no register write)
         db #F4
 x86_alu8_memory_guest_image_end:
 
