@@ -50,16 +50,21 @@ LINE11:
         DB      $0D
 LINE11_END:
 
-        ; --- Строка 20: RANDOMIZE USR 15619 : REM : LOAD "proj124" CODE 24576 ---
-        DB      0, 20                   
-        DW      LINE20_END-LINE20       
+        ; --- Строка 20: загрузить host image и NeoGS firmware в банк 0 ---
+        ; RANDOMIZE USR 15619: LOAD "proj124" CODE 24576: LOAD "neogs" CODE 49152
+        DB      0, 20
+        DW      LINE20_END-LINE20
 LINE20:
-        DB      RANDOMIZE               ; RANDOMIZE
-        DB      USR, "15619", $0E, 0, 0 ; USR 15619
-        DW      15619                   
+        DB      RANDOMIZE
+        DB      USR, "15619", $0E, 0, 0
+        DW      15619
         DB      0
-        DB      $3A, REM, $3A           
-        DB      "LOAD ", 34, "proj124", 34, " CODE 24576", $0D 
+        DB      $3A, LOAD, 34, "proj124", 34, " ", CODE, " 24576", $0E, 0, 0
+        DW      24576
+        DB      0
+        DB      $3A, LOAD, 34, "neogs", 34, " ", CODE, " 49152", $0E, 0, 0
+        DW      49152
+        DB      0, $0D
 LINE20_END:
 
         ; --- Строка 21: Вывод метки "LOADED" в порт отладки #EF после чтения файла ---
