@@ -1012,6 +1012,11 @@ x86_guest_jl_target:
         db #5C                      ; POP SP -> SP=00F0
         db #BC,#00,#01              ; restore SP=0100
 
+        ; Exercise a PUSH/POP word crossing SS:FFFF -> SS:0000 offset wrap.
+        db #BC,#01,#00              ; MOV SP,0001
+        db #50,#58                  ; PUSH AX / POP AX, SP wraps back to 0001
+        db #BC,#00,#01              ; restore SP=0100
+
         db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
 x86_guest_handler_image:
