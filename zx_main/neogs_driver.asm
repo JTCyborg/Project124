@@ -196,7 +196,7 @@ upload_firmware::
         or      a
         jp      nz, .upload_failed
         ld      a, l
-        cp      255-0                 ; maximum length 254 bytes
+        cp      255                   ; maximum length 254 bytes
         jp      nc, .upload_failed
 
         ; Firmware length = package length - header - bootstrap length.
@@ -385,8 +385,9 @@ upload_firmware::
         pop     de
         jp      c, .upload_failed
         ld      hl, #C000
-        ld      bc, 256
-        ld      (neo_fw_buffer_remaining), bc
+        ld      hl, 256
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, #C000
 .firmware_buffer_ready:
         ld      a, (hl)
         call    gs_boot_send_data_byte
