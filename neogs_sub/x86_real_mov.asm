@@ -367,6 +367,159 @@ x86_mov_reg_temp:      db 0
 x86_mov_disp_low:      db 0
 
 ; -------------------------------------------------------------------------
+; Extended 8086 MOV addressing regression.
+; Covers all eight 16-bit EA forms, signed disp8, disp16, ES/CS/SS/DS
+; overrides, BP default-SS behavior, and a word store at offset FFFFh.
+; Guest code executes at CS:IP = 0800:5600 (physical D600h).
+; -------------------------------------------------------------------------
+x86_real_mov_addressing_test:
+        ld      hl, x86_mov_address_test_image
+        ld      de, #D600
+        ld      bc, x86_mov_address_test_image_end - x86_mov_address_test_image
+        call    x86_real_copy_image
+        jp      c, .fail_copy
+
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      hl, #1000
+        ld      (x86_reg_ds), hl
+        ld      hl, #3000
+        ld      (x86_reg_es), hl
+        ld      hl, #0800
+        ld      (x86_reg_cs), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #5600
+        ld      (x86_reg_ip), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+
+        call    x86_real_execute
+        jp      c, .fail_execute
+
+        ; Table records are segment, offset, expected word (little-endian).
+        ld      hl, x86_mov_address_test_table
+        ld      a, x86_mov_address_test_count
+        ld      (x86_mov_address_test_remaining), a
+        xor     a
+        ld      (x86_mov_address_test_index), a
+.verify_loop:
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_segment), de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_offset), de
+        call    x86_mem_read16
+        jp      c, .fail_verify
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_verify
+        ld      a, (x86_mov_address_test_index)
+        inc     a
+        ld      (x86_mov_address_test_index), a
+        ld      a, (x86_mov_address_test_remaining)
+        dec     a
+        ld      (x86_mov_address_test_remaining), a
+        jp      nz, .verify_loop
+
+        ld      hl, #1E01
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+.fail_copy:
+        ld      hl, #1E10
+        jp      .fail
+.fail_execute:
+        ld      hl, #1E11
+        jp      .fail
+.fail_verify:
+        ld      a, (x86_mov_address_test_index)
+        ld      l, a
+        ld      h, #1E
+        jp      .fail
+.fail:
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_mov_address_test_remaining: db 0
+x86_mov_address_test_index:     db 0
+
+x86_mov_address_test_image:
+        db #B8,#34,#12             ; MOV AX,1234
+        db #BB,#00,#02             ; MOV BX,0200
+        db #BE,#10,#00             ; MOV SI,0010
+        db #BF,#20,#00             ; MOV DI,0020
+        db #BD,#00,#01             ; MOV BP,0100
+
+        db #89,#00                 ; [BX+SI] -> DS:0210
+        db #89,#01                 ; [BX+DI] -> DS:0220
+        db #89,#02                 ; [BP+SI] -> SS:0110
+        db #89,#03                 ; [BP+DI] -> SS:0120
+        db #89,#04                 ; [SI] -> DS:0010
+        db #89,#05                 ; [DI] -> DS:0020
+        db #89,#46,#00             ; [BP+0] -> SS:0100
+        db #89,#07                 ; [BX] -> DS:0200
+
+        db #89,#40,#05             ; [BX+SI+5] positive disp8 -> DS:0215
+        db #89,#40,#FB             ; [BX+SI-5] negative disp8 -> DS:020B
+        db #89,#80,#34,#12         ; [BX+SI+1234] disp16 -> DS:1444
+
+        db #26,#89,#46,#00         ; ES:[BP] -> ES:0100
+        db #2E,#89,#46,#00         ; CS:[BP] -> CS:0100
+        db #36,#89,#46,#00         ; SS:[BP] -> SS:0100
+        db #3E,#89,#46,#00         ; DS:[BP] -> DS:0100
+
+        db #BB,#FF,#FF             ; BX=FFFF
+        db #89,#07                 ; word at DS:FFFF wraps offset to 0000
+        db #F4
+x86_mov_address_test_image_end:
+
+; segment, offset, expected word
+x86_mov_address_test_table:
+        dw #1000,#0210,#1234       ; [BX+SI]
+        dw #1000,#0220,#1234       ; [BX+DI]
+        dw #7000,#0110,#1234       ; [BP+SI], default SS
+        dw #7000,#0120,#1234       ; [BP+DI], default SS
+        dw #1000,#0010,#1234       ; [SI]
+        dw #1000,#0020,#1234       ; [DI]
+        dw #7000,#0100,#1234       ; [BP], default SS
+        dw #1000,#0200,#1234       ; [BX]
+        dw #1000,#0215,#1234       ; positive disp8
+        dw #1000,#020B,#1234       ; negative disp8
+        dw #1000,#1444,#1234       ; disp16
+        dw #3000,#0100,#1234       ; ES override
+        dw #0800,#0100,#1234       ; CS override
+        dw #7000,#0100,#1234       ; SS override
+        dw #1000,#0100,#1234       ; DS override
+        dw #1000,#FFFF,#1234       ; word wraps within same segment
+x86_mov_address_test_count EQU 16
+
+; -------------------------------------------------------------------------
 ; Regression test for all four MOV ModR/M opcodes and DS/SS effective
 ; addressing. Success: carry clear, saved_x86_ax=1D01h.
 ; -------------------------------------------------------------------------
