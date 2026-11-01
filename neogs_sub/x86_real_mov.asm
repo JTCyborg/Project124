@@ -313,37 +313,38 @@ x86_real_mov_write_rm:
         ret     c
         jp      x86_real_next
 .write_memory_word:
-        ; Diagnostic: capture the source and decoded EA for every
-        ; MOV r/m16,r16 operation using direct-address ModR/M (mod=00,r/m=110).
-        ld      a, (x86_mov_opcode)
-        cp      #89
-        jr      nz, .write_word_store
-        ld      a, (x86_mov_modrm)
-        cp      #16
-        jr      nz, .write_word_store
-        ld      hl, (x86_mov_value)
-        ld      (x86_mov_diag_value), hl
-        ld      hl, (x86_mov_offset)
-        ld      (x86_mov_diag_offset), hl
-        ld      hl, (x86_mov_segment)
-        ld      (x86_mov_diag_segment), hl
-.write_word_store:
+;         ; Diagnostic: capture the source and decoded EA for every
+;         ; MOV r/m16,r16 operation using direct-address ModR/M (mod=00,r/m=110).
+;         ld      a, (x86_mov_opcode)
+;         cp      #89
+;         jr      nz, .write_word_store
+;         ld      a, (x86_mov_modrm)
+;         cp      #16
+;         jr      nz, .write_word_store
+;         ld      hl, (x86_mov_value)
+;         ld      (x86_mov_diag_value), hl
+;         ld      hl, (x86_mov_offset)
+;         ld      (x86_mov_diag_offset), hl
+;         ld      hl, (x86_mov_segment)
+;         ld      (x86_mov_diag_segment), hl
+; .write_word_store:
         ld      hl, (x86_mov_value)
         ld      (x86_mem_word_value), hl
         ; ld      a, 'W'      ; diagnostic trace retained but disabled
         ; call    x86_mov_trace_event
         call    x86_mem_write16
         ret     c
-        ; Read the just-written word back immediately and trace it.
-        ld      hl, (x86_mov_offset)
-        ld      (x86_mem_offset), hl
-        ld      hl, (x86_mov_segment)
-        ld      (x86_mem_segment), hl
-        call    x86_mem_read16
-        ret     c
-        ld      (x86_mov_trace_readback), hl
-        ; ld      a, 'R'      ; diagnostic trace retained but disabled
-        ; call    x86_mov_trace_event
+;         ; Read the just-written word back immediately and trace it.
+;         ld      hl, (x86_mov_offset)
+;         ld      (x86_mem_offset), hl
+;         ld      hl, (x86_mov_segment)
+;         ld      (x86_mem_segment), hl
+;         call    x86_mem_read16
+;         ret     c
+;         ld      (x86_mov_trace_readback), hl
+;         ; ld      a, 'R'      ; diagnostic trace retained but disabled
+;         ; call    x86_mov_trace_event
+;         jp      x86_real_next
         jp      x86_real_next
 
 x86_mov_opcode:        db 0
@@ -357,12 +358,12 @@ x86_mov_width:         db 0
 x86_mov_offset:        dw 0
 x86_mov_segment:       dw 0
 x86_mov_value:         dw 0
-x86_mov_diag_value:    dw 0
-x86_mov_diag_offset:   dw 0
-x86_mov_diag_segment:  dw 0
-x86_mov_trace_readback: dw 0
-x86_mov_trace_enable:  db 0
-x86_mov_trace_stage:   db 0
+; x86_mov_diag_value:    dw 0
+; x86_mov_diag_offset:   dw 0
+; x86_mov_diag_segment:  dw 0
+; x86_mov_trace_readback: dw 0
+; x86_mov_trace_enable:  db 0
+; x86_mov_trace_stage:   db 0
 x86_mov_reg_temp:      db 0
 x86_mov_disp_low:      db 0
 
@@ -551,12 +552,12 @@ x86_real_mov_memory_test:
         ld      (x86_reg_ds), hl
         ld      (x86_reg_es), hl
         ld      (x86_reg_cs), hl
-        ld      a, 1
-        ld      (x86_mov_trace_enable), a
-        ld      hl, #FFFF
-        ld      (x86_mov_diag_value), hl
-        ld      hl, #FFFF
-        ld      (x86_mov_diag_offset), hl
+        ; ld      a, 1
+        ; ld      (x86_mov_trace_enable), a
+        ; ld      hl, #FFFF
+        ; ld      (x86_mov_diag_value), hl
+        ; ld      hl, #FFFF
+        ; ld      (x86_mov_diag_offset), hl
         ld      hl, #5600
         ld      (x86_reg_ip), hl
         ld      hl, #7000
@@ -567,8 +568,8 @@ x86_real_mov_memory_test:
         ld      (x86_reg_flags), hl
 
         call    x86_real_execute
-        xor     a
-        ld      (x86_mov_trace_enable), a
+        ; xor     a
+        ; ld      (x86_mov_trace_enable), a
         jr      nc, .execution_ok
         ld      hl, #1D02
         jp      .fail
@@ -672,14 +673,8 @@ x86_real_mov_memory_test:
         ld      hl, #1D33
         jp      .fail
 .fail_di:
-        ; Report the decoded direct EA. FFFF means the capture hook did
-        ; not run; 0206 means direct address decoding matched the test.
-        ld      hl, (x86_mov_diag_offset)
-        ld      (saved_x86_ax), hl
-        ld      a, 11
-        ld      (x86_exit_status), a
-        scf
-        ret
+        ld      hl, #1D34
+        jp      .fail
 .fail_si:
         ld      hl, #1D35
         jp      .fail
