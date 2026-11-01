@@ -664,9 +664,15 @@ x86_mov_trace_event:
         ret
 
 x86_mov_trace_putc:
+        ; NeoGS local I/O is not the Spectrum printer port. Send each
+        ; trace byte through the existing DBIT stream; the host drains it
+        ; while CMD_INT_GUEST_TEST is active and mirrors it to port #EF.
         push    bc
-        ld      bc, #00EF
-        out     (c), a
+        push    de
+        push    hl
+        call    neo_send_data_byte
+        pop     hl
+        pop     de
         pop     bc
         ret
 
