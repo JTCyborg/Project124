@@ -1,0 +1,522 @@
+; =========================================================================
+; PROJECT124 — 8086 string instructions, single-iteration forms (no REP yet)
+;
+; A4/A5 MOVS, A6/A7 CMPS, AA/AB STOS, AC/AD LODS, AE/AF SCAS.
+; Source uses DS:SI or the active segment override; destination is ES:DI.
+; DF controls index direction. REP/REPE/REPNE are a separate next stage.
+; =========================================================================
+
+x86_real_string_instruction:
+        ld      (x86_string_opcode), a
+        and     #FE
+        cp      #A4
+        jp      z, x86_string_movs
+        cp      #A6
+        jp      z, x86_string_cmps
+        cp      #AA
+        jp      z, x86_string_stos
+        cp      #AC
+        jp      z, x86_string_lods
+        jp      x86_string_scas
+
+x86_string_movs:
+        call    x86_string_read_source
+        ret     c
+        ld      (x86_string_value), hl
+        call    x86_string_write_dest
+        ret     c
+        call    x86_string_advance_si
+        call    x86_string_advance_di
+        jp      x86_real_next
+
+x86_string_cmps:
+        call    x86_string_read_source
+        ret     c
+        ld      (x86_string_value), hl
+        call    x86_string_read_dest
+        ret     c
+        ld      (x86_string_other), hl
+        call    x86_string_compare
+        call    x86_string_advance_si
+        call    x86_string_advance_di
+        jp      x86_real_next
+
+x86_string_stos:
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        xor     a
+        call    x86_alu8_read_reg
+        ld      l, a
+        ld      h, 0
+        jr      .store
+.word:
+        xor     a
+        call    x86_alu_read_reg16
+.store:
+        ld      (x86_string_value), hl
+        call    x86_string_write_dest
+        ret     c
+        call    x86_string_advance_di
+        jp      x86_real_next
+
+x86_string_lods:
+        call    x86_string_read_source
+        ret     c
+        ld      (x86_string_value), hl
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        ld      a, l
+        ld      (x86_alu8_result), a
+        xor     a
+        call    x86_alu8_write_reg
+        jr      .advance
+.word:
+        xor     a
+        ld      hl, (x86_string_value)
+        call    x86_alu_write_reg16
+.advance:
+        call    x86_string_advance_si
+        jp      x86_real_next
+
+x86_string_scas:
+        call    x86_string_read_dest
+        ret     c
+        ld      (x86_string_other), hl
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        xor     a
+        call    x86_alu8_read_reg
+        ld      l, a
+        ld      h, 0
+        jr      .compare
+.word:
+        xor     a
+        call    x86_alu_read_reg16
+.compare:
+        ld      (x86_string_value), hl
+        call    x86_string_compare
+        call    x86_string_advance_di
+        jp      x86_real_next
+
+; Read DS:SI or the active source-segment override. OUT HL=value.
+x86_string_read_source:
+        ld      hl, (x86_reg_ds)
+        ld      a, (x86_real_seg_override_active)
+        or      a
+        jr      z, .segment_ready
+        ld      hl, (x86_real_seg_override)
+.segment_ready:
+        ld      (x86_mem_segment), hl
+        ld      hl, (x86_reg_si)
+        ld      (x86_mem_offset), hl
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        ret     c
+        call    x86_mem_read8
+        ret     c
+        ld      l, a
+        ld      h, 0
+        or      a
+        ret
+.word:
+        jp      x86_mem_read16
+
+; Read ES:DI. OUT HL=value.
+x86_string_read_dest:
+        ld      hl, (x86_reg_es)
+        ld      (x86_mem_segment), hl
+        ld      hl, (x86_reg_di)
+        ld      (x86_mem_offset), hl
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        ret     c
+        call    x86_mem_read8
+        ret     c
+        ld      l, a
+        ld      h, 0
+        or      a
+        ret
+.word:
+        jp      x86_mem_read16
+
+; Write x86_string_value to ES:DI.
+x86_string_write_dest:
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        ld      a, (x86_string_value)
+        ld      (x86_mem_value), a
+        ld      hl, (x86_reg_es)
+        ld      (x86_mem_segment), hl
+        ld      hl, (x86_reg_di)
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_write8
+.word:
+        ld      hl, (x86_string_value)
+        ld      (x86_mem_word_value), hl
+        ld      hl, (x86_reg_es)
+        ld      (x86_mem_segment), hl
+        ld      hl, (x86_reg_di)
+        ld      (x86_mem_offset), hl
+        jp      x86_mem_write16
+
+; Compare x86_string_value - x86_string_other and update all six status flags.
+x86_string_compare:
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .word
+        ld      a, (x86_string_value)
+        ld      (x86_alu8_dst), a
+        ld      a, (x86_string_other)
+        ld      (x86_alu8_src), a
+        xor     a
+        ld      (x86_alu8_carry_in), a
+        ld      a, #38
+        ld      (x86_alu8_mode), a
+        ld      a, (x86_alu8_dst)
+        ld      b, a
+        ld      a, (x86_alu8_src)
+        ld      c, a
+        ld      a, b
+        sub     c
+        ld      (x86_alu8_result), a
+        ld      a, 0
+        adc     a, 0
+        ld      (x86_alu8_carry), a
+        jp      x86_real_alu8_update_flags
+.word:
+        ld      hl, (x86_string_value)
+        ld      (x86_alu_dst), hl
+        ld      hl, (x86_string_other)
+        ld      (x86_alu_src), hl
+        xor     a
+        ld      (x86_alu_carry_in), a
+        ld      a, #38
+        ld      (x86_alu_mode), a
+        ld      hl, (x86_alu_dst)
+        ld      de, (x86_alu_src)
+        or      a
+        sbc     hl, de
+        ld      (x86_alu_result), hl
+        ld      a, 0
+        adc     a, 0
+        ld      (x86_alu_carry), a
+        jp      x86_alu_update_flags
+
+; Apply DF and operand width to HL, then update SI or DI.
+x86_string_adjust_index:
+        ld      a, (x86_reg_flags+1)
+        bit     2, a                    ; DF is FLAGS bit 10
+        jr      nz, .backward
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .forward_word
+        inc     hl
+        ret
+.forward_word:
+        inc     hl
+        inc     hl
+        ret
+.backward:
+        ld      a, (x86_string_opcode)
+        and     1
+        jr      nz, .backward_word
+        dec     hl
+        ret
+.backward_word:
+        dec     hl
+        dec     hl
+        ret
+
+x86_string_advance_si:
+        ld      hl, (x86_reg_si)
+        call    x86_string_adjust_index
+        ld      (x86_reg_si), hl
+        ret
+
+x86_string_advance_di:
+        ld      hl, (x86_reg_di)
+        call    x86_string_adjust_index
+        ld      (x86_reg_di), hl
+        ret
+
+; -------------------------------------------------------------------------
+; CPU-STR-01 regression. Four HLT checkpoints expose CMPS/SCAS FLAGS.
+; The first MOVSB uses an SS override; remaining source reads use DS.
+; The second program verifies DF=1 for both byte and word operations.
+; -------------------------------------------------------------------------
+
+x86_real_strings_test:
+        ld      hl, x86_string_guest_image
+        ld      de, #5200
+        ld      bc, x86_string_guest_image_end - x86_string_guest_image
+        call    x86_real_copy_image
+        jp      c, x86_string_test_fail_copy
+
+        ld      hl, x86_string_guest_df_image
+        ld      de, #5240
+        ld      bc, x86_string_guest_df_image_end - x86_string_guest_df_image
+        call    x86_real_copy_image
+        jp      c, x86_string_test_fail_copy
+
+        ld      hl, x86_string_ds_data
+        ld      de, #4100
+        ld      bc, x86_string_ds_data_end - x86_string_ds_data
+        call    x86_real_copy_image
+        jp      c, x86_string_test_fail_copy
+
+        ld      hl, x86_string_ss_data
+        ld      de, #7100
+        ld      bc, x86_string_ss_data_end - x86_string_ss_data
+        call    x86_real_copy_image
+        jp      c, x86_string_test_fail_copy
+
+        ld      hl, x86_string_es_data
+        ld      de, #8200
+        ld      bc, x86_string_es_data_end - x86_string_es_data
+        call    x86_real_copy_image
+        jp      c, x86_string_test_fail_copy
+
+        ; Initialize the guest for the forward byte/word sequence.
+        ld      hl, 0
+        ld      (x86_reg_cs), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bx), hl
+        ld      hl, #5200
+        ld      (x86_reg_ip), hl
+        ld      hl, #ABCD
+        ld      (x86_reg_ax), hl
+        ld      hl, #0100
+        ld      (x86_reg_si), hl
+        ld      hl, #0200
+        ld      (x86_reg_di), hl
+        ld      hl, #0400
+        ld      (x86_reg_ds), hl
+        ld      hl, #0800
+        ld      (x86_reg_es), hl
+        ld      hl, #0700
+        ld      (x86_reg_ss), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0302
+        ld      (x86_reg_flags), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+
+        ; MOVSB/MOVSW, LODSB/LODSW, STOSB/STOSW, CMPSB -> HLT.
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_ax)
+        ld      de, #7766
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_si)
+        ld      de, #0107
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_di)
+        ld      de, #0207
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+        ld      hl, (x86_reg_flags)
+        ld      de, #0246
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_1
+
+        ; CMPSW -> HLT.
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_si)
+        ld      de, #0109
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_2
+        ld      hl, (x86_reg_di)
+        ld      de, #0209
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_2
+        ld      hl, (x86_reg_flags)
+        ld      de, #0202
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_2
+
+        ; SCASB -> HLT.
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_di)
+        ld      de, #020A
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_3
+        ld      hl, (x86_reg_flags)
+        ld      de, #0246
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_3
+
+        ; SCASW -> HLT.
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_di)
+        ld      de, #020C
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_4
+        ld      hl, (x86_reg_flags)
+        ld      de, #0202
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_4
+
+        ; Verify MOVSB/MOVSW and STOSB/STOSW destination bytes.
+        ld      hl, #8200
+        ld      a, #11
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+        ld      hl, #8201
+        ld      a, #33
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+        ld      hl, #8202
+        ld      a, #44
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+        ld      hl, #8203
+        ld      a, #66
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+        ld      hl, #8204
+        ld      a, #66
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+        ld      hl, #8205
+        ld      a, #77
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_5
+
+        ; Reverse-direction byte and word operations with DF set.
+        ld      hl, #0102
+        ld      (x86_reg_si), hl
+        ld      hl, #0202
+        ld      (x86_reg_di), hl
+        ld      hl, #0702
+        ld      (x86_reg_flags), hl
+        ld      hl, #5240
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_string_test_fail_execute
+        ld      hl, (x86_reg_si)
+        ld      de, #00FF
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_6
+        ld      hl, (x86_reg_di)
+        ld      de, #01FF
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_6
+        ld      hl, (x86_reg_flags)
+        ld      de, #0702
+        or      a
+        sbc     hl, de
+        jp      nz, x86_string_test_fail_6
+
+        ld      hl, #8201
+        ld      a, #33
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_6
+        ld      hl, #8202
+        ld      a, #44
+        call    x86_string_check_byte
+        jp      c, x86_string_test_fail_6
+
+        or      a
+        ret
+
+x86_string_check_byte:
+        ld      (x86_string_expected), a
+        ld      (x86_mem_addr), hl
+        xor     a
+        ld      (x86_mem_addr+2), a
+        call    x86_mem_read8
+        ret     c
+        ld      b, a
+        ld      a, (x86_string_expected)
+        cp      b
+        ret     z
+        scf
+        ret
+
+x86_string_test_fail_copy:
+        ld      hl, #1D10
+        jr      x86_string_test_fail
+x86_string_test_fail_execute:
+        ld      hl, #1D11
+        jr      x86_string_test_fail
+x86_string_test_fail_1:
+        ld      hl, #1D01
+        jr      x86_string_test_fail
+x86_string_test_fail_2:
+        ld      hl, #1D02
+        jr      x86_string_test_fail
+x86_string_test_fail_3:
+        ld      hl, #1D03
+        jr      x86_string_test_fail
+x86_string_test_fail_4:
+        ld      hl, #1D04
+        jr      x86_string_test_fail
+x86_string_test_fail_5:
+        ld      hl, #1D05
+        jr      x86_string_test_fail
+x86_string_test_fail_6:
+        ld      hl, #1D06
+x86_string_test_fail:
+        ld      (saved_x86_ax), hl
+        ld      a, 13
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_string_opcode:   db 0
+x86_string_value:    dw 0
+x86_string_other:    dw 0
+x86_string_expected: db 0
+
+x86_string_guest_image:
+        db #36,#A4,#A5,#AC,#AD,#AA,#AB,#A6,#F4,#A7,#F4,#AE,#F4,#AF,#F4
+x86_string_guest_image_end:
+
+x86_string_guest_df_image:
+        db #A4,#A5,#F4
+x86_string_guest_df_image_end:
+
+x86_string_ds_data:
+        db #22,#33,#44,#55,#66,#77,#80,#80,#00
+x86_string_ds_data_end:
+
+x86_string_ss_data:
+        db #11
+x86_string_ss_data_end:
+
+x86_string_es_data:
+        db #AA,#BB,#CC,#DD,#EE,#FF,#80,#7F,#00,#66,#65,#77
+x86_string_es_data_end:
