@@ -1,9 +1,9 @@
 ; =========================================================================
-; Build both NeoGS binaries from the Project 124 root:
+; Build NeoGS firmware and one deployable package from the Project 124 root:
 ;   sjasmplus neogs_sub/build_firmware.asm
 ;
 ; neogs_code.bin       custom firmware, loaded at logical RAM address $0000
-; neogs_bootstrap.bin  executable Z80 bootstrap, loaded by #14 at $4000
+; neogs_bootstrap.bin  intermediate bootstrap; neoprog.bin packages it with firmware
 ; =========================================================================
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
@@ -21,3 +21,14 @@
         ASSERT neogs_bootstrap_end <= $7FFF
         SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
         SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+
+; One deployable file: [WORD bootstrap_length][bootstrap][firmware].
+; The host reads this package once from TR-DOS as neoprog.C.
+        ORG     #8000
+neoprog_package_start:
+        DEFW    neogs_bootstrap_end - neogs_bootstrap_start
+        INCBIN  "neogs_bootstrap.bin"
+        INCBIN  "neogs_code.bin"
+neoprog_package_end:
+        SAVEBIN "neoprog.bin", neoprog_package_start, neoprog_package_end - neoprog_package_start
+        SAVEBIN "zx_main/neoprog.bin", neoprog_package_start, neoprog_package_end - neoprog_package_start
