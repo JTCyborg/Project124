@@ -1379,6 +1379,7 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_alu_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_alu8_logic_pass
+        MACRO_EF_STRING P124_msg_int_guest_alu8_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_address_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
@@ -1984,6 +1985,7 @@ P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP registers, PUSH SP, PO
 P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP register ModR/M; all six flags verified.", 13, 0
 P124_msg_int_guest_alu_memory_pass: DEFB "[CPU] PASS: 16-bit arithmetic memory ModR/M; DS/SS and ES/CS/SS/DS overrides verified.", 13, 0
 P124_msg_int_guest_alu8_logic_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP; 8/16-bit AND/OR/XOR/TEST; flags verified.", 13, 0
+P124_msg_int_guest_alu8_memory_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP memory ModR/M; all EA forms, displacements and segment overrides verified.", 13, 0
 P124_msg_int_guest_mov_memory_pass: DEFB "[CPU] PASS: MOV r/m8,r8 and r/m16,r16; DS/SS addressing verified.", 13, 0
 P124_msg_int_guest_mov_address_pass: DEFB "[CPU] PASS: MOV all 8 EA forms, signed disp8/disp16, segment overrides and offset wrap.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
@@ -5300,7 +5302,7 @@ x86_int_target_cs: dw 0
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms, short Jcc,
 ; LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
-; 16-bit arithmetic memory ModR/M operands and segment overrides are supported; byte arithmetic and logical memory ModR/M remain unsupported.
+; 16-bit and byte arithmetic memory ModR/M operands are supported, including segment overrides. Logical memory ModR/M remains unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -5445,8 +5447,12 @@ x86_real_mode_test:
         call    x86_real_alu_memory_test
         ret     c
 
-        ; Run byte arithmetic and 8/16-bit logical regression.
+        ; Run byte arithmetic and 8/16-bit logical register regression.
         call    x86_real_alu8_logic_test
+        ret     c
+
+        ; Stage 3E: byte arithmetic ModR/M memory operands and segment overrides.
+        call    x86_real_alu8_memory_test
         ret     c
 
         ; Stage 3B: 8086 MOV between register and memory operands.
@@ -7166,7 +7172,8 @@ x86_guest_alu_image_end:
 ; Byte arithmetic: ADD/ADC/SBB/SUB/CMP r/m8,r8 and reverse direction.
 ; Byte logic: OR/AND/XOR/TEST.
 ; Word logic: OR/AND/XOR/TEST.
-; Only ModR/M mod=11 (register-direct) is accepted in this stage.
+; Byte arithmetic supports register and memory ModR/M operands; byte/word
+; logical operations and TEST remain register-direct in this stage.
 ; Logical instructions clear CF/OF and deterministically clear undefined AF.
 ; =========================================================================
 
@@ -7181,8 +7188,10 @@ x86_real_alu8_modrm:
         ld      (x86_alu8_modrm), a
         and     #C0
         cp      #C0
-        jp      nz, x86_real_alu_unsupported
+        jp      nz, .memory_operand
 
+        xor     a
+        ld      (x86_alu8_dst_is_mem), a
         ld      a, (x86_alu8_modrm)
         and     #38
         srl     a
@@ -7222,15 +7231,77 @@ x86_real_alu8_modrm:
         ld      (x86_alu8_src_reg), a
         ld      a, 1
         ld      (x86_alu8_no_write), a
+        ; TEST is register-direct in this stage. Do not fall through into
+        ; the memory-only decoder inserted immediately below.
+        jp      .operands_ready
+
+.memory_operand:
+        ; This stage adds arithmetic memory forms only. TEST/logic memory
+        ; forms remain on the unsupported path until their own regression.
+        xor     a
+        ld      (x86_alu8_no_write), a
+        ld      (x86_alu8_is_logic), a
+        ld      a, (x86_real_opcode)
+        cp      #84
+        jp      z, x86_real_alu_unsupported
+        and     #38
+        cp      #00
+        jr      z, .memory_opcode_ok
+        cp      #10
+        jr      z, .memory_opcode_ok
+        cp      #18
+        jr      z, .memory_opcode_ok
+        cp      #28
+        jr      z, .memory_opcode_ok
+        cp      #38
+        jp      nz, x86_real_alu_unsupported
+.memory_opcode_ok:
+        ld      a, (x86_alu8_modrm)
+        call    x86_real_mov_decode_modrm
+        ret     c
+        xor     a
+        ld      (x86_alu8_dst_is_mem), a
+        ld      a, (x86_real_opcode)
+        and     2
+        jr      nz, .memory_source
+
+        ; r/m8 is destination: read memory, register field is source.
+        ld      a, 1
+        ld      (x86_alu8_dst_is_mem), a
+        call    x86_real_alu8_read_memory
+        ret     c
+        ld      (x86_alu8_dst), a
+        ld      a, (x86_mov_reg)
+        call    x86_alu8_read_reg
+        ld      (x86_alu8_src), a
+        jp      .operands_ready
+
+.memory_source:
+        ; Register field is destination; r/m8 memory is source.
+        ld      a, (x86_mov_reg)
+        ld      (x86_alu8_dst_reg), a
+        call    x86_alu8_read_reg
+        ld      (x86_alu8_dst), a
+        call    x86_real_alu8_read_memory
+        ret     c
+        ld      (x86_alu8_src), a
 
 .operands_ready:
+        ld      a, (x86_alu8_dst_reg)
+        ld      (x86_alu8_dst_reg), a
+        ; Register-direct operands are loaded here; memory paths above
+        ; have already populated the byte values.
+        ld      a, (x86_alu8_modrm)
+        and     #C0
+        cp      #C0
+        jr      nz, .values_ready
         ld      a, (x86_alu8_dst_reg)
         call    x86_alu8_read_reg
         ld      (x86_alu8_dst), a
         ld      a, (x86_alu8_src_reg)
         call    x86_alu8_read_reg
         ld      (x86_alu8_src), a
-
+.values_ready:
         ld      a, (x86_real_opcode)
         cp      #84
         jr      z, .force_test
@@ -7370,6 +7441,14 @@ x86_real_alu8_modrm:
         and     #38
         cp      #38
         jp      z, x86_real_next
+        ld      a, (x86_alu8_dst_is_mem)
+        or      a
+        jr      z, .write_register
+        ld      a, (x86_alu8_result)
+        call    x86_real_alu8_write_memory
+        ret     c
+        jp      x86_real_next
+.write_register:
         ld      a, (x86_alu8_dst_reg)
         ld      b, a
         ld      a, (x86_alu8_result)
@@ -7377,6 +7456,27 @@ x86_real_alu8_modrm:
         ld      a, b
         call    x86_alu8_write_reg
         jp      x86_real_next
+
+; Read/write one byte through the effective address calculated by MOV.
+; The MOV decoder has already applied default SS for BP and segment prefix.
+x86_real_alu8_read_memory:
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset_work), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_read8
+
+x86_real_alu8_write_memory:
+        ld      (x86_mem_value), a
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset_work), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_write8
 
 ; Read byte register selected by A; return byte in A.
 x86_alu8_read_reg:
@@ -7801,6 +7901,324 @@ x86_real_alu8_logic_test:
         ld      (x86_exit_status), a
         scf
         ret
+
+x86_alu8_dst_is_mem:  db 0
+; -------------------------------------------------------------------------
+; 8086 byte arithmetic memory regression.
+; Guest at 0800:5700. Covers both ModR/M directions for ADD/ADC/SUB/SBB/CMP,
+; BP default SS, and ES/CS/SS/DS segment overrides.
+; -------------------------------------------------------------------------
+x86_real_alu8_memory_test:
+        ld      hl, x86_alu8_memory_guest_image
+        ld      de, #D700
+        ld      bc, x86_alu8_memory_guest_image_end - x86_alu8_memory_guest_image
+        call    x86_real_copy_image
+        jp      c, .fail_copy
+
+        ; Seed the six locations checked after guest execution.
+        ld      a, #10
+        ld      de, #1000
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #20
+        ld      de, #7000
+        ld      bc, #0100
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #30
+        ld      de, #3000
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #40
+        ld      de, #0800
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #50
+        ld      de, #7000
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #60
+        ld      de, #1000
+        ld      bc, #0100
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+
+        ; Additional zeroed cells for all 8086 16-bit EA forms and
+        ; signed disp8 / disp16 arithmetic stores.
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0210
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0220
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #7000
+        ld      bc, #0110
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #7000
+        ld      bc, #0120
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0010
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0020
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0300
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #0205
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #01FB
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, 0
+        ld      de, #1000
+        ld      bc, #1434
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+
+        ; Initialize guest registers and real-mode segments.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      hl, #1000
+        ld      (x86_reg_ds), hl
+        ld      hl, #3000
+        ld      (x86_reg_es), hl
+        ld      hl, #0800
+        ld      (x86_reg_cs), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #0010
+        ld      (x86_reg_si), hl
+        ld      hl, #0020
+        ld      (x86_reg_di), hl
+        ld      hl, #5700
+        ld      (x86_reg_ip), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+
+        call    x86_real_execute
+        jp      c, .fail_execute
+
+        ; AL/AH and CL/CH results; DX records the final carry-generation SUB.
+        ld      hl, (x86_reg_ax)
+        ld      de, #1903
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+        ld      hl, (x86_reg_cx)
+        ld      de, #0215
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+        ld      hl, (x86_reg_dx)
+        ld      de, #00EB
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+        ld      hl, (x86_reg_flags)
+        ld      de, #0293
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_flags
+
+        ; Verify each byte destination, including every segment override.
+        ld      hl, x86_alu8_mem_expected_table
+        ld      (x86_alu8_mem_table_ptr), hl
+        ld      a, x86_alu8_mem_expected_count
+        ld      (x86_alu8_mem_remaining), a
+        xor     a
+        ld      (x86_alu8_mem_index), a
+.verify_loop:
+        ld      hl, (x86_alu8_mem_table_ptr)
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_segment), de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (x86_mem_offset_work), de
+        ld      a, (hl)
+        inc     hl
+        ld      (x86_alu8_mem_expected), a
+        ld      (x86_alu8_mem_table_ptr), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_verify
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        ld      b, a
+        ld      a, (x86_alu8_mem_expected)
+        cp      b
+        jp      nz, .fail_verify
+        ld      a, (x86_alu8_mem_index)
+        inc     a
+        ld      (x86_alu8_mem_index), a
+        ld      a, (x86_alu8_mem_remaining)
+        dec     a
+        ld      (x86_alu8_mem_remaining), a
+        jp      nz, .verify_loop
+
+        ld      hl, #1F21
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+
+.fail_copy:
+        ld      hl, #1F20
+        jp      .fail
+.fail_seed:
+        ld      hl, #1F21
+        jp      .fail
+.fail_execute:
+        ld      hl, #1F22
+        jp      .fail
+.fail_register:
+        ld      hl, #1F23
+        jp      .fail
+.fail_flags:
+        ld      hl, #1F24
+        jp      .fail
+.fail_verify:
+        ld      a, (x86_alu8_mem_index)
+        ld      l, a
+        ld      h, #1F
+.fail:
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+; IN: A=value, DE=segment, BC=offset.
+x86_real_alu8_memory_seed:
+        ld      (x86_mem_value), a
+        ld      (x86_mem_segment), de
+        ld      (x86_mem_offset_work), bc
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_write8
+
+x86_alu8_mem_table_ptr:  dw 0
+x86_alu8_mem_expected:   db 0
+x86_alu8_mem_remaining: db 0
+x86_alu8_mem_index:     db 0
+
+x86_alu8_memory_guest_image:
+        db #B0,#03                 ; MOV AL,03
+        db #BB,#00,#02             ; MOV BX,0200
+        db #BD,#00,#01             ; MOV BP,0100
+        db #B1,#02                 ; MOV CL,02
+        db #B5,#02                 ; MOV CH,02
+        db #00,#07                 ; ADD DS:[BX],AL -> 13
+        db #02,#0F                 ; ADD CL,DS:[BX] -> 15
+        db #BA,#00,#00             ; MOV DX,0000
+        db #2A,#D1                 ; SUB DL,CL -> CF=1
+        db #10,#07                 ; ADC DS:[BX],AL -> 17
+        db #BA,#00,#00             ; MOV DX,0000
+        db #2A,#D1                 ; SUB DL,CL -> CF=1
+        db #12,#2F                 ; ADC CH,DS:[BX] -> 1A
+        db #28,#46,#00             ; SUB SS:[BP],AL -> 1D
+        db #BA,#00,#00             ; MOV DX,0000
+        db #2A,#D1                 ; SUB DL,CL -> CF=1
+        db #18,#46,#00             ; SBB SS:[BP],AL -> 19
+        db #BA,#00,#00             ; MOV DX,0000
+        db #2A,#D1                 ; SUB DL,CL -> CF=1
+        db #1A,#2F                 ; SBB CH,DS:[BX] -> 02
+        db #B4,#30                 ; MOV AH,30
+        db #2A,#27                 ; SUB AH,DS:[BX] -> 19
+        db #26,#00,#07             ; ADD ES:[BX],AL -> 33
+        db #2E,#00,#07             ; ADD CS:[BX],AL -> 43
+        db #36,#00,#07             ; ADD SS:[BX],AL -> 53
+        db #3E,#00,#46,#00         ; ADD DS:[BP],AL -> 63
+        db #00,#00                 ; ADD [BX+SI],AL -> DS:0210 = 03
+        db #00,#01                 ; ADD [BX+DI],AL -> DS:0220 = 03
+        db #00,#02                 ; ADD [BP+SI],AL -> SS:0110 = 03
+        db #00,#03                 ; ADD [BP+DI],AL -> SS:0120 = 03
+        db #00,#04                 ; ADD [SI],AL -> DS:0010 = 03
+        db #00,#05                 ; ADD [DI],AL -> DS:0020 = 03
+        db #00,#46,#00             ; ADD [BP+0],AL -> SS:0100 = 1C
+        db #00,#06,#00,#03         ; ADD direct [0300],AL -> 03
+        db #00,#47,#05             ; ADD [BX+5],AL -> 03
+        db #00,#47,#FB             ; ADD [BX-5],AL -> 03
+        db #00,#87,#34,#12         ; ADD [BX+1234],AL -> 03
+        db #38,#07                 ; CMP DS:[BX],AL (no memory write)
+        db #3A,#07                 ; CMP AL,DS:[BX] (no register write)
+        db #F4
+x86_alu8_memory_guest_image_end:
+
+; segment, offset, expected byte
+x86_alu8_mem_expected_table:
+        dw #1000,#0200
+        db #17
+        dw #7000,#0100
+        db #1C
+        dw #3000,#0200
+        db #33
+        dw #0800,#0200
+        db #43
+        dw #7000,#0200
+        db #53
+        dw #1000,#0100
+        db #63
+        dw #1000,#0210
+        db #03
+        dw #1000,#0220
+        db #03
+        dw #7000,#0110
+        db #03
+        dw #7000,#0120
+        db #03
+        dw #1000,#0010
+        db #03
+        dw #1000,#0020
+        db #03
+        dw #1000,#0300
+        db #03
+        dw #1000,#0205
+        db #03
+        dw #1000,#01FB
+        db #03
+        dw #1000,#1434
+        db #03
+x86_alu8_mem_expected_count EQU 16
 
 x86_alu8_modrm:       db 0
 x86_alu8_mode:        db 0
