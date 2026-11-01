@@ -101,6 +101,10 @@ x86_hlt:
 
 ; Unsupported instruction: stop rather than executing arbitrary memory.
 x86_unsupported:
+        ; Preserve the actual byte that failed opcode dispatch in AX.
+        ; This makes DMA/window corruption diagnosable from the host result.
+        ld      l, a
+        ld      h, 0
         ld      (saved_z80_ax), hl
         ld      a, 2
         ld      (x86_exit_status), a
