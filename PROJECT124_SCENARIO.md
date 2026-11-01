@@ -423,3 +423,17 @@
 - Guest INT 20h again failed with `status/detail = 000D 1D01`. With the prior diagnostic split, `1D01` now unambiguously identifies the AX comparison immediately after the first guest HLT (MOVSB/MOVSW/LODSB sequence). SI/DI/FLAGS checks are not reached.
 - Updated only the failure-report path: on this AX mismatch it now returns the **observed guest AX** in the existing status/detail field instead of the generic `1D01` marker. This is diagnostic instrumentation; it does not alter LODSB execution or the expected value. Commit: `a1391943ec32048bda16d0431ed71c109ac5e87e`.
 - Next run must report the actual AX value, allowing separation of an incorrect memory read, AL write, or AH preservation. Await CI artifact before runtime. CPU-STR and STACK runtime remain unpassed; REP work remains blocked.
+
+
+### 2026-11-02 — third CPU-STR runtime: уточнение AX=#7766 и разделение второго checkpoint
+
+- User runtime log: package length `#3BC0` (60 sectors); bootstrap, IPC/HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA и INT stack-frame/IRET прошли. Guest INT 20h завершился `status/detail = 000D 7766`.
+- `7766` — фактическое значение, сохранённое диагностическим обработчиком в `saved_x86_ax`; само по себе оно не обозначает номер теста. В guest data массиве байты по DS:0104 равны `66 77`, поэтому ожидаемый результат LODSW на втором checkpoint — AX=`7766`.
+- Предыдущая версия обработчика направляла AX/SI/DI/FLAGS проверки второго checkpoint в один общий обработчик, сохранявший AX. Поэтому лог `7766` совместим как с неожиданным AX на первом checkpoint, так и с ошибкой SI, DI или FLAGS после второго checkpoint. Он **не доказывает**, что LODSB прошёл, и не доказывает, что LODSW завершился успешно.
+- Исправлена диагностика в `neogs_sub/x86_strings.asm`:
+  - первый checkpoint AX mismatch снова возвращает отдельный код `1D01`;
+  - второй checkpoint AX mismatch сохраняет фактический AX;
+  - второй checkpoint SI, DI и FLAGS mismatch теперь сохраняют соответственно фактический SI, DI и FLAGS в поле detail.
+- Commits: `6c22bb801c2fb59d257015e653a165b07368bd28` (разделение SI/DI/FLAGS второго checkpoint) и `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` (разделение AX первого/второго checkpoint).
+- Изменена только диагностика self-test; реализация string instructions не менялась. Build и runtime для этих двух commits пока не подтверждены. Следующий лог должен различить первый AX checkpoint (`1D01`), второй AX mismatch (фактический AX), второй SI mismatch (фактический SI), второй DI mismatch (фактический DI) и второй FLAGS mismatch (фактические FLAGS).
+- CPU-STR-01 и STACK-01 остаются runtime NOT PASS; REP/REPE/REPNE по-прежнему заблокированы до полного прохождения regression.
