@@ -518,9 +518,10 @@ x86_real_alu_memory_test:
         call    x86_real_execute
         jp      c, .fail_execute
 
-        ; Register-destination form: CX = 2 + DS:[BX] (5 + 3) = 10.
+        ; Register-destination arithmetic forms leave CX = 11 after ADD,
+        ; ADC and SUB against DS:[BX].
         ld      hl, (x86_reg_cx)
-        ld      de, #000A
+        ld      de, #000B
         or      a
         sbc     hl, de
         jp      nz, .fail_register
@@ -610,23 +611,30 @@ x86_alu_mem_remaining: db 0
 x86_alu_mem_index:     db 0
 
 ; Guest at 0800:5800:
-; ADD [BX],AX; ADD CX,[BX]; SUB [BP],AX;
-; ADD ES:[BX],AX; ADD CS:[BX],AX; ADD SS:[BX],AX; ADD DS:[BP],AX.
+; ADD/ADC/SBB/SUB/CMP in both ModR/M directions, with segment overrides.
 x86_alu_memory_guest_image:
-        db #01,#07                 ; ADD DS:[BX],AX -> 0008
-        db #03,#0F                 ; ADD CX,DS:[BX] -> 000A
-        db #29,#46,#00             ; SUB SS:[BP],AX -> 001D
-        db #26,#01,#07             ; ADD ES:[BX],AX -> 0013
-        db #2E,#01,#07             ; ADD CS:[BX],AX -> 0033
-        db #36,#01,#07             ; ADD SS:[BX],AX -> 0043
-        db #3E,#01,#46,#00         ; ADD DS:[BP],AX -> 0053
+        db #01,#07                 ; ADD DS:[BX],AX: 5 + 3 = 8
+        db #03,#0F                 ; ADD CX,DS:[BX]: 2 + 8 = 10
+        db #2B,#D1                 ; SUB DX,CX: set CF
+        db #11,#07                 ; ADC DS:[BX],AX: 8 + 3 + 1 = 12
+        db #2B,#D1                 ; SUB DX,CX: set CF again
+        db #19,#46,#00             ; SBB SS:[BP],AX: 20 - 3 - 1 = 1C
+        db #29,#46,#00             ; SUB SS:[BP],AX: 1C - 3 = 19
+        db #39,#07                 ; CMP DS:[BX],AX: no memory write
+        db #2B,#D1                 ; SUB DX,CX: set CF for ADC
+        db #13,#0F                 ; ADC CX,DS:[BX]: 10 + 12 + 1 = 23
+        db #2B,#0F                 ; SUB CX,DS:[BX]: 23 - 12 = 11
+        db #26,#01,#07             ; ADD ES:[BX],AX -> 13
+        db #2E,#01,#07             ; ADD CS:[BX],AX -> 33
+        db #36,#01,#07             ; ADD SS:[BX],AX -> 43
+        db #3E,#01,#46,#00         ; ADD DS:[BP],AX -> 53
         db #F4
 x86_alu_memory_guest_image_end:
 
 ; segment, offset, expected word
 x86_alu_memory_expected_table:
-        dw #1000,#0200,#0008       ; DS:[BX]
-        dw #7000,#0100,#001D       ; BP default SS
+        dw #1000,#0200,#000C       ; DS:[BX], ADD + ADC
+        dw #7000,#0100,#0019       ; BP default SS, SBB + SUB
         dw #3000,#0200,#0013       ; ES override
         dw #0800,#0200,#0033       ; CS override
         dw #7000,#0200,#0043       ; SS override
