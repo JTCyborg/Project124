@@ -2,7 +2,7 @@
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
 ; This bounded executable slice runs guest instructions through CS:IP and
-; the physical-memory backend. Supported: NOP, register-direct 8/16-bit
+; the physical-memory backend. Supported: IN/OUT byte/word, NOP, register-direct 8/16-bit
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; near/far CALL and RET, far JMP, MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms,
 ; short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
