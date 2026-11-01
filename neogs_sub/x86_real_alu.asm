@@ -615,12 +615,15 @@ x86_alu_mem_index:     db 0
 x86_alu_memory_guest_image:
         db #01,#07                 ; ADD DS:[BX],AX: 5 + 3 = 8
         db #03,#0F                 ; ADD CX,DS:[BX]: 2 + 8 = 10
+        db #BA,#00,#00             ; MOV DX,0
         db #2B,#D1                 ; SUB DX,CX: set CF
         db #11,#07                 ; ADC DS:[BX],AX: 8 + 3 + 1 = 12
+        db #BA,#00,#00             ; MOV DX,0
         db #2B,#D1                 ; SUB DX,CX: set CF again
         db #19,#46,#00             ; SBB SS:[BP],AX: 20 - 3 - 1 = 1C
         db #29,#46,#00             ; SUB SS:[BP],AX: 1C - 3 = 19
         db #39,#07                 ; CMP DS:[BX],AX: no memory write
+        db #BA,#00,#00             ; MOV DX,0
         db #2B,#D1                 ; SUB DX,CX: set CF for ADC
         db #13,#0F                 ; ADC CX,DS:[BX]: 10 + 12 + 1 = 23
         db #2B,#0F                 ; SUB CX,DS:[BX]: 23 - 12 = 11
