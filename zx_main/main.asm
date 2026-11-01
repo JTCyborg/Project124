@@ -280,7 +280,7 @@ ProgramEnd:
         ASSERT ProgramEnd <= #A800
 
 ; Assemble the firmware payload in RAM bank 1 only as SAVETRD source data.
-; The BASIC loader loads neogs.C into bank 0 at #C000 before the host starts.
+; The host TR-DOS reader loads neogs.C into bank 0 at #C000 during startup.
         PAGE    1
         ORG     #C000
 neogs_binary_start:
@@ -302,7 +302,7 @@ neogs_binary_end:
         ; Синхронный экспорт бинарных блоков в образ TRD
         SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
         SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
-        ; Firmware is a separate TR-DOS file loaded by BASIC to #C000.
+        ; Firmware is a separate TR-DOS file loaded by the host sector reader to #C000.
         PAGE    1
         SAVETRD "disk_A.trd", "neogs.C", neogs_binary_start, neogs_binary_end - neogs_binary_start
         PAGE    0
