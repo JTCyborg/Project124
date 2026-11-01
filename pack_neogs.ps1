@@ -17,8 +17,11 @@ $Firmware = [IO.File]::ReadAllBytes($FirmwarePath)
 if ($Bootstrap.Length -eq 0 -or $Bootstrap.Length -gt 0x3FFF) {
     throw "Invalid NeoGS bootstrap length: $($Bootstrap.Length)"
 }
-if ($Firmware.Length -eq 0 -or $Firmware.Length -gt 0x3000) {
-    throw "Invalid NeoGS firmware length: $($Firmware.Length)"
+# Must match neogs_sub/build_firmware.asm and the runtime checks in
+# neogs_sub/bootstrap.asm and zx_main/neogs_driver.asm.
+# Firmware ends below #3400, leaving at least #0C00 bytes for the Z80 stack.
+if ($Firmware.Length -eq 0 -or $Firmware.Length -gt 0x3400) {
+    throw "Invalid NeoGS firmware length: $($Firmware.Length) (maximum 13312 bytes / 0x3400)"
 }
 
 $PackageLength = 2 + $Bootstrap.Length + $Firmware.Length
