@@ -8,8 +8,7 @@
 ; Supports all 8086 16-bit effective-address forms:
 ;   [BX+SI], [BX+DI], [BP+SI], [BP+DI], [SI], [DI], [BP], [BX]
 ;   direct [disp16], signed disp8 and disp16.
-; Default segment is DS; BP-based forms default to SS.
-; Segment override prefixes are not implemented in this stage.
+; Default segment is DS; BP-based forms default to SS. ES/CS/SS/DS override prefixes are supported.
 ; =========================================================================
 
 x86_real_mov_modrm:
