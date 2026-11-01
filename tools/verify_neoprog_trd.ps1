@@ -89,12 +89,12 @@ try {
     }
 
     if ($remaining -ne 0) {
-        throw "TR-DOS data ended before the complete firmware image was verified."
+        throw "TR-DOS data ended before the complete package was verified."
     }
 
     Write-Host ("[VERIFY] neoprog.C found in TR-DOS catalogue.")
     Write-Host ("[VERIFY] Package size: {0} bytes ({1} sectors)." -f $package.Length, $sectorCount)
-    Write-Host "[VERIFY] Every firmware byte in disk_A.trd matches neogs_code.bin."
+    Write-Host "[VERIFY] Every package byte in disk_A.trd matches neoprog.bin."
     exit 0
 }
 catch {
