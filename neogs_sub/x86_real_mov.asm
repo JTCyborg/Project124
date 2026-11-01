@@ -560,6 +560,24 @@ x86_mov_trace_event:
         call    x86_mov_trace_putc
         ld      a, ' '
         call    x86_mov_trace_putc
+
+        ld      a, 'I'
+        call    x86_mov_trace_putc
+        ld      a, 'P'
+        call    x86_mov_trace_putc
+        ld      a, '='
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_ip)
+        call    x86_mov_trace_hex16
+        ld      a, ' '
+        call    x86_mov_trace_putc
+
+        ld      a, 'O'
+        call    x86_mov_trace_putc
+        ld      a, 'P'
+        call    x86_mov_trace_putc
+        ld      a, '='
+        call    x86_mov_trace_putc
         ld      a, (x86_mov_opcode)
         call    x86_mov_trace_hex8
         ld      a, '/'
@@ -567,6 +585,13 @@ x86_mov_trace_event:
         ld      a, (x86_mov_modrm)
         call    x86_mov_trace_hex8
         ld      a, ' '
+        call    x86_mov_trace_putc
+
+        ld      a, 'E'
+        call    x86_mov_trace_putc
+        ld      a, 'A'
+        call    x86_mov_trace_putc
+        ld      a, '='
         call    x86_mov_trace_putc
         ld      hl, (x86_mov_segment)
         call    x86_mov_trace_hex16
@@ -576,9 +601,31 @@ x86_mov_trace_event:
         call    x86_mov_trace_hex16
         ld      a, ' '
         call    x86_mov_trace_putc
+
+        ld      a, 'V'
+        call    x86_mov_trace_putc
+        ld      a, '='
+        call    x86_mov_trace_putc
         ld      hl, (x86_mov_value)
         call    x86_mov_trace_hex16
         ld      a, ' '
+        call    x86_mov_trace_putc
+
+        ld      a, 'R'
+        call    x86_mov_trace_putc
+        ld      a, '='
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_ax)
+        call    x86_mov_trace_hex16
+        ld      a, '/'
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_bx)
+        call    x86_mov_trace_hex16
+        ld      a, '/'
+        call    x86_mov_trace_putc
+        ld      hl, (x86_reg_cx)
+        call    x86_mov_trace_hex16
+        ld      a, '/'
         call    x86_mov_trace_putc
         ld      hl, (x86_reg_dx)
         call    x86_mov_trace_hex16
@@ -591,6 +638,11 @@ x86_mov_trace_event:
         ld      hl, (x86_reg_di)
         call    x86_mov_trace_hex16
         ld      a, ' '
+        call    x86_mov_trace_putc
+
+        ld      a, 'B'
+        call    x86_mov_trace_putc
+        ld      a, '='
         call    x86_mov_trace_putc
         ld      hl, (x86_mov_trace_readback)
         call    x86_mov_trace_hex16
