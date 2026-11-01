@@ -453,6 +453,7 @@ x86_mov_memory_test_image:
         db #8B,#1C                 ; MOV BX,[SI]
         db #89,#16,#06,#02         ; MOV [0206],DX
         db #8B,#3E,#06,#02         ; MOV DI,[0206]
+        db #BD,#00,#01             ; MOV BP,0100
         db #89,#46,#00             ; MOV [BP+00],AX (SS default)
         db #8B,#76,#00             ; MOV SI,[BP+00] (SS default)
         db #F4
