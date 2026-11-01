@@ -503,8 +503,44 @@ x86_mov_address_test_image:
         db #36,#89,#07             ; SS:[BX] -> SS:0200
         db #3E,#89,#46,#00         ; DS:[BP] -> DS:0100
 
+        ; Read back every EA form and preserve each result in DS scratch.
+        db #8B,#08                 ; CX <- [BX+SI]
+        db #89,#0E,#00,#05         ; DS:0500 <- CX
+        db #8B,#09                 ; CX <- [BX+DI]
+        db #89,#0E,#02,#05         ; DS:0502 <- CX
+        db #8B,#0A                 ; CX <- [BP+SI]
+        db #89,#0E,#04,#05         ; DS:0504 <- CX
+        db #8B,#0B                 ; CX <- [BP+DI]
+        db #89,#0E,#06,#05         ; DS:0506 <- CX
+        db #8B,#0C                 ; CX <- [SI]
+        db #89,#0E,#08,#05         ; DS:0508 <- CX
+        db #8B,#0D                 ; CX <- [DI]
+        db #89,#0E,#0A,#05         ; DS:050A <- CX
+        db #8B,#4E,#00             ; CX <- [BP+0]
+        db #89,#0E,#0C,#05         ; DS:050C <- CX
+        db #8B,#0F                 ; CX <- [BX]
+        db #89,#0E,#0E,#05         ; DS:050E <- CX
+
+        db #26,#8B,#0F             ; CX <- ES:[BX]
+        db #89,#0E,#10,#05         ; DS:0510 <- CX
+        db #2E,#8B,#0F             ; CX <- CS:[BX]
+        db #89,#0E,#12,#05         ; DS:0512 <- CX
+        db #36,#8B,#0F             ; CX <- SS:[BX]
+        db #89,#0E,#14,#05         ; DS:0514 <- CX
+        db #3E,#8B,#4E,#00         ; CX <- DS:[BP]
+        db #89,#0E,#16,#05         ; DS:0516 <- CX
+
+        db #8B,#48,#05             ; CX <- [BX+SI+5]
+        db #89,#0E,#20,#05         ; DS:0520 <- CX
+        db #8B,#48,#FB             ; CX <- [BX+SI-5]
+        db #89,#0E,#22,#05         ; DS:0522 <- CX
+        db #8B,#88,#34,#12         ; CX <- [BX+SI+1234]
+        db #89,#0E,#24,#05         ; DS:0524 <- CX
+
         db #BB,#FF,#FF             ; BX=FFFF
         db #89,#07                 ; word at DS:FFFF wraps offset to 0000
+        db #8B,#0F                 ; CX <- [BX], same segment offset wrap
+        db #89,#0E,#26,#05         ; DS:0526 <- CX
         db #F4
 x86_mov_address_test_image_end:
 
@@ -526,7 +562,23 @@ x86_mov_address_test_table:
         dw #7000,#0200,#1234       ; SS override on DS-default [BX]
         dw #1000,#0100,#1234       ; DS override on SS-default [BP]
         dw #1000,#FFFF,#1234       ; word wraps within same segment
-x86_mov_address_test_count EQU 16
+        dw #1000,#0500,#1234       ; read [BX+SI]
+        dw #1000,#0502,#1234       ; read [BX+DI]
+        dw #1000,#0504,#1234       ; read [BP+SI]
+        dw #1000,#0506,#1234       ; read [BP+DI]
+        dw #1000,#0508,#1234       ; read [SI]
+        dw #1000,#050A,#1234       ; read [DI]
+        dw #1000,#050C,#1234       ; read [BP]
+        dw #1000,#050E,#1234       ; read [BX]
+        dw #1000,#0510,#1234       ; read ES override
+        dw #1000,#0512,#1234       ; read CS override
+        dw #1000,#0514,#1234       ; read SS override
+        dw #1000,#0516,#1234       ; read DS override
+        dw #1000,#0520,#1234       ; read positive disp8
+        dw #1000,#0522,#1234       ; read negative disp8
+        dw #1000,#0524,#1234       ; read disp16
+        dw #1000,#0526,#1234       ; read wrapped word at DS:FFFF
+x86_mov_address_test_count EQU 32
 
 ; -------------------------------------------------------------------------
 ; Regression test for all four MOV ModR/M opcodes and DS/SS effective
