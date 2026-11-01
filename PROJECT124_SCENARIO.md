@@ -393,3 +393,16 @@
 4. Если CPU-STR regression не проходит, исправить конкретную операцию/FLAGS/индекс по status/AX; REP пока не запускать.
 5. После Runtime PASS добавить F2/F3 REP/REPE/REPNE с CX, ZF, DF и step budget.
 
+
+### 2026-11-02 — CI rebuild after independent LODSB checkpoint
+
+- После усиления regression отдельной HLT-проверкой результата LODSB выполнен новый GitHub Actions run **41361321253** для commit `6bc68342772d9e4d602d094fa1a54cb319e95af9`; conclusion `success`.
+- Обновлённые размеры:
+  - firmware `neogs_code.bin`: **15 075 байт = #3AE3**, до лимита #4000 остаётся **1 309 байт**;
+  - bootstrap: 196 байт = #00C4;
+  - package `neoprog.bin`: **15 273 байта = #3BA9**, 60 sectors;
+  - `disk_A.trd`: 655 360 байт.
+- Package header проверен как `C4 00` (196 bytes bootstrap); bootstrap и firmware payload побайтно совпали с соответствующими BIN-файлами. TR-DOS verification снова подтвердила совпадение каждого meaningful byte файла neoprog.C с package.
+- Новый artifact ID: `13105461949`, имя `project124-build`. Он заменяет предыдущий artifact/run для runtime; брать следует именно его.
+- **Build: PASS. Runtime: NOT RUN.** Новый пакет готов к загрузке на Pentagon/NeoGS; CPU-STR-01 и STACK-01 ещё требуют runtime marker в пользовательском логе.
+
