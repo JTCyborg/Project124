@@ -722,7 +722,9 @@ neogs_int_test_and_get_result:
 neogs_int_guest_test_and_get_result:
         ld      a, CMD_INT_GUEST_TEST
         out     (GSCOM), a
-        call    neogs_wait_command_done_long
+        ; Drain NeoGS trace characters over DBIT while guest regression runs.
+        ; The same host routine mirrors every byte to emulator port #EF.
+        call    neogs_wait_run_done_with_console
         ret     c
         jp      neogs_get_result_frame
 
