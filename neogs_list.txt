@@ -16,7 +16,7 @@
    5+ 0000              ; MEMORY MAP / BOOT:
    6+ 0000              ; The stock GS105a ROM loads a tiny module at $5B00. That module enables
    7+ 0000              ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-   8+ 0000              ; The firmware occupies $0000-$2FFF; its stack is at $3FFF.
+   8+ 0000              ; The firmware occupies $0000-$33FF at most; at least $0C00 bytes remain for the stack at $3FFF.
    9+ 0000              ; NeoGS logical $4000-$7FFF is the second half of physical RAM page 1,
   10+ 0000              ; therefore logical $5000 maps to physical linear address $00D000.
   11+ 0000              ; The x86 DMA frame is placed at $5000: [length lo][length hi][x86 bytes].
@@ -7108,16 +7108,16 @@
  477+ 3258
 # file closed: main.asm
   10  3258
-  11  3258              ; Low RAM is used by the firmware and its stack. Keep the image below $3000;
-  12  3258              ; the Z80 stack is placed at $3FFF and the x86 DMA payload starts at $5000.
-build_firmware.asm(13): error: [ASSERT] Assertion failed:  neogs_firmware_end <= $3000
-  13  3258                      ASSERT neogs_firmware_end <= $3000
-  14  3258                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
-  15  3258                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
-  16  3258
-  17  3258              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
-  18  3258                      ORG     $4000
-  19  4000                      INCLUDE "bootstrap.asm"
+  11  3258              ; Firmware occupies $0000-$33FF at most. Keep at least $0C00 bytes below SP=$3FFF
+  12  3258              ; for the Z80 stack; x86 DMA payload remains at $5000.
+  13  3258                      ASSERT neogs_firmware_end <= $3400
+  14  3258                      ASSERT $4000 - neogs_firmware_end >= $0C00
+  15  3258                      SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
+  16  3258                      SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
+  17  3258
+  18  3258              ; GS105a #14 writes the executable bootstrap into fixed RAM $4000-$7FFF.
+  19  3258                      ORG     $4000
+  20  4000                      INCLUDE "bootstrap.asm"
 # file opened: bootstrap.asm
    1+ 4000              ; =========================================================================
    2+ 4000              ; PROJECT 124 — first-stage NeoGS executable bootstrap
@@ -7153,12 +7153,12 @@ build_firmware.asm(13): error: [ASSERT] Assertion failed:  neogs_firmware_end <=
   32+ 4015 CD 77 40             call    bootstrap_receive_data_byte
   33+ 4018 57                   ld      d, a
   34+ 4019
-  35+ 4019                      ; Reject zero length and any image larger than the reserved low RAM area.
+  35+ 4019                      ; Reject zero length and any image larger than $3400, preserving a 3 KiB stack reserve.
   36+ 4019 7A                   ld      a, d
   37+ 401A B3                   or      e
   38+ 401B 28 22                jr      z, bootstrap_error
   39+ 401D 7A                   ld      a, d
-  40+ 401E FE 30                cp      #30
+  40+ 401E FE 34                cp      #34
   41+ 4020 38 06                jr      c, bootstrap_length_ok
   42+ 4022 20 1B                jr      nz, bootstrap_error
   43+ 4024 7B                   ld      a, e
@@ -7278,12 +7278,12 @@ build_firmware.asm(13): error: [ASSERT] Assertion failed:  neogs_firmware_end <=
  157+ 40B7              neogs_bootstrap_end:
  158+ 40B7
 # file closed: bootstrap.asm
-  20  40B7                      ASSERT neogs_bootstrap_start = $4000
-  21  40B7                      ASSERT neogs_bootstrap_end <= $7FFF
-  22  40B7                      SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
-  23  40B7                      SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
-  24  40B7
-  25  40B7              ; neoprog.bin is assembled by the build scripts after both intermediate
-  26  40B7              ; binaries have been written. It is the only NeoGS payload exported to TR-DOS.
-  27  40B7
+  21  40B7                      ASSERT neogs_bootstrap_start = $4000
+  22  40B7                      ASSERT neogs_bootstrap_end <= $7FFF
+  23  40B7                      SAVEBIN "neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+  24  40B7                      SAVEBIN "zx_main/neogs_bootstrap.bin", neogs_bootstrap_start, neogs_bootstrap_end - neogs_bootstrap_start
+  25  40B7
+  26  40B7              ; neoprog.bin is assembled by the build scripts after both intermediate
+  27  40B7              ; binaries have been written. It is the only NeoGS payload exported to TR-DOS.
+  28  40B7
 # file closed: build_firmware.asm

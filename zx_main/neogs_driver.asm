@@ -207,7 +207,7 @@ upload_firmware::
         add     hl, de
         ld      (neo_fw_source), hl
 
-        ; Firmware image must fit in low RAM $0000-$2FFF, below SP=$3FFF.
+        ; Firmware image must fit below $3400, preserving at least 3 KiB for the stack below SP=$3FFF.
         ld      hl, (neo_fw_length)
         ld      a, h
         or      a
@@ -218,7 +218,7 @@ upload_firmware::
         jr      .firmware_length_valid
 .firmware_high_nonzero:
         ld      a, h
-        cp      #30
+        cp      #34
         jr      c, .firmware_length_valid
         jp      nz, .upload_failed
         ld      a, l
