@@ -24,13 +24,15 @@ try {
         'neogs_bootstrap.bin',
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
+        'neoprog.bin',
+        'zx_main/neoprog.bin',
         'disk_A.trd'
     )
     foreach ($File in $OldOutputs) {
         if (Test-Path $File) { Remove-Item $File -Force }
     }
 
-    Write-Host "[1/2] Building NeoGS firmware and bootstrap..." -ForegroundColor Cyan
+    Write-Host "[1/2] Building NeoGS firmware, bootstrap and single neoprog package..." -ForegroundColor Cyan
     & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_firmware.asm'
     if ($LASTEXITCODE -ne 0) {
         throw "NeoGS firmware build failed (sjasmplus exit code $LASTEXITCODE)."
@@ -40,7 +42,9 @@ try {
         'neogs_code.bin',
         'neogs_bootstrap.bin',
         'zx_main/neogs_code.bin',
-        'zx_main/neogs_bootstrap.bin'
+        'zx_main/neogs_bootstrap.bin',
+        'neoprog.bin',
+        'zx_main/neoprog.bin'
     )
     foreach ($File in $Generated) {
         if (-not (Test-Path $File)) {
@@ -58,7 +62,7 @@ try {
     }
 
     Write-Host "Build completed. Output files:" -ForegroundColor Green
-    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','disk_A.trd' |
+    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','neoprog.bin','disk_A.trd' |
         Select-Object Name,Length,LastWriteTime |
         Format-Table -AutoSize
 }
