@@ -89,7 +89,7 @@ x86_real_mode_test:
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_dx)
-        ld      de, #7856
+        ld      de, #0100
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -247,6 +247,16 @@ x86_real_next:
         cp      #50
         jp      c, x86_real_dec_r16
 .not_dec_r16:
+        cp      #50
+        jp      c, .not_push_r16
+        cp      #58
+        jp      c, x86_real_push_r16
+.not_push_r16:
+        cp      #58
+        jp      c, .not_pop_r16
+        cp      #60
+        jp      c, x86_real_pop_r16
+.not_pop_r16:
         cp      #B0
         jp      c, .not_mov_r8
         cp      #B8
@@ -285,6 +295,83 @@ x86_real_next:
 
 x86_real_nop:
         jp      x86_real_next
+
+; -------------------------------------------------------------------------
+; 50-57 PUSH r16 and 58-5F POP r16. Stack accesses use SS:SP through the
+; physical-memory API. PUSH SP stores the pre-decrement SP value, matching
+; the original 8086 behavior. POP SP increments internally, then replaces
+; SP with the popped word. Neither instruction modifies guest FLAGS.
+; -------------------------------------------------------------------------
+
+x86_real_push_r16:
+        ld      (x86_real_opcode), a
+        sub     #50
+        add     a, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        call    x86_real_stack_push
+        ret     c
+        jp      x86_real_next
+
+x86_real_pop_r16:
+        ld      (x86_real_opcode), a
+        call    x86_real_stack_pop
+        ret     c
+        ld      a, (x86_real_opcode)
+        sub     #58
+        add     a, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, x86_reg_ax
+        add     hl, de
+        ld      a, (x86_real_stack_value)
+        ld      (hl), a
+        inc     hl
+        ld      a, (x86_real_stack_value+1)
+        ld      (hl), a
+        jp      x86_real_next
+
+; IN: DE=word. On failure SP is rolled back; guest FLAGS are untouched.
+x86_real_stack_push:
+        ld      (x86_real_stack_value), de
+        ld      hl, (x86_reg_sp)
+        ld      (x86_real_old_sp), hl
+        dec     hl
+        dec     hl
+        ld      (x86_reg_sp), hl
+        ld      (x86_mem_offset), hl
+        ld      de, (x86_reg_ss)
+        ld      (x86_mem_segment), de
+        ld      hl, (x86_real_stack_value)
+        ld      (x86_mem_word_value), hl
+        call    x86_mem_write16
+        ret     nc
+        ld      hl, (x86_real_old_sp)
+        ld      (x86_reg_sp), hl
+        scf
+        ret
+
+; OUT: x86_real_stack_value = popped word. SP advances only after read.
+; POP SP's destination write then replaces the incremented SP as required.
+x86_real_stack_pop:
+        ld      hl, (x86_reg_sp)
+        ld      (x86_mem_offset), hl
+        ld      de, (x86_reg_ss)
+        ld      (x86_mem_segment), de
+        call    x86_mem_read16
+        ret     c
+        ld      (x86_real_stack_value), hl
+        ld      hl, (x86_reg_sp)
+        inc     hl
+        inc     hl
+        ld      (x86_reg_sp), hl
+        or      a
+        ret
 
 ; -------------------------------------------------------------------------
 ; Short relative control flow: 70-7F Jcc, E0-E3 LOOP/JCXZ, EB JMP.
@@ -821,6 +908,8 @@ x86_real_test_fail:
         ret
 
 x86_real_steps:       dw 0
+x86_real_stack_value: dw 0
+x86_real_old_sp:      dw 0
 x86_real_copy_source: dw 0
 x86_real_copy_dest:   dw 0
 x86_real_copy_count:  dw 0
@@ -901,6 +990,26 @@ x86_guest_jb_done:
         db #00
 x86_guest_jl_target:
         db #90
+
+        ; Exercise PUSH/POP for AX,CX,DX,BX,BP,SI,DI and verify restoration.
+        db #50,#51,#52,#53,#55,#56,#57
+        db #B8,#11,#11
+        db #B9,#22,#22
+        db #BA,#33,#33
+        db #BB,#44,#44
+        db #BD,#55,#55
+        db #BE,#66,#66
+        db #BF,#77,#77
+        db #5F,#5E,#5D,#5B,#5A,#59,#58
+
+        ; 8086 PUSH SP stores the pre-decrement value (0100h).
+        db #54,#5A                  ; PUSH SP / POP DX -> DX=0100h
+
+        ; POP SP uses the popped word as the final SP value.
+        db #B8,#F0,#00              ; MOV AX,00F0
+        db #50                      ; PUSH AX
+        db #5C                      ; POP SP -> SP=00F0
+        db #BC,#00,#01              ; restore SP=0100
 
         db #CD,#20,#F4             ; INT 20h / HLT
 x86_guest_main_image_end:
