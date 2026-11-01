@@ -46,8 +46,9 @@ The stack regression exercises `PUSH r16` and `POP r16` for the general
 registers, checks that the register values are restored and that SP balances,
 verifies the original 8086 `PUSH SP` behavior (the pre-decrement SP value is
 pushed), and verifies that `POP SP` replaces SP with the popped word. Stack
-words are accessed through SS:SP and the physical-memory backend. Stack
-instructions must preserve FLAGS.
+words are accessed through SS:SP and the physical-memory backend; a PUSH/POP
+pair also crosses the SS:FFFFh-to-SS:0000h offset boundary. Stack instructions
+must preserve FLAGS.
 
 After the INT 20h handler changes AX to `1234h` and IRET returns, the test
 checks the post-HLT IP using the assembled guest-image length, FLAGS=`0B16h`,
