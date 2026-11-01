@@ -4,7 +4,8 @@
 ; Byte arithmetic: ADD/ADC/SBB/SUB/CMP r/m8,r8 and reverse direction.
 ; Byte logic: OR/AND/XOR/TEST.
 ; Word logic: OR/AND/XOR/TEST.
-; Only ModR/M mod=11 (register-direct) is accepted in this stage.
+; Byte arithmetic supports register and memory ModR/M operands; byte/word
+; logical operations and TEST remain register-direct in this stage.
 ; Logical instructions clear CF/OF and deterministically clear undefined AF.
 ; =========================================================================
 
@@ -19,8 +20,10 @@ x86_real_alu8_modrm:
         ld      (x86_alu8_modrm), a
         and     #C0
         cp      #C0
-        jp      nz, x86_real_alu_unsupported
+        jp      nz, .memory_operand
 
+        xor     a
+        ld      (x86_alu8_dst_is_mem), a
         ld      a, (x86_alu8_modrm)
         and     #38
         srl     a
@@ -61,14 +64,58 @@ x86_real_alu8_modrm:
         ld      a, 1
         ld      (x86_alu8_no_write), a
 
+.memory_operand:
+        ; This stage adds arithmetic memory forms only. TEST/logic memory
+        ; forms remain on the unsupported path until their own regression.
+        ld      a, (x86_real_opcode)
+        cp      #84
+        jp      z, x86_real_alu_unsupported
+        ld      a, (x86_alu8_modrm)
+        call    x86_real_mov_decode_modrm
+        ret     c
+        xor     a
+        ld      (x86_alu8_dst_is_mem), a
+        ld      a, (x86_real_opcode)
+        and     2
+        jr      nz, .memory_source
+
+        ; r/m8 is destination: read memory, register field is source.
+        ld      a, 1
+        ld      (x86_alu8_dst_is_mem), a
+        call    x86_real_alu8_read_memory
+        ret     c
+        ld      (x86_alu8_dst), a
+        ld      a, (x86_mov_reg)
+        call    x86_alu8_read_reg
+        ld      (x86_alu8_src), a
+        jp      .operands_ready
+
+.memory_source:
+        ; Register field is destination; r/m8 memory is source.
+        ld      a, (x86_mov_reg)
+        ld      (x86_alu8_dst_reg), a
+        call    x86_alu8_read_reg
+        ld      (x86_alu8_dst), a
+        call    x86_real_alu8_read_memory
+        ret     c
+        ld      (x86_alu8_src), a
+
 .operands_ready:
+        ld      a, (x86_alu8_dst_reg)
+        ld      (x86_alu8_dst_reg), a
+        ; Register-direct operands are loaded here; memory paths above
+        ; have already populated the byte values.
+        ld      a, (x86_alu8_modrm)
+        and     #C0
+        cp      #C0
+        jr      nz, .values_ready
         ld      a, (x86_alu8_dst_reg)
         call    x86_alu8_read_reg
         ld      (x86_alu8_dst), a
         ld      a, (x86_alu8_src_reg)
         call    x86_alu8_read_reg
         ld      (x86_alu8_src), a
-
+.values_ready:
         ld      a, (x86_real_opcode)
         cp      #84
         jr      z, .force_test
@@ -208,6 +255,14 @@ x86_real_alu8_modrm:
         and     #38
         cp      #38
         jp      z, x86_real_next
+        ld      a, (x86_alu8_dst_is_mem)
+        or      a
+        jr      z, .write_register
+        ld      a, (x86_alu8_result)
+        call    x86_real_alu8_write_memory
+        ret     c
+        jp      x86_real_next
+.write_register:
         ld      a, (x86_alu8_dst_reg)
         ld      b, a
         ld      a, (x86_alu8_result)
@@ -215,6 +270,27 @@ x86_real_alu8_modrm:
         ld      a, b
         call    x86_alu8_write_reg
         jp      x86_real_next
+
+; Read/write one byte through the effective address calculated by MOV.
+; The MOV decoder has already applied default SS for BP and segment prefix.
+x86_real_alu8_read_memory:
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset_work), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_read8
+
+x86_real_alu8_write_memory:
+        ld      (x86_mem_value), a
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset_work), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_calc_phys
+        ret     c
+        jp      x86_mem_write8
 
 ; Read byte register selected by A; return byte in A.
 x86_alu8_read_reg:
@@ -640,6 +716,7 @@ x86_real_alu8_logic_test:
         scf
         ret
 
+x86_alu8_dst_is_mem:  db 0
 x86_alu8_modrm:       db 0
 x86_alu8_mode:        db 0
 x86_alu8_reg:         db 0
