@@ -136,8 +136,8 @@ command_reset:
 ; Host uses OUT/LDIR writes into $0000-$3FFF. No dummy write is performed.
 ; -------------------------------------------------------------------------
 command_load_x86:
-        ; PG1 is a direct page register: $88 selects physical page 68.
-        ld      a, #88
+        ; PG1 is a direct page register: $44 selects physical page 68.
+        ld      a, #44
         out     (PG1), a
 
         ld      a, C_DMA_ZX
