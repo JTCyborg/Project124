@@ -424,12 +424,17 @@ x86_real_mov_addressing_test:
         ld      d, (hl)
         inc     hl
         ld      (x86_mem_offset), de
+        ld      (x86_mov_address_test_ptr), hl
         call    x86_mem_read16
         jp      c, .fail_verify
+        ld      (x86_mov_address_test_actual), hl
+        ld      hl, (x86_mov_address_test_ptr)
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
         inc     hl
+        ld      (x86_mov_address_test_ptr), hl
+        ld      hl, (x86_mov_address_test_actual)
         or      a
         sbc     hl, de
         jp      nz, .fail_verify
@@ -468,6 +473,8 @@ x86_real_mov_addressing_test:
 
 x86_mov_address_test_remaining: db 0
 x86_mov_address_test_index:     db 0
+x86_mov_address_test_ptr:       dw 0
+x86_mov_address_test_actual:    dw 0
 
 x86_mov_address_test_image:
         db #B8,#34,#12             ; MOV AX,1234
