@@ -379,6 +379,8 @@ command_bios_video_test:
 ; Run a TR-DOS payload through the bounded CS:IP real-mode executor.
 command_run_x86_real:
         call    execute_neogs_x86_real
+        ld      a, 3
+        out     (PG1), a                ; restore physical firmware page 1
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
