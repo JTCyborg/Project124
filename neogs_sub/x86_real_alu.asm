@@ -77,6 +77,7 @@ x86_real_alu_modrm16:
 .memory_source:
         ; ADD/ADC/SBB/SUB/CMP r16,r/m16: memory is source.
         ld      a, (x86_mov_reg)
+        ld      (x86_alu_dst_reg), a
         call    x86_alu_read_reg16
         ld      (x86_alu_dst), hl
         call    x86_real_alu_read_memory_word
