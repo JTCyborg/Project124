@@ -202,12 +202,16 @@ x86_real_mov_use_ss:
 
 ; Fetch little-endian immediate/displacement through the bounded CS:IP path.
 x86_real_mov_fetch16:
+        ; x86_real_fetch8 updates HL with the new guest IP. Do not keep
+        ; the low displacement byte in L across the second fetch.
         call    x86_real_fetch8
         ret     c
-        ld      l, a
+        ld      (x86_mov_disp_low), a
         call    x86_real_fetch8
         ret     c
         ld      h, a
+        ld      a, (x86_mov_disp_low)
+        ld      l, a
         or      a
         ret
 
@@ -353,6 +357,7 @@ x86_mov_trace_readback: dw 0
 x86_mov_trace_enable:  db 0
 x86_mov_trace_stage:   db 0
 x86_mov_reg_temp:      db 0
+x86_mov_disp_low:      db 0
 
 ; -------------------------------------------------------------------------
 ; Regression test for all four MOV ModR/M opcodes and DS/SS effective
