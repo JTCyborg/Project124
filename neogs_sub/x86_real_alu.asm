@@ -411,6 +411,7 @@ x86_guest_alu_image:
         db #13,#D1                 ; ADC DX,CX -> 0002 (reg destination)
         db #B8,#00,#00             ; MOV AX,0000
         db #2B,#C1                 ; SUB AX,CX -> FFFF, CF=1 (reg destination)
+        db #9C,#5E                 ; PUSHF / POP SI -> 0297 (snapshot before ADC)
         db #11,#CA                 ; ADC DX,CX -> 0004 (r/m destination)
         db #BB,#05,#00             ; MOV BX,0005
         db #1B,#D9                 ; SBB BX,CX -> 0003 (reg destination)
