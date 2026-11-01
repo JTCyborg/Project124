@@ -669,15 +669,17 @@ x86_logic_result:     dw 0
 x86_logic_new_flags:  dw 0
 
 x86_guest_alu8_logic_image:
-        db #B0,#7F                 ; MOV AL,7F
         db #B1,#01                 ; MOV CL,01
-        db #02,#C1                 ; ADD AL,CL -> 80 (reg destination)
+        db #B0,#10                 ; MOV AL,10
+        db #00,#C8                 ; ADD AL,CL (r/m destination) -> 11
+        db #B0,#7F                 ; MOV AL,7F
+        db #02,#C1                 ; ADD AL,CL (reg destination) -> 80
         db #9C,#5E                 ; PUSHF/POP SI -> 0892
         db #B0,#00                 ; MOV AL,00
         db #2A,#C1                 ; SUB AL,CL -> FF, CF=1
         db #9C,#5F                 ; PUSHF/POP DI -> 0097
         db #B3,#00                 ; MOV BL,00
-        db #12,#D9                 ; ADC BL,CL -> 02 (carry-in)
+        db #12,#D9                 ; ADC BL,CL -> 02 (reg destination, carry-in)
         db #B0,#00                 ; MOV AL,00
         db #2A,#C1                 ; SUB AL,CL -> FF, CF=1
         db #1A,#D9                 ; SBB BL,CL -> 00 (reg destination)
@@ -690,15 +692,21 @@ x86_guest_alu8_logic_image:
         db #38,#C8                 ; CMP AL,CL -> flags only, AL stays 04
         db #B0,#01                 ; MOV AL,01
         db #3A,#C1                 ; CMP AL,CL -> ZF=1, AL stays 01
-        db #B0,#F0                 ; MOV AL,F0
         db #B1,#0F                 ; MOV CL,0F
-        db #22,#C1                 ; AND AL,CL -> 00
+        db #B0,#F0                 ; MOV AL,F0
+        db #20,#C8                 ; AND AL,CL (r/m destination) -> 00
         db #9C,#5D                 ; PUSHF/POP BP -> 0046
         db #B0,#F0                 ; MOV AL,F0
-        db #0A,#C1                 ; OR AL,CL -> FF
+        db #22,#C1                 ; AND AL,CL (reg destination) -> 00
+        db #B0,#F0                 ; MOV AL,F0
+        db #08,#C8                 ; OR AL,CL (r/m destination) -> FF
         db #9C,#5A                 ; PUSHF/POP DX -> 0086
+        db #B0,#F0                 ; MOV AL,F0
+        db #0A,#C1                 ; OR AL,CL (reg destination) -> FF
         db #B0,#FF                 ; MOV AL,FF
-        db #32,#C1                 ; XOR AL,CL -> F0
+        db #30,#C8                 ; XOR AL,CL (r/m destination) -> F0
+        db #B0,#FF                 ; MOV AL,FF
+        db #32,#C1                 ; XOR AL,CL (reg destination) -> F0
         db #84,#C1                 ; TEST AL,CL -> flags only, AL stays F0
         db #B8,#F0,#F0             ; MOV AX,F0F0
         db #B9,#0F,#0F             ; MOV CX,0F0F
