@@ -409,6 +409,23 @@ upload_firmware::
         cp      NGS_FIRMWARE_READY_ACK
         jp      nz, .upload_failed
 
+        ; Cross-check every GS data byte acknowledged by DBIT. The count
+        ; includes #14's remaining three header bytes, bootstrap payload,
+        ; #13's high address byte, firmware length (two bytes), and firmware.
+        ; The first argument byte of #14 and #13 is preloaded before command
+        ; dispatch and is therefore intentionally not counted.
+        ld      a, 10
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_bootstrap_length)
+        ld      de, (neo_fw_length)
+        add     hl, de
+        ld      de, 6
+        add     hl, de
+        ld      de, (neo_fw_bytes_sent)
+        or      a
+        sbc     hl, de
+        jp      nz, .upload_failed
+
         xor     a
         ret
 
