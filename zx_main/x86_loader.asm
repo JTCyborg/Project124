@@ -115,7 +115,16 @@ EXECUTE_X86_FILE_STAGE::
         ; -------------------------------------------------------------
         MACRO_EF_STRING P124_msg_memtest_start
         call    neogs_mem_test_and_get_result
-        jp      c, .diag_extended_fail
+        jp      c, .memtest_transport_fail
+        MACRO_EF_STRING P124_msg_memtest_result
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
         ld      a, (P124_X86_RESULT_STATUS)
         or      a
         jp      nz, .diag_memtest_fail
@@ -476,6 +485,11 @@ EXECUTE_X86_FILE_STAGE::
         scf
         jp      .loader_restore_stack
 
+.memtest_transport_fail:
+        MACRO_EF_STRING P124_msg_memtest_transport_fail
+        scf
+        jp      .loader_restore_stack
+
 .diag_memtest_fail:
         MACRO_EF_STRING P124_msg_memtest_fail
         ld      a, (P124_X86_RESULT_STATUS)
@@ -737,8 +751,19 @@ neogs_int_guest_test_and_get_result:
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
         out     (GSCOM), a
+        MACRO_EF_STRING P124_msg_memtest_command_sent
         call    neogs_wait_command_done_long
-        ret     c
+        jr      nc, .memtest_command_ack
+        MACRO_EF_STRING P124_msg_memtest_command_timeout
+        scf
+        ret
+.memtest_command_ack:
+        MACRO_EF_STRING P124_msg_memtest_command_ack
+        call    neogs_get_result_frame
+        ret     nc
+        MACRO_EF_STRING P124_msg_memtest_result_timeout
+        scf
+        ret
 
 neogs_get_result_frame:
         ld      a, CMD_GET_STATUS
@@ -775,7 +800,13 @@ neogs_get_result_frame:
         ret
 
 ; Diagnostic data: MOV AX,#BBAA / INC AX / NOP / HLT -> AX=#BBAB.
-P124_msg_memtest_start: DEFB "[MEM] Testing x86 RAM pages and 8086 word/segment addressing...", 13, 0
+P124_msg_memtest_start: DEFB "[MEM] START: 64-page RAM map + word/segment tests.", 13, 0
+P124_msg_memtest_command_sent: DEFB "[MEM] CMD_MEM_TEST sent; waiting for NeoGS completion...", 13, 0
+P124_msg_memtest_command_ack: DEFB "[MEM] NeoGS command completed; requesting result frame.", 13, 0
+P124_msg_memtest_command_timeout: DEFB "[MEM] STOP: command completion timeout (NeoGS did not release CBIT).", 13, 0
+P124_msg_memtest_result_timeout: DEFB "[MEM] STOP: result-frame timeout after command completion.", 13, 0
+P124_msg_memtest_result: DEFB "[MEM] RESULT status/AX = ", 0
+P124_msg_memtest_transport_fail: DEFB "[MEM] FAIL: transport stopped before result frame.", 13, 0
 P124_msg_memtest_pass:  DEFB "[MEM] PASS: 64 pages + word access + segment/offset wrap verified.", 13, 0
 P124_msg_bios_post_start: DEFB "[BIOS] Stage 1: initialize IVT and BIOS Data Area...", 13, 0
 P124_msg_bios_post_pass: DEFB "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
