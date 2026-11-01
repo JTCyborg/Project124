@@ -7603,8 +7603,11 @@ x86_real_mov_modrm:
         ret     c
 
         ; Opcode bit 0 selects byte/word; bit 1 selects direction.
+        ; Internal convention: width=0 means word, width=1 means byte.
+        ; 8086 opcode bit 0 is the inverse: 0=byte, 1=word.
         ld      a, (x86_mov_opcode)
         and     1
+        xor     1
         ld      (x86_mov_width), a
 
         ld      a, (x86_mov_opcode)
@@ -7933,31 +7936,36 @@ x86_real_mov_memory_test:
         jp      .fail
 
 .execution_ok:
+        ld      hl, (x86_reg_ax)
+        ld      de, #1234
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_ax
         ld      hl, (x86_reg_cx)
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_cx
         ld      hl, (x86_reg_dx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_dx
         ld      hl, (x86_reg_bx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_bx
         ld      hl, (x86_reg_di)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_di
         ld      hl, (x86_reg_si)
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_si
 
         ; Verify DS:0200, DS:0004 and DS:0206 word writes.
         ld      hl, 0
@@ -7965,7 +7973,7 @@ x86_real_mov_memory_test:
         ld      hl, #0200
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #1234
         or      a
         sbc     hl, de
@@ -7976,7 +7984,7 @@ x86_real_mov_memory_test:
         ld      hl, #0004
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #AB34
         or      a
         sbc     hl, de
@@ -7987,7 +7995,7 @@ x86_real_mov_memory_test:
         ld      hl, #0206
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #AB34
         or      a
         sbc     hl, de
@@ -7999,7 +8007,7 @@ x86_real_mov_memory_test:
         ld      hl, #0100
         ld      (x86_mem_offset), hl
         call    x86_mem_read16
-        jr      c, .fail_memory
+        jp      c, .fail_memory
         ld      de, #1234
         or      a
         sbc     hl, de
@@ -8012,8 +8020,41 @@ x86_real_mov_memory_test:
         or      a
         ret
 
-.fail_registers:
-        ld      hl, #1D03
+.fail_ax:
+        ld      hl, #1D30
+        jp      .fail
+.fail_cx:
+        ld      hl, #1D31
+        jp      .fail
+.fail_dx:
+        ld      hl, #1D32
+        jp      .fail
+.fail_bx:
+        ld      hl, #1D33
+        jp      .fail
+.fail_di:
+        ; Diagnostic: inspect the source word independently. This separates
+        ; a failed DS:0206 write/read from a failed MOV destination register.
+        ld      hl, (x86_reg_ds)
+        ld      (x86_mem_segment), hl
+        ld      hl, #0206
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jr      c, .fail_di_memory_error
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+.fail_di_memory_error:
+        ld      hl, #EEEE
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+.fail_si:
+        ld      hl, #1D35
         jp      .fail
 .fail_memory:
         ld      hl, #1D04

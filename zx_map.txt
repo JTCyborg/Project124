@@ -444,7 +444,7 @@ neogs_wait_run_done_with_console.run_outer: EQU 0x00007070
 neogs_wait_run_done_with_console.run_timeout: EQU 0x000070BD
 neogs_wait_run_done_with_console.stream_clear: EQU 0x000070AC
 neogs_wait_run_done_with_console.stream_control: EQU 0x0000708A
-neoprog_package_end: EQU 0x0000E78A
+neoprog_package_end: EQU 0x0000E7DC
 neoprog_package_start: EQU 0x0000C000
 open_cmos: EQU 0x000066CE
 read_byte_raw: EQU 0x000066B8

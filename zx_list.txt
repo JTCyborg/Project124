@@ -5237,11 +5237,11 @@
 282   8991                      ORG     #C000
 283   C000              neoprog_package_start:
 284   C000                      INCBIN "zx_main/neoprog.bin"
-285   E78A              neoprog_package_end:
-286   E78A
-287   E78A              ; Return to bank 0 and place the BASIC boot program at #E000.
-288   E78A                      PAGE    0
-289   E78A                      ORG     #E000
+285   E7DC              neoprog_package_end:
+286   E7DC
+287   E7DC              ; Return to bank 0 and place the BASIC boot program at #E000.
+288   E7DC                      PAGE    0
+289   E7DC                      ORG     #E000
 290   E000                      INCLUDE "boot_loader.asm"
 # file opened: boot_loader.asm
   1+  E000              ; =========================================================================
