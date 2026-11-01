@@ -354,7 +354,7 @@ x86_real_strings_test:
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
         ld      hl, (x86_reg_flags)
-        ld      de, #0202
+        ld      de, #0212             ; AF=1: low-nibble borrow in 0080h-007Fh
         or      a
         sbc     hl, de
         jp      nz, x86_string_test_fail_2
