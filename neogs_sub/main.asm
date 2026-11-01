@@ -139,42 +139,54 @@ command_load_x86:
         ld      a, #44
         out     (PG1), a
 
-        ; Verify that PG1 really exposes writable physical page 68.
-        ; The marker occupies the first DMA-header byte and is overwritten
-        ; by the host's length prefix once DMA starts.
+        ; Three independent PG1 tests:
+        ; bit 0: page #44 accepts a write/read at $4000
+        ; bit 1: switching to page #03 isolates that marker
+        ; bit 2: switching back to page #44 preserves the marker
+        xor     a
+        ld      (neo_pg1_map_verified), a
+
         ld      a, #A5
         ld      (X86_DMA_HEADER_ADDR), a
+        ld      a, (X86_DMA_HEADER_ADDR)
+        cp      #A5
+        jr      nz, .pg1_test_switch_away
+        ld      a, (neo_pg1_map_verified)
+        or      1
+        ld      (neo_pg1_map_verified), a
 
-        ; Switch away and back: this distinguishes page 68 from the
-        ; trampoline page. A simple write/read without paging would not.
+.pg1_test_switch_away:
         ld      a, #03
         out     (PG1), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
-        jr      z, .pg1_map_failed
+        jr      z, .pg1_test_switch_back
+        ld      a, (neo_pg1_map_verified)
+        or      2
+        ld      (neo_pg1_map_verified), a
 
+.pg1_test_switch_back:
         ld      a, #44
         out     (PG1), a
         ld      a, (X86_DMA_HEADER_ADDR)
         cp      #A5
-        jr      nz, .pg1_map_failed
-
-.pg1_map_verified:
-        ld      a, 1
+        jr      nz, .pg1_test_restore_normal
+        ld      a, (neo_pg1_map_verified)
+        or      4
         ld      (neo_pg1_map_verified), a
-        jr      .pg1_map_test_done
 
-.pg1_map_failed:
-        ; Restore normal page and rewrite the trampoline in case the
-        ; failed PG1 switch caused the marker to overwrite its first byte.
+        ld      a, (neo_pg1_map_verified)
+        cp      7
+        jr      z, .pg1_map_test_done
+
+.pg1_test_restore_normal:
+        ; On any failed test, restore the normal page and trampoline.
         ld      a, #03
         out     (PG1), a
         ld      hl, rom_return_trampoline_code
         ld      de, ROM_RETURN_TRAMPOLINE_ADDR
         ld      bc, rom_return_trampoline_end - rom_return_trampoline_code
         ldir
-        ld      a, 0
-        ld      (neo_pg1_map_verified), a
 
 .pg1_map_test_done:
         ld      a, C_DMA_ZX
