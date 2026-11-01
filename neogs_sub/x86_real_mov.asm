@@ -443,6 +443,8 @@ x86_real_mov_memory_test:
 
 x86_mov_memory_test_image:
         db #B8,#34,#12             ; MOV AX,1234
+        db #8B,#C8                 ; MOV CX,AX (ModR/M register-direct)
+        db #89,#CA                 ; MOV DX,CX (reverse register-direct)
         db #BB,#00,#02             ; MOV BX,0200
         db #89,#07                 ; MOV [BX],AX
         db #8B,#0F                 ; MOV CX,[BX]
