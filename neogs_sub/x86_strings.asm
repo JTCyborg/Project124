@@ -554,6 +554,16 @@ x86_real_rep_strings_test:
         ld      bc, x86_rep_dest_data_end - x86_rep_dest_data
         call    x86_real_copy_image
         jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_word_source
+        ld      de, #4120
+        ld      bc, x86_rep_word_source_end - x86_rep_word_source
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+        ld      hl, x86_rep_word_dest
+        ld      de, #8220
+        ld      bc, x86_rep_word_dest_end - x86_rep_word_dest
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
         ld      hl, x86_rep_ss_data
         ld      de, #7100
         ld      bc, x86_rep_ss_data_end - x86_rep_ss_data
@@ -614,7 +624,14 @@ x86_real_rep_strings_test:
         call    x86_string_check_byte
         jp      c, x86_rep_test_fail
 
-        ; REPE CMPSB: all three bytes equal, then CX reaches zero.
+        ; Force a mismatch on byte two; REPE must stop there with CX=1.
+        ld      hl, x86_rep_mismatch_byte
+        ld      de, #8201
+        ld      bc, 1
+        call    x86_real_copy_image
+        jp      c, x86_rep_test_fail
+
+        ; REPE CMPSB: first byte equal, second differs; stop with ZF=0.
         ld      hl, #0100
         ld      (x86_reg_si), hl
         ld      hl, #0200
@@ -626,15 +643,26 @@ x86_real_rep_strings_test:
         call    x86_real_execute
         jp      c, x86_rep_test_fail
         ld      hl, (x86_reg_cx)
-        ld      a, h
-        or      l
+        ld      de, 1
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_si)
+        ld      de, #0102
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
+        ld      hl, (x86_reg_di)
+        ld      de, #0202
+        or      a
+        sbc     hl, de
         jp      nz, x86_rep_test_fail
         ld      a, (x86_reg_flags)
         bit     6, a
-        jp      z, x86_rep_test_fail
+        jp      nz, x86_rep_test_fail
 
-        ; REPNE SCASB: AL=33 matches the second byte; stop with CX=1.
-        ld      hl, #0033
+        ; REPNE SCASB: AL=99 matches byte two; stop with CX=1 and ZF=1.
+        ld      hl, #0099
         ld      (x86_reg_ax), hl
         ld      hl, #0200
         ld      (x86_reg_di), hl
@@ -707,6 +735,80 @@ x86_real_rep_strings_test:
         ld      a, #53
         call    x86_string_check_byte
         jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_cx)
+        ld      a, h
+        or      l
+        jp      nz, x86_rep_test_fail
+
+        ; REP MOVSW copies two words and advances both indices by four.
+        ld      hl, #0120
+        ld      (x86_reg_si), hl
+        ld      hl, #0220
+        ld      (x86_reg_di), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5270
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, #8220
+        ld      a, #34
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8221
+        ld      a, #12
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8222
+        ld      a, #78
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8223
+        ld      a, #56
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ; REP STOSW writes AX twice; REP LODSW leaves the last word in AX.
+        ld      hl, #BEEF
+        ld      (x86_reg_ax), hl
+        ld      hl, #0230
+        ld      (x86_reg_di), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5273
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, #8230
+        ld      a, #EF
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8231
+        ld      a, #BE
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8232
+        ld      a, #EF
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+        ld      hl, #8233
+        ld      a, #BE
+        call    x86_string_check_byte
+        jp      c, x86_rep_test_fail
+
+        ld      hl, #0120
+        ld      (x86_reg_si), hl
+        ld      hl, 2
+        ld      (x86_reg_cx), hl
+        ld      hl, #5276
+        ld      (x86_reg_ip), hl
+        call    x86_real_execute
+        jp      c, x86_rep_test_fail
+        ld      hl, (x86_reg_ax)
+        ld      de, #5678
+        or      a
+        sbc     hl, de
+        jp      nz, x86_rep_test_fail
         ld      hl, (x86_reg_cx)
         ld      a, h
         or      l
@@ -800,14 +902,22 @@ x86_string_expected: db 0
 
 x86_rep_guest_image:
         db #F3,#A4,#F4,#F3,#A6,#F4,#F2,#AE,#F4,#F3,#A4,#F4
-        db #F3,#36,#A4,#F4
+        db #F3,#36,#A4,#F4,#F3,#A5,#F4,#F3,#AB,#F4,#F3,#AD,#F4
 x86_rep_guest_image_end:
 x86_rep_source_data:
         db #22,#33,#44
 x86_rep_source_data_end:
+x86_rep_mismatch_byte:
+        db #99
+x86_rep_word_source:
+        db #34,#12,#78,#56
+x86_rep_word_source_end:
 x86_rep_dest_data:
         db #AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA,#AA
 x86_rep_dest_data_end:
+x86_rep_word_dest:
+        db #AA,#AA,#AA,#AA
+x86_rep_word_dest_end:
 x86_rep_ss_data:
         db #51,#52,#53
 x86_rep_ss_data_end:
