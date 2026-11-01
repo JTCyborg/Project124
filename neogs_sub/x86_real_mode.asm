@@ -199,7 +199,7 @@ x86_real_mode_test:
         call    x86_real_io_test
         ret     c
 
-        ; CPU-STR-01: MOVS/CMPS/STOS/LODS/SCAS byte and word forms, no REP.
+        ; CPU-STR-01/02: single-step and REP/REPE/REPNE string regression.
         call    x86_real_strings_test
         ret     c
 
