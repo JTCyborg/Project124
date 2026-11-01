@@ -10,12 +10,12 @@ IPC_CMD_TIMEOUT EQU #FFFF
 
 ; -------------------------------------------------------------------------
 ; Load the separately stored NeoGS firmware file from TR-DOS.
-; The descriptor must match the freshly assembled neogs_code.bin exactly.
-; OUT: Carry clear, firmware bytes at #C000; carry set and error code saved.
+; neoprog.C layout: [WORD bootstrap_length][bootstrap bytes][firmware bytes].
+; OUT: Carry clear, complete package at #C000 and exact file length saved.
 ; Uses the same verified TR-DOS 5.04T catalogue/sector API as Stage 5.
 ; -------------------------------------------------------------------------
 load_neogs_firmware_file::
-        ; Search the exact 8.3 catalogue name neogs.C.
+        ; Search the exact 8.3 catalogue name neoprog.C.
         ld      hl, neo_fw_filename
         ld      de, #5CDD
         ld      bc, 8
@@ -44,15 +44,21 @@ load_neogs_firmware_file::
         or      b
         jp      nz, .bad_descriptor
 
-        ; Refuse a stale or truncated firmware file.
+        ; Store the actual package length; its header separates the two code sections.
         ld      hl, (#5CE8)
-        ld      de, neogs_binary_end - neogs_binary_start
+        ld      (neo_fw_file_length), hl
+        ld      a, h
+        or      l
+        jp      z, .bad_length
+        ld      a, h
         or      a
-        sbc     hl, de
-        jp      nz, .bad_length
-
+        jr      nz, .package_minimum_ok
+        ld      a, l
+        cp      3
+        jp      c, .bad_length
+.package_minimum_ok:
         ; Verify sector count = ceil(file_length / 256).
-        ld      hl, neogs_binary_end - neogs_binary_start
+        ld      hl, (neo_fw_file_length)
         ld      de, 255
         add     hl, de
         ld      a, (#5CEA)
@@ -145,18 +151,68 @@ load_neogs_firmware_file::
 ;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
 ; -------------------------------------------------------------------------
 upload_firmware::
+        ; HL points to the package read once from TR-DOS; DE is its total length.
+        ; Layout: WORD bootstrap_length, bootstrap bytes, then firmware bytes.
+        ld      (neo_fw_package_source), hl
+        ld      (neo_fw_package_length), de
+
+        ; Decode and validate the bootstrap length from the package header.
+        ld      a, d
+        or      a
+        jr      nz, .package_header_present
+        ld      a, e
+        cp      3
+        jp      c, .upload_failed
+.package_header_present:
+        ld      a, (hl)
+        ld      (neo_fw_bootstrap_length), a
+        inc     hl
+        ld      a, (hl)
+        ld      (neo_fw_bootstrap_length+1), a
+        ld      hl, (neo_fw_bootstrap_length)
+        ld      a, h
+        or      l
+        jp      z, .upload_failed
+        ld      a, h
+        cp      #40
+        jp      nc, .upload_failed
+
+        ; Firmware length = package length - header - bootstrap length.
+        ld      hl, (neo_fw_package_length)
+        ld      de, 2
+        or      a
+        sbc     hl, de
+        jp      c, .upload_failed
+        ld      de, (neo_fw_bootstrap_length)
+        or      a
+        sbc     hl, de
+        jp      c, .upload_failed
+        ld      (neo_fw_length), hl
+
+        ; Resolve both section pointers inside the same package buffer.
+        ld      hl, (neo_fw_package_source)
+        inc     hl
+        inc     hl
+        ld      (neo_fw_bootstrap_source), hl
+        ld      de, (neo_fw_bootstrap_length)
+        add     hl, de
         ld      (neo_fw_source), hl
-        ld      (neo_fw_length), de
 
         ; Firmware image must fit in low RAM $0000-$2FFF, below SP=$3FFF.
-        ld      a, d
-        or      e
+        ld      hl, (neo_fw_length)
+        ld      a, h
+        or      a
+        jp      nz, .firmware_high_nonzero
+        ld      a, l
+        or      a
         jp      z, .upload_failed
-        ld      a, d
+        jr      .firmware_length_valid
+.firmware_high_nonzero:
+        ld      a, h
         cp      #30
         jr      c, .firmware_length_valid
         jp      nz, .upload_failed
-        ld      a, e
+        ld      a, l
         or      a
         jp      nz, .upload_failed
 .firmware_length_valid:
@@ -202,7 +258,7 @@ upload_firmware::
         ld      a, 3
         ld      (neo_fw_timeout_phase), a
         ld      hl, 0
-        ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+        ld      de, (neo_fw_bootstrap_length)
         or      a
         sbc     hl, de                  ; HL = -bootstrap length
         ld      (neo_fw_block_length), hl
@@ -227,8 +283,8 @@ upload_firmware::
         ; Phase 4: transfer the executable bootstrap into RAM $4000.
         ld      a, 4
         ld      (neo_fw_timeout_phase), a
-        ld      hl, neogs_bootstrap_start
-        ld      de, neogs_bootstrap_end - neogs_bootstrap_start
+        ld      hl, (neo_fw_bootstrap_source)
+        ld      de, (neo_fw_bootstrap_length)
 .bootstrap_block_loop:
         ld      a, d
         or      e
@@ -529,15 +585,20 @@ neogs_wait_data_byte::
         or      a
         ret
 
-; TR-DOS firmware file loader state and fixed 8-character filename.
-neo_fw_filename:        db "neogs   "
+; TR-DOS NeoGS package loader state and fixed 8-character filename.
+neo_fw_filename:        db "neoprog "
 neo_fw_load_buffer:     dw 0
 neo_fw_load_remaining:  db 0
 neo_fw_load_track:      db 0
 neo_fw_load_sector:     db 0
 neo_fw_file_error:      db 0
+neo_fw_file_length:     dw 0
 
-; Stage 2 diagnostics consumed by zx_main/main.asm.
+; Stage 2 package parser and transfer state.
+neo_fw_package_source:  dw 0
+neo_fw_package_length:  dw 0
+neo_fw_bootstrap_source: dw 0
+neo_fw_bootstrap_length: dw 0
 neo_fw_source:          dw 0
 neo_fw_length:          dw 0
 neo_fw_bootstrap_address: dw #4000
