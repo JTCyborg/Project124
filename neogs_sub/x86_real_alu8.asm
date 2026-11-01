@@ -63,6 +63,9 @@ x86_real_alu8_modrm:
         ld      (x86_alu8_src_reg), a
         ld      a, 1
         ld      (x86_alu8_no_write), a
+        ; TEST is register-direct in this stage. Do not fall through into
+        ; the memory-only decoder inserted immediately below.
+        jp      .operands_ready
 
 .memory_operand:
         ; This stage adds arithmetic memory forms only. TEST/logic memory
