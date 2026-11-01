@@ -297,8 +297,10 @@ x86_real_alu_test:
         ld      de, #5200
         ld      bc, x86_guest_alu_image_end - x86_guest_alu_image
         call    x86_real_copy_image
-        ret     c
-
+        jr      nc, .image_ready
+        ld      hl, #1B07
+        jr      .set_failure
+.image_ready:
         ld      hl, 0
         ld      (x86_reg_ax), hl
         ld      (x86_reg_bx), hl
@@ -320,8 +322,10 @@ x86_real_alu_test:
         ld      (x86_reg_flags), hl
 
         call    x86_real_execute
-        ret     c
-
+        jr      nc, .execution_ok
+        ld      hl, #1B07
+        jr      .set_failure
+.execution_ok:
         ld      hl, (x86_reg_ax)
         ld      de, 1
         or      a
