@@ -7,9 +7,9 @@ ZX Spectrum Pentagon 1024 project with a host Z80 and a NeoGS Z80 firmware core.
 Run `build.bat` from the repository root on Windows. The build uses the
 project's `tools/sjasmplus.exe`.
 
-1. `neogs_sub/build_firmware.asm` builds the firmware and bootstrap, then
-   packages them into `neoprog.bin` as
-   `[WORD bootstrap_length][bootstrap][firmware]`.
+1. `neogs_sub/build_firmware.asm` builds `neogs_code.bin` and
+   `neogs_bootstrap.bin`. `pack_neogs.ps1` combines them into `neoprog.bin`
+   using `[WORD bootstrap_length][bootstrap][firmware]`.
 2. `zx_main/main.asm` builds the host image and exports
    `proj124.C`, `boot.B`, `neoprog.C`, and `x86task.C`.
 3. The complete NeoGS package is staged in RAM bank 1 only as a `SAVETRD`
