@@ -301,3 +301,21 @@
 Эти две задачи остаются отложенными по решению пользователя. CPU-03 из списка отложенных исключён и возвращён в активную работу.
 
 Сборка и запуск текущего pipeline подтверждены предоставленным runtime-логом.
+
+
+### 2026-11-02 — runtime log: новая сборка/загрузка и повторная регрессия (00:03:32–00:03:38)
+
+- Пользователь предоставил runtime-лог запуска. Хост обнаружил `neoprog.C`, прочитал первый сектор и передал пакет через потоковый механизм: PACKAGE LENGTH `#3726` (14 118 байт), PACKAGE SECTORS `#0038` (56 секторов), GS DATA BYTES ACK `#372A` (длина + 4). Bootstrap через GS105a ROM loader завершился, приложение NeoGS вышло в режим `PERFECT MANAGER 124 DUAL-CORE NODE ONLINE`.
+- Важно: `#3726` — длина **всего пакета** (заголовок + bootstrap + firmware), а не размер одного `neogs_code.bin`. Поэтому по этому числу нельзя отдельно подтвердить firmware ASSERT `<=#3800` или остаток до лимита. ACK `#372A` подтверждает счётчик переданных байтов (+4), но не CRC/побайтную целостность.
+- Повторно подтверждены по этому запуску: IPC HLT/AX=#BBAB; пять interpreter edge cases; MEM: 64 pages + word access + segment/offset wrap; BIOS IVT/BDA; INT stack frame/IRET; CPU control-flow, stack, arithmetic/logical, ModR/M и MOV regressions; guest INT 20h; BIOS INT 10h mode/cursor/teletype с 42-column stream; Stage 5 TR-DOS task load, host buffer `#C000`, DMA completion и итоговый status/AX `0000 BBAB`. Pipeline дошёл до штатного HALT.
+- **CPU-I/O-02: не подтверждено этим логом.** В выводе нет отдельного marker/pass для пяти новых IN/OUT regression cases, нет результатов тестовых портов `00E0h/01E0h`, нет проверки сохранения FLAGS. Наличие новой длины пакета само по себе не является доказательством выполнения этих тестов. Статус CPU-I/O-01 остаётся «реализовано в исходниках; runtime regression ожидает явного marker».
+- Stack reserve 2 КиБ и отсутствие переполнения стека этим логом отдельно не проверены: для этого нужен явный stack watermark/guard test либо отдельная диагностическая проверка.
+
+## Следующий этап — CPU-I/O-02, подтвердить именно IN/OUT
+
+1. Проверить, что запущенный `neoprog.C` действительно собран из текущего `main` с `x86_io.asm` и содержит вызов `x86_real_io_test` в активном тестовом pipeline.
+2. Добавить/проверить отдельный host marker после успешного завершения I/O regression, например `[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; immediate/DX; byte/word; full DX; FLAGS preserved.` Marker должен печататься только после всех проверок, а не при входе в тест.
+3. Повторно собрать и запустить; в логе должны присутствовать этот marker и отсутствие общего CPU failure status. Проверить все пять guest cases, включая `DX=01E0h` (не alias к `00E0h`).
+4. Отдельно получить размер именно `neogs_code.bin` после сборки и проверить ASSERT `<=#3800`; длину полного `neoprog.C` не использовать вместо firmware image size.
+5. После I/O regression перейти к CPU-STR-01: MOVS/LODS/STOS/CMPS/SCAS без REP, затем REP/REPE/REPNE с CX/ZF/DF и ограничением числа шагов.
+
