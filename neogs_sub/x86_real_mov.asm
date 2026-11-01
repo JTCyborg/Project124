@@ -350,31 +350,36 @@ x86_real_mov_memory_test:
         jp      .fail
 
 .execution_ok:
+        ld      hl, (x86_reg_ax)
+        ld      de, #1234
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_ax
         ld      hl, (x86_reg_cx)
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_cx
         ld      hl, (x86_reg_dx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_dx
         ld      hl, (x86_reg_bx)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_bx
         ld      hl, (x86_reg_di)
         ld      de, #AB34
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_di
         ld      hl, (x86_reg_si)
         ld      de, #1234
         or      a
         sbc     hl, de
-        jp      nz, .fail_registers
+        jp      nz, .fail_si
 
         ; Verify DS:0200, DS:0004 and DS:0206 word writes.
         ld      hl, 0
@@ -429,8 +434,23 @@ x86_real_mov_memory_test:
         or      a
         ret
 
-.fail_registers:
-        ld      hl, #1D03
+.fail_ax:
+        ld      hl, #1D30
+        jp      .fail
+.fail_cx:
+        ld      hl, #1D31
+        jp      .fail
+.fail_dx:
+        ld      hl, #1D32
+        jp      .fail
+.fail_bx:
+        ld      hl, #1D33
+        jp      .fail
+.fail_di:
+        ld      hl, #1D34
+        jp      .fail
+.fail_si:
+        ld      hl, #1D35
         jp      .fail
 .fail_memory:
         ld      hl, #1D04
