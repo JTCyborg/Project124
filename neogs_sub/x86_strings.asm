@@ -10,14 +10,15 @@ x86_real_string_instruction:
         ld      (x86_string_opcode), a
         ld      a, (x86_real_rep_mode)
         or      a
-        jr      z, .first
+        jr      z, .single
         ld      hl, (x86_reg_cx)
         ld      a, h
         or      l
-        jp      z, x86_real_next
-.first:
+        jp      z, x86_real_next       ; CX=0: no memory access, no index change
+.single:
         call    x86_string_iteration
         ret     c
+.after_iteration:
         ld      a, (x86_real_rep_mode)
         or      a
         jp      z, x86_real_next
@@ -27,12 +28,15 @@ x86_real_string_instruction:
         ld      a, h
         or      l
         jp      z, x86_real_next
+
+        ; F2/F3 test ZF only for CMPS and SCAS; other string forms repeat
+        ; unconditionally. F3 continues while ZF=1, F2 while ZF=0.
         ld      a, (x86_string_opcode)
         and     #FE
         cp      #A6
         jr      z, .check_zf
         cp      #AE
-        jr      nz, .again
+        jr      nz, .repeat
 .check_zf:
         ld      a, (x86_real_rep_mode)
         cp      3
@@ -40,12 +44,12 @@ x86_real_string_instruction:
         ld      a, (x86_reg_flags)
         bit     6, a
         jp      nz, x86_real_next
-        jr      .again
+        jr      .repeat
 .repe:
         ld      a, (x86_reg_flags)
         bit     6, a
         jp      z, x86_real_next
-.again:
+.repeat:
         ld      hl, (x86_real_steps)
         ld      a, h
         or      l
@@ -54,7 +58,7 @@ x86_real_string_instruction:
         ld      (x86_real_steps), hl
         call    x86_string_iteration
         ret     c
-        jr      .first
+        jr      .after_iteration
 
 x86_string_iteration:
         ld      a, (x86_string_opcode)
