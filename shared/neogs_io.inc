@@ -99,7 +99,8 @@ NGS_RESULT_SIGNATURE   EQU #A5
 NGS_STATUS_CBIT EQU M_CBIT
 NGS_STATUS_DBIT EQU M_DBIT
 
-; The x86 DMA frame occupies logical $5000..$7FFF (12 KiB).
-; The two-byte length header leaves #2FFE bytes for the guest image.
-NGS_X86_DMA_WINDOW_SIZE EQU #3000
-NGS_X86_MAX_CODE_SIZE   EQU #2FFE
+; The x86 DMA frame occupies logical $4000..$7FFF (16 KiB) via PG1.
+; PG1 direct page value #88 selects physical RAM page 68 ($110000).
+; The two-byte length header leaves #3FFE bytes for the guest image.
+NGS_X86_DMA_WINDOW_SIZE EQU #4000
+NGS_X86_MAX_CODE_SIZE   EQU #3FFE
