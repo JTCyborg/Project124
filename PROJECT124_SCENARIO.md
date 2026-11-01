@@ -406,3 +406,34 @@
 - Новый artifact ID: `13105461949`, имя `project124-build`. Он заменяет предыдущий artifact/run для runtime; брать следует именно его.
 - **Build: PASS. Runtime: NOT RUN.** Новый пакет готов к загрузке на Pentagon/NeoGS; CPU-STR-01 и STACK-01 ещё требуют runtime marker в пользовательском логе.
 
+
+
+### 2026-11-02 — runtime CPU-STR failure and diagnostic split
+
+- User runtime log: package length `#3BA9` (60 sectors), bootstrap completed; IPC HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA and INT stack-frame/IRET stages all passed.
+- Guest `INT 20h` pipeline stopped with `status/detail = 000D 1D01`. Status 13 is CPU-STR-01 failure. Existing detail `1D01` grouped four checks at the first string-program HLT: AX after LODSB, SI, DI, and FLAGS preservation. The log therefore does **not** identify which of those four checks failed. No CPU-STR PASS, STACK PASS or later BIOS/runtime stages were reached in this run.
+- Added separate failure details without changing guest execution: `1D01` = AX, `1D07` = SI, `1D08` = DI, `1D09` = FLAGS. Commit: `88b62c137d1648978e37f5b9abfd0e59f66e8005`.
+- GitHub Actions run `41361854774` for commit `88b62c137d1648978e37f5b9abfd0e59f66e8005` completed with conclusion `success` (Build, Verify, Upload artifacts). Artifact ID `13106125079`: `neogs_code.bin` 15,090 bytes (`#3AF2`, 1,038 bytes free to `#4000`); bootstrap 196 bytes (`#00C4`); package `neoprog.bin` 15,288 bytes (`#3BB8`, 60 sectors); `disk_A.trd` 655,360 bytes. Build/packaging PASS; hardware/emulator runtime of this diagnostic build is still pending.
+- Next action: wait for CI artifact, run the same test again, and use the refined `1Dxx` result to fix the actual failing state. Do not implement REP/REPE/REPNE until CPU-STR and STACK runtime tests pass.
+
+
+### 2026-11-02 — second CPU-STR runtime and LODSB value capture
+
+- User ran diagnostic artifact `neoprog.bin #3BB8` / 60 sectors. All earlier stages again passed: IPC/HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA, and INT stack-frame/IRET.
+- Guest INT 20h again failed with `status/detail = 000D 1D01`. With the prior diagnostic split, `1D01` now unambiguously identifies the AX comparison immediately after the first guest HLT (MOVSB/MOVSW/LODSB sequence). SI/DI/FLAGS checks are not reached.
+- Updated only the failure-report path: on this AX mismatch it now returns the **observed guest AX** in the existing status/detail field instead of the generic `1D01` marker. This is diagnostic instrumentation; it does not alter LODSB execution or the expected value. Commit: `a1391943ec32048bda16d0431ed71c109ac5e87e`.
+- Next run must report the actual AX value, allowing separation of an incorrect memory read, AL write, or AH preservation. Await CI artifact before runtime. CPU-STR and STACK runtime remain unpassed; REP work remains blocked.
+
+
+### 2026-11-02 — third CPU-STR runtime: уточнение AX=#7766 и разделение второго checkpoint
+
+- User runtime log: package length `#3BC0` (60 sectors); bootstrap, IPC/HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA и INT stack-frame/IRET прошли. Guest INT 20h завершился `status/detail = 000D 7766`.
+- `7766` — фактическое значение, сохранённое диагностическим обработчиком в `saved_x86_ax`; само по себе оно не обозначает номер теста. В guest data массиве байты по DS:0104 равны `66 77`, поэтому ожидаемый результат LODSW на втором checkpoint — AX=`7766`.
+- Предыдущая версия обработчика направляла AX/SI/DI/FLAGS проверки второго checkpoint в один общий обработчик, сохранявший AX. Поэтому лог `7766` совместим как с неожиданным AX на первом checkpoint, так и с ошибкой SI, DI или FLAGS после второго checkpoint. Он **не доказывает**, что LODSB прошёл, и не доказывает, что LODSW завершился успешно.
+- Исправлена диагностика в `neogs_sub/x86_strings.asm`:
+  - первый checkpoint AX mismatch снова возвращает отдельный код `1D01`;
+  - второй checkpoint AX mismatch сохраняет фактический AX;
+  - второй checkpoint SI, DI и FLAGS mismatch теперь сохраняют соответственно фактический SI, DI и FLAGS в поле detail.
+- Commits: `6c22bb801c2fb59d257015e653a165b07368bd28` (разделение SI/DI/FLAGS второго checkpoint) и `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` (разделение AX первого/второго checkpoint).
+- Изменена только диагностика self-test; реализация string instructions не менялась. GitHub Actions run `41362495956` для commit `0576ae0ecbed75ea9bf9c585a97224548bca3b2d` завершился success: Build, Verify и Upload artifacts — PASS. Artifact ID `13105633891` (`project124-build`): firmware `neogs_code.bin` 15 118 байт (`#3B0E`, запас 1 266 байт до `#4000`), bootstrap 196 байт (`#00C4`), package `neoprog.bin` 15 316 байт (`#3BD4`, 60 TR-DOS sectors), `disk_A.trd` 655 360 байт. Это подтверждает сборку/упаковку, но не runtime. Сценарий обновлён после получения runtime лога; свежий пакет готов для следующего запуска. Следующий лог должен различить первый AX checkpoint (`1D01`), второй AX mismatch (фактический AX), второй SI mismatch (фактический SI), второй DI mismatch (фактический DI) и второй FLAGS mismatch (фактические FLAGS).
+- CPU-STR-01 и STACK-01 остаются runtime NOT PASS; REP/REPE/REPNE по-прежнему заблокированы до полного прохождения regression.

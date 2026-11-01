@@ -323,22 +323,22 @@ x86_real_strings_test:
         ld      de, #AB55
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1a
         ld      hl, (x86_reg_si)
         ld      de, #0104
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1b
         ld      hl, (x86_reg_di)
         ld      de, #0203
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1c
         ld      hl, (x86_reg_flags)
         ld      de, #0302
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1d
 
         ; LODSW/STOSB/STOSW/CMPSB -> HLT.
         call    x86_real_execute
@@ -352,17 +352,17 @@ x86_real_strings_test:
         ld      de, #0107
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1e
         ld      hl, (x86_reg_di)
         ld      de, #0207
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1f
         ld      hl, (x86_reg_flags)
         ld      de, #0246
         or      a
         sbc     hl, de
-        jp      nz, x86_string_test_fail_1
+        jp      nz, x86_string_test_fail_1g
 
         ; CMPSW -> HLT.
         call    x86_real_execute
@@ -497,7 +497,38 @@ x86_string_test_fail_execute:
         ld      hl, #1D11
         jr      x86_string_test_fail
 x86_string_test_fail_1:
+        ; Second checkpoint: preserve AX if LODSW result itself is wrong.
+        ld      hl, (x86_reg_ax)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1a:
+        ; First checkpoint AX after LODSB: retain a distinct stage code.
         ld      hl, #1D01
+        jr      x86_string_test_fail
+x86_string_test_fail_1e:
+        ; Second checkpoint SI after LODSW/STOSB/STOSW/CMPSB.
+        ld      hl, (x86_reg_si)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1f:
+        ; Second checkpoint DI after STOSB/STOSW/CMPSB.
+        ld      hl, (x86_reg_di)
+        jr      x86_string_test_fail_observed
+x86_string_test_fail_1g:
+        ; Second checkpoint FLAGS after non-comparing string operations.
+        ld      hl, (x86_reg_flags)
+x86_string_test_fail_observed:
+        ld      (saved_x86_ax), hl
+        ld      a, 13
+        ld      (x86_exit_status), a
+        scf
+        ret
+x86_string_test_fail_1b:
+        ld      hl, #1D07             ; SI after MOVSB/MOVSW/LODSB
+        jr      x86_string_test_fail
+x86_string_test_fail_1c:
+        ld      hl, #1D08             ; DI after MOVSB/MOVSW
+        jr      x86_string_test_fail
+x86_string_test_fail_1d:
+        ld      hl, #1D09             ; FLAGS preserved by MOVS/LODS
         jr      x86_string_test_fail
 x86_string_test_fail_2:
         ld      hl, #1D02
