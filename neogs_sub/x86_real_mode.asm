@@ -12,7 +12,7 @@
 ; handler at 0000:5100. The guest loads all eight general registers with
 ; MOV r16,imm16, invokes INT 20h, then resumes at HLT after handler IRET.
 ; The test checks all MOV destinations, interrupt return, FLAGS and SP.
-; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh.
+; Success: status=0, AX=1A02h. Failure: status=9, AX=1Bxxh or 1Cxxh.
 ; =========================================================================
 
 X86_REAL_STEP_LIMIT EQU #FFFF
