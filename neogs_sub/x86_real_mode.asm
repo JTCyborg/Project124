@@ -119,13 +119,14 @@ x86_real_mode_test:
         jp      nz, x86_real_test_fail_5
 
         ; Verify original control-flow context, SP and FLAGS were restored.
+        ; FAR JMP moved execution to segment 0001; INT/IRET must retain it.
         ld      hl, (x86_reg_cs)
-        ld      de, 0
+        ld      de, 1
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
         ld      hl, (x86_reg_ip)
-        ld      de, #5002 + (x86_guest_main_image_end - x86_guest_main_image)
+        ld      de, #4FF2 + (x86_guest_main_image_end - x86_guest_main_image)
         or      a
         sbc     hl, de
         jp      nz, x86_real_test_fail_5
@@ -1286,11 +1287,11 @@ x86_guest_jl_target:
 
         ; Far CALL enters a RETF subroutine; return address then executes FAR JMP.
         db #9A
-        dw #5002 + (x86_guest_far_subroutine - x86_guest_main_image)
-        dw 0
+        dw #4FF2 + (x86_guest_far_subroutine - x86_guest_main_image)
+        dw 1                       ; same physical image at CS:IP = 0001:4FF2+offset
         db #EA
-        dw #5002 + (x86_guest_far_target - x86_guest_main_image)
-        dw 0
+        dw #4FF2 + (x86_guest_far_target - x86_guest_main_image)
+        dw 1
 x86_guest_far_subroutine:
         db #CB                      ; RETF restores IP and CS
 x86_guest_far_target:
