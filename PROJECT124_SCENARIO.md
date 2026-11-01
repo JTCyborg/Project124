@@ -319,3 +319,22 @@
 4. Отдельно получить размер именно `neogs_code.bin` после сборки и проверить ASSERT `<=#3800`; длину полного `neoprog.C` не использовать вместо firmware image size.
 5. После I/O regression перейти к CPU-STR-01: MOVS/LODS/STOS/CMPS/SCAS без REP, затем REP/REPE/REPNE с CX/ZF/DF и ограничением числа шагов.
 
+
+### 2026-11-02 — CPU-I/O-02: явный host PASS marker добавлен
+
+- Проверена интеграция: `x86_real_mode_test` вызывает `x86_real_io_test` после существующих MOV/ModR/M регрессий; команда `CMD_INT_GUEST_TEST` запускает этот self-test. Dispatcher направляет диапазоны E4–E7 и EC–EF в `x86_real_io_instruction`.
+- Подтверждена структура пяти guest cases: immediate byte, immediate word, DX byte, DX word и unmapped full-DX port `01E0h`. После каждого исполнения проверяется `FLAGS=#0302`; проверяется AX и итоговое содержимое тестового latch `A1B2h`. Это статический аудит исходников, не результат исполнения.
+- Найдено, почему предыдущий runtime-лог не содержал I/O result: хост печатал PASS-сообщения существующих regression groups, но не имел отдельной строки для IN/OUT. В `zx_main/x86_loader.asm` добавлен `P124_msg_int_guest_io_pass`, который выводится после общего успешного result frame и проверок status/AX, рядом с остальными CPU PASS markers. Строка: `[CPU-I/O] PASS: IN/OUT E4-E7, EC-EF; imm8/DX; byte/word; full DX; FLAGS preserved.`
+- Commit: `055f8ea7379477a022b23389d48674165c963cdb`.
+- Сборка после добавления marker **не выполнялась**. Runtime-лог от 00:03:32 предшествует этому изменению и не может содержать новый marker; CPU-I/O-02 остаётся ожидающим повторной сборки и нового лога.
+- Среда проверки: Debian 13; `sjasmplus`, `z80asm`, `pasmo`, `pwsh` и `powershell` отсутствуют; пакет `sjasmplus` в доступном apt-cache не найден. Проверена официальная ветка релизов SjASMPlus: актуальный release v1.24.0 публикует source archive и Windows binary, но не готовый Linux binary. Попытка загрузить исходный архив из среды завершилась сетевой ошибкой DNS (`github.com` не разрешается). Поэтому build и firmware size measurement здесь не запускались. GitHub Actions runs для Project124 branch main также не обнаружены.
+- Не обновлялись `neogs_code.bin`, `neoprog.bin` и прочие tracked binaries. Не объявлять CPU-I/O-02 PASS до сборки, фактической проверки `neogs_code.bin <= #3800` и runtime marker.
+- Stack reserve `#3800..#3FFE` (2 КиБ) пока подтверждён только картой адресов/ASSERT; watermark/guard test глубины стека не добавлен и runtime не выполнен.
+
+## Текущий ближайший шаг
+
+1. Собрать свежие исходники с SjASMPlus 1.24.0 или совместимой версией и проверить оба ASSERT в `build_firmware.asm`, а также фактический размер именно `neogs_code.bin`.
+2. Установить собранный пакет `neoprog.C` и повторить полный pipeline. В Stage 2B ожидать новую строку `[CPU-I/O] PASS: ...`. Если строки нет — проверить, что на TR-DOS записан новый пакет, а не прежний бинарник.
+3. Добавить/выполнить runtime stack watermark для диапазона `#3800..#3FFE`; сохранить не менее 2 КиБ зарезервированной области и подтвердить, что тестовая глубина стека не заходит в guard.
+4. Только после этих проверок закрыть CPU-I/O-02 и переходить к CPU-STR-01.
+
