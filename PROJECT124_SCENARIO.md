@@ -406,3 +406,12 @@
 - Новый artifact ID: `13105461949`, имя `project124-build`. Он заменяет предыдущий artifact/run для runtime; брать следует именно его.
 - **Build: PASS. Runtime: NOT RUN.** Новый пакет готов к загрузке на Pentagon/NeoGS; CPU-STR-01 и STACK-01 ещё требуют runtime marker в пользовательском логе.
 
+
+
+### 2026-11-02 — runtime CPU-STR failure and diagnostic split
+
+- User runtime log: package length `#3BA9` (60 sectors), bootstrap completed; IPC HLT, five interpreter edge cases, 64-page memory/word/segment-wrap, BIOS IVT/BDA and INT stack-frame/IRET stages all passed.
+- Guest `INT 20h` pipeline stopped with `status/detail = 000D 1D01`. Status 13 is CPU-STR-01 failure. Existing detail `1D01` grouped four checks at the first string-program HLT: AX after LODSB, SI, DI, and FLAGS preservation. The log therefore does **not** identify which of those four checks failed. No CPU-STR PASS, STACK PASS or later BIOS/runtime stages were reached in this run.
+- Added separate failure details without changing guest execution: `1D01` = AX, `1D07` = SI, `1D08` = DI, `1D09` = FLAGS. Commit: `88b62c137d1648978e37f5b9abfd0e59f66e8005`.
+- GitHub Actions run `41361854774` was queued for this diagnostic-only change. Build/runtime status remains pending until CI completes and the rebuilt artifact is run on hardware/emulator.
+- Next action: wait for CI artifact, run the same test again, and use the refined `1Dxx` result to fix the actual failing state. Do not implement REP/REPE/REPNE until CPU-STR and STACK runtime tests pass.
