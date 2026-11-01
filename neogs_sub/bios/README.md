@@ -56,8 +56,10 @@ The separate `x86_real_alu.asm` module adds register-direct 16-bit
 overflow, carry/borrow, auxiliary carry/borrow, parity, sign and zero flags;
 it also checks ADC/SBB carry-in behavior and that CMP does not write its
 destination. Memory ModR/M operands and 8-bit ALU operations are not yet
-supported. A dedicated `[CPU] PASS` line is emitted only after the host
-verifies the saved FLAGS and final AX/DX/BX results.
+supported. The guest program exercises both ModR/M operand directions for
+all five operations and chains the results into final AX/BX/BP/DX/SP checks.
+A dedicated `[CPU] PASS` line is emitted only after the host verifies those
+registers and the saved FLAGS.
 
 After the INT 20h handler changes AX to `1234h` and IRET returns, the test
 checks the post-HLT IP using the assembled guest-image length, FLAGS=`0B16h`,
