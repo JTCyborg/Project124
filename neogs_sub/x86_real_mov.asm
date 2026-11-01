@@ -20,8 +20,11 @@ x86_real_mov_modrm:
         ret     c
 
         ; Opcode bit 0 selects byte/word; bit 1 selects direction.
+        ; Internal convention: width=0 means word, width=1 means byte.
+        ; 8086 opcode bit 0 is the inverse: 0=byte, 1=word.
         ld      a, (x86_mov_opcode)
         and     1
+        xor     1
         ld      (x86_mov_width), a
 
         ld      a, (x86_mov_opcode)
