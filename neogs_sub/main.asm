@@ -7,7 +7,7 @@
 ; RAM-over-ROM and receives this firmware at logical RAM address $0000.
 ; Current firmware image is kept below $3400; the stack grows down from $3FFF.
 ; PG1 normally maps physical page 1 (register value #03).
-; During x86 DMA, PG1 maps physical page 68 (register value #88) at $4000-$7FFF.
+; During x86 DMA, PG1 maps physical page 68 (register value #44) at $4000-$7FFF.
 ; Physical page 68 starts at $110000; firmware and its stack remain in page 0.
 ; =========================================================================
 
@@ -212,6 +212,10 @@ execute_neogs_x86:
         ret
 
 .dma_ok:
+        ; Emit a live NeoGS-side dump before interpreting the DMA payload.
+        ; The host drains this stream and mirrors it to emulator port #EF.
+        call    neo_debug_dump_dma_frame
+
         ; DMA frame begins with a little-endian x86 byte length at $4000.
         ld      hl, (X86_DMA_HEADER_ADDR)
         ld      a, h
@@ -419,6 +423,72 @@ command_get_status:
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
+
+; -------------------------------------------------------------------------
+; NeoGS DMA diagnostic stream.
+; Sent through GSDAT/DBIT while the host is in
+; neogs_wait_run_done_with_console; the host mirrors it to port #EF.
+; Dumps PG1, the two-byte length header, and the first 12 frame bytes.
+; -------------------------------------------------------------------------
+neo_debug_dump_dma_frame:
+        push    hl
+        push    de
+        ld      hl, neo_debug_dma_prefix
+        call    neo_debug_send_string
+        in      a, (PG1)
+        call    neo_debug_hex8
+        ld      a, ' '
+        call    neo_send_data_byte
+        ld      hl, X86_DMA_HEADER_ADDR
+        ld      e, 12
+.neo_debug_dump_loop:
+        ld      a, (hl)
+        call    neo_debug_hex8
+        ld      a, ' '
+        call    neo_send_data_byte
+        inc     hl
+        dec     e
+        jr      nz, .neo_debug_dump_loop
+        ld      a, 13
+        call    neo_send_data_byte
+        ld      a, 10
+        call    neo_send_data_byte
+        pop     de
+        pop     hl
+        ret
+
+neo_debug_send_string:
+        ld      a, (hl)
+        inc     hl
+        or      a
+        ret     z
+        call    neo_send_data_byte
+        jr      neo_debug_send_string
+
+; IN: A = byte. Sends two uppercase hexadecimal digits.
+neo_debug_hex8:
+        push    af
+        rrca
+        rrca
+        rrca
+        rrca
+        and     #0F
+        call    neo_debug_hex_nibble
+        pop     af
+        and     #0F
+        jp      neo_debug_hex_nibble
+
+; IN: A = nibble 0..15.
+neo_debug_hex_nibble:
+        add     a, '0'
+        cp      '9'+1
+        jr      c, .neo_debug_hex_send
+        add     a, 7
+.neo_debug_hex_send:
+        jp      neo_send_data_byte
+
+neo_debug_dma_prefix:
+        defb    "[NGS DMA] PG1=", 0
 
 ; -------------------------------------------------------------------------
 ; neo_send_data_byte
