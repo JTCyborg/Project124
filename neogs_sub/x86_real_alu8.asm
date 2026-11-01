@@ -68,15 +68,20 @@ x86_real_alu8_modrm:
         jp      .operands_ready
 
 .memory_operand:
-        ; This stage adds arithmetic memory forms only. TEST/logic memory
-        ; forms remain on the unsupported path until their own regression.
+        ; Arithmetic and logical byte memory forms share the MOV EA decoder.
         xor     a
         ld      (x86_alu8_no_write), a
         ld      (x86_alu8_is_logic), a
         ld      a, (x86_real_opcode)
         cp      #84
-        jp      z, x86_real_alu_unsupported
+        jr      z, .memory_test
         and     #38
+        cp      #08
+        jr      z, .memory_logic
+        cp      #20
+        jr      z, .memory_logic
+        cp      #30
+        jr      z, .memory_logic
         cp      #00
         jr      z, .memory_opcode_ok
         cp      #10
@@ -87,6 +92,15 @@ x86_real_alu8_modrm:
         jr      z, .memory_opcode_ok
         cp      #38
         jp      nz, x86_real_alu_unsupported
+        jr      .memory_opcode_ok
+.memory_logic:
+        ld      a, 1
+        ld      (x86_alu8_is_logic), a
+        jr      .memory_opcode_ok
+.memory_test:
+        ld      a, 1
+        ld      (x86_alu8_no_write), a
+        ld      (x86_alu8_is_logic), a
 .memory_opcode_ok:
         ld      a, (x86_alu8_modrm)
         call    x86_real_mov_decode_modrm
@@ -470,10 +484,56 @@ x86_real_logic16_modrm:
         call    x86_real_fetch8
         ret     c
         ld      (x86_logic_modrm), a
+        xor     a
+        ld      (x86_logic_no_write), a
+        ld      (x86_logic_dst_is_mem), a
+        ld      a, (x86_logic_modrm)
         and     #C0
         cp      #C0
-        jp      nz, x86_real_alu_unsupported
+        jr      z, .register_operand
 
+        ; Memory EA and segment selection are shared with MOV/arithmetic.
+        ld      a, (x86_logic_modrm)
+        call    x86_real_mov_decode_modrm
+        ret     c
+        ld      a, (x86_real_opcode)
+        cp      #85
+        jr      z, .memory_test
+        and     2
+        jr      nz, .memory_source
+        ; OR/AND/XOR r/m16,r16: memory destination.
+        ld      a, 1
+        ld      (x86_logic_dst_is_mem), a
+        call    x86_real_alu_read_memory_word
+        ret     c
+        ld      (x86_logic_dst), hl
+        ld      a, (x86_mov_reg)
+        call    x86_alu_read_reg16
+        ld      (x86_logic_src), hl
+        jp      .operands_ready
+.memory_source:
+        ; OR/AND/XOR r16,r/m16: memory source.
+        ld      a, (x86_mov_reg)
+        ld      (x86_logic_dst_reg), a
+        call    x86_alu_read_reg16
+        ld      (x86_logic_dst), hl
+        call    x86_real_alu_read_memory_word
+        ret     c
+        ld      (x86_logic_src), hl
+        jp      .operands_ready
+.memory_test:
+        ; TEST r/m16,r16: FLAGS only, no memory writeback.
+        ld      a, 1
+        ld      (x86_logic_no_write), a
+        call    x86_real_alu_read_memory_word
+        ret     c
+        ld      (x86_logic_dst), hl
+        ld      a, (x86_mov_reg)
+        call    x86_alu_read_reg16
+        ld      (x86_logic_src), hl
+        jp      .operands_ready
+
+.register_operand:
         ld      a, (x86_logic_modrm)
         and     #38
         srl     a
@@ -483,9 +543,6 @@ x86_real_logic16_modrm:
         ld      a, (x86_logic_modrm)
         and     7
         ld      (x86_logic_rm), a
-        xor     a
-        ld      (x86_logic_no_write), a
-
         ld      a, (x86_real_opcode)
         cp      #85
         jr      z, .test_rm
@@ -495,13 +552,13 @@ x86_real_logic16_modrm:
         ld      (x86_logic_dst_reg), a
         ld      a, (x86_logic_reg)
         ld      (x86_logic_src_reg), a
-        jr      .read_values
+        jr      .read_register_values
 .reg_destination:
         ld      a, (x86_logic_reg)
         ld      (x86_logic_dst_reg), a
         ld      a, (x86_logic_rm)
         ld      (x86_logic_src_reg), a
-        jr      .read_values
+        jr      .read_register_values
 .test_rm:
         ld      a, (x86_logic_rm)
         ld      (x86_logic_dst_reg), a
@@ -509,7 +566,7 @@ x86_real_logic16_modrm:
         ld      (x86_logic_src_reg), a
         ld      a, 1
         ld      (x86_logic_no_write), a
-.read_values:
+.read_register_values:
         ld      a, (x86_logic_dst_reg)
         call    x86_alu_read_reg16
         ld      (x86_logic_dst), hl
@@ -517,15 +574,16 @@ x86_real_logic16_modrm:
         call    x86_alu_read_reg16
         ld      (x86_logic_src), hl
 
+.operands_ready:
         ld      a, (x86_real_opcode)
         and     #38
         cp      #08
         jr      z, .word_or
         cp      #20
         jr      z, .word_and
-        ; XOR and TEST (TEST is forced to AND).
         cp      #30
         jr      z, .word_xor
+        ; TEST 85 is forced to AND.
         ld      a, #20
         ld      (x86_logic_mode), a
         jr      .word_and
@@ -572,9 +630,22 @@ x86_real_logic16_modrm:
         ld      a, (x86_logic_no_write)
         or      a
         jp      nz, x86_real_next
+        ld      a, (x86_logic_dst_is_mem)
+        or      a
+        jr      nz, .write_memory
         ld      a, (x86_logic_dst_reg)
         ld      hl, (x86_logic_result)
         call    x86_alu_write_reg16
+        jp      x86_real_next
+.write_memory:
+        ld      hl, (x86_logic_result)
+        ld      (x86_mem_word_value), hl
+        ld      hl, (x86_mov_offset)
+        ld      (x86_mem_offset), hl
+        ld      hl, (x86_mov_segment)
+        ld      (x86_mem_segment), hl
+        call    x86_mem_write16
+        ret     c
         jp      x86_real_next
 
 ; Shared deterministic logical flags. CF/AF/OF are cleared; PF/ZF/SF
@@ -1066,6 +1137,239 @@ x86_alu8_carry:       db 0
 x86_alu8_no_write:    db 0
 x86_alu8_is_logic:    db 0
 x86_alu8_new_flags:   dw 0
+
+; -------------------------------------------------------------------------
+; Logical memory regression: byte and word OR/AND/XOR/TEST.
+; Exercises both operand directions, DS/SS defaults, ES/CS overrides and
+; TEST's mandatory no-writeback behavior.
+; -------------------------------------------------------------------------
+x86_real_logic_memory_test:
+        ld      hl, x86_logic_memory_guest_image
+        ld      de, #D900
+        ld      bc, x86_logic_memory_guest_image_end - x86_logic_memory_guest_image
+        call    x86_real_copy_image
+        jp      c, .fail_copy
+        ; Byte operands.
+        ld      a, #10
+        ld      de, #1000
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #F0
+        ld      de, #7000
+        ld      bc, #0100
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #20
+        ld      de, #3000
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #40
+        ld      de, #0800
+        ld      bc, #0200
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ld      a, #60
+        ld      de, #1000
+        ld      bc, #0100
+        call    x86_real_alu8_memory_seed
+        jp      c, .fail_seed
+        ; Word operands.
+        ld      hl, #1000
+        ld      de, #1000
+        ld      bc, #0300
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #FFFF
+        ld      de, #1000
+        ld      bc, #0102
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #AAAA
+        ld      de, #3000
+        ld      bc, #0300
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #FFFF
+        ld      de, #1000
+        ld      bc, #0302
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+        ld      hl, #00FF
+        ld      de, #1000
+        ld      bc, #0304
+        call    x86_real_alu_memory_seed
+        jp      c, .fail_seed
+
+        ; Guest segment/register state.
+        ld      hl, 0
+        ld      (x86_reg_ax), hl
+        ld      (x86_reg_bx), hl
+        ld      (x86_reg_cx), hl
+        ld      (x86_reg_dx), hl
+        ld      (x86_reg_bp), hl
+        ld      (x86_reg_si), hl
+        ld      (x86_reg_di), hl
+        ld      hl, #1000
+        ld      (x86_reg_ds), hl
+        ld      hl, #3000
+        ld      (x86_reg_es), hl
+        ld      hl, #0800
+        ld      (x86_reg_cs), hl
+        ld      hl, #7000
+        ld      (x86_reg_ss), hl
+        ld      hl, #5900
+        ld      (x86_reg_ip), hl
+        ld      hl, #0100
+        ld      (x86_reg_sp), hl
+        ld      hl, #0202
+        ld      (x86_reg_flags), hl
+        xor     a
+        ld      (x86_real_seg_override_active), a
+        call    x86_real_execute
+        jp      c, .fail_execute
+
+        ; CX=00F0 and DX=0FF0 after register-destination logical operations.
+        ld      hl, (x86_reg_cx)
+        ld      de, #00F0
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+        ld      hl, (x86_reg_dx)
+        ld      de, #0FF0
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_register
+
+        ; Byte DS/SS/ES/CS results and TEST no-writeback.
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0200
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        cp      #13
+        jp      nz, .fail_verify
+        ld      hl, #7000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0100
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        cp      #FF
+        jp      nz, .fail_verify
+        ld      hl, #3000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0200
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        cp      #23
+        jp      nz, .fail_verify
+        ld      hl, #0800
+        ld      (x86_mem_segment), hl
+        ld      hl, #0200
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        cp      #43
+        jp      nz, .fail_verify
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0100
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read8
+        jp      c, .fail_verify
+        cp      #63
+        jp      nz, .fail_verify
+
+        ; Word OR, XOR, AND results; final TEST must not change DS:0300.
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0300
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, .fail_verify
+        ld      de, #10F0
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_verify
+        ld      hl, #3000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0300
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, .fail_verify
+        ld      de, #AA5A
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_verify
+        ld      hl, #1000
+        ld      (x86_mem_segment), hl
+        ld      hl, #0302
+        ld      (x86_mem_offset), hl
+        call    x86_mem_read16
+        jp      c, .fail_verify
+        ld      de, #00F0
+        or      a
+        sbc     hl, de
+        jp      nz, .fail_verify
+        ld      hl, #1F31
+        ld      (saved_x86_ax), hl
+        xor     a
+        ld      (x86_exit_status), a
+        or      a
+        ret
+.fail_copy:
+        ld      hl, #1F30
+        jp      .fail
+.fail_seed:
+        ld      hl, #1F31
+        jp      .fail
+.fail_execute:
+        ld      hl, #1F32
+        jp      .fail
+.fail_register:
+        ld      hl, #1F33
+        jp      .fail
+.fail_verify:
+        ld      hl, #1F34
+.fail:
+        ld      (saved_x86_ax), hl
+        ld      a, 11
+        ld      (x86_exit_status), a
+        scf
+        ret
+
+x86_logic_dst_is_mem: db 0
+
+x86_logic_memory_guest_image:
+        db #B0,#03                 ; MOV AL,03
+        db #BB,#00,#02             ; MOV BX,0200
+        db #08,#07                 ; OR DS:[BX],AL -> 13
+        db #B1,#1F                 ; MOV CL,1F
+        db #22,#0F                 ; AND CL,DS:[BX] -> 13
+        db #B2,#0F                 ; MOV DL,0F
+        db #BD,#00,#01             ; MOV BP,0100
+        db #36,#30,#56,#00         ; XOR SS:[BP+0],DL -> FF
+        db #84,#07                 ; TEST DS:[BX],AL; no write
+        db #26,#08,#07             ; OR ES:[BX],AL -> 23
+        db #2E,#08,#07             ; OR CS:[BX],AL -> 43
+        db #3E,#08,#46,#00         ; OR DS:[BP],AL -> 63
+        db #BB,#00,#03             ; MOV BX,0300
+        db #B9,#F0,#00             ; MOV CX,00F0
+        db #09,#0F                 ; OR DS:[BX],CX -> 10F0
+        db #BA,#0F,#0F             ; MOV DX,0F0F
+        db #23,#16,#02,#01         ; AND DX,DS:[0102] -> 0F0F
+        db #26,#31,#0F             ; XOR ES:[BX],CX -> AA5A
+        db #BB,#02,#03             ; MOV BX,0302
+        db #21,#0F                 ; AND DS:[BX],CX -> 00F0
+        db #33,#16,#04,#03         ; XOR DX,DS:[0304] -> 0FF0
+        db #BB,#00,#03             ; MOV BX,0300
+        db #85,#17                 ; TEST DS:[BX],DX; no write
+        db #F4
+x86_logic_memory_guest_image_end:
 
 x86_logic_modrm:      db 0
 x86_logic_mode:       db 0
