@@ -1250,6 +1250,11 @@ x86_real_logic_memory_test:
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v40
         call    x86_mem_read8
         jp      c, .fail_v40
         cp      #13
@@ -1258,6 +1263,11 @@ x86_real_logic_memory_test:
         ld      (x86_mem_segment), hl
         ld      hl, #0100
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v41
         call    x86_mem_read8
         jp      c, .fail_v41
         cp      #FF
@@ -1266,6 +1276,11 @@ x86_real_logic_memory_test:
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v42
         call    x86_mem_read8
         jp      c, .fail_v42
         cp      #23
@@ -1274,6 +1289,11 @@ x86_real_logic_memory_test:
         ld      (x86_mem_segment), hl
         ld      hl, #0200
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v43
         call    x86_mem_read8
         jp      c, .fail_v43
         cp      #43
@@ -1282,6 +1302,11 @@ x86_real_logic_memory_test:
         ld      (x86_mem_segment), hl
         ld      hl, #0100
         ld      (x86_mem_offset), hl
+        ; x86_mem_read8 consumes the precomputed 20-bit x86_mem_addr.
+        ; Convert this segment:offset explicitly before reading it back.
+        ld      (x86_mem_offset_work), hl
+        call    x86_mem_calc_phys
+        jp      c, .fail_v44
         call    x86_mem_read8
         jp      c, .fail_v44
         cp      #63
