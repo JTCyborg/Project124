@@ -9,6 +9,129 @@ IPC_BYTE_TIMEOUT EQU #FFFF
 IPC_CMD_TIMEOUT EQU #FFFF
 
 ; -------------------------------------------------------------------------
+; Load the separately stored NeoGS firmware file from TR-DOS.
+; The descriptor must match the freshly assembled neogs_code.bin exactly.
+; OUT: Carry clear, firmware bytes at #C000; carry set and error code saved.
+; Uses the same verified TR-DOS 5.04T catalogue/sector API as Stage 5.
+; -------------------------------------------------------------------------
+load_neogs_firmware_file::
+        ; Search the exact 8.3 catalogue name neogs.C.
+        ld      hl, neo_fw_filename
+        ld      de, #5CDD
+        ld      bc, 8
+        ldir
+        ld      a, 'C'
+        ld      (#5CE5), a
+        ld      a, 9
+        ld      (#5D06), a
+        ld      c, 10
+        call    #3D13
+        ld      a, c
+        cp      #FF
+        jp      z, .file_not_found
+
+        ; C=#0A returns the directory slot. Fetch its full descriptor with C=#08.
+        push    af
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        pop     af
+        ld      c, 8
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .bad_descriptor
+
+        ; Refuse a stale or truncated firmware file.
+        ld      hl, (#5CE8)
+        ld      de, neogs_binary_end - neogs_binary_start
+        or      a
+        sbc     hl, de
+        jp      nz, .bad_length
+
+        ; Verify sector count = ceil(file_length / 256).
+        ld      hl, neogs_binary_end - neogs_binary_start
+        ld      de, 255
+        add     hl, de
+        ld      a, (#5CEA)
+        cp      h
+        jp      nz, .bad_descriptor
+        ld      (neo_fw_load_remaining), a
+
+        ld      a, (#5CEB)
+        cp      16
+        jp      nc, .bad_descriptor
+        ld      (neo_fw_load_sector), a
+        ld      a, (#5CEC)
+        ld      (neo_fw_load_track), a
+        ld      hl, #C000
+        ld      (neo_fw_load_buffer), hl
+
+.read_sector_loop:
+        ld      a, (neo_fw_load_track)
+        ld      d, a
+        ld      a, (neo_fw_load_sector)
+        ld      e, a
+        ld      hl, (neo_fw_load_buffer)
+        ld      b, 1
+        ld      c, 5
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jp      nz, .sector_read_failed
+
+        ; Next 256-byte sector goes to the next host buffer page.
+        ld      hl, (neo_fw_load_buffer)
+        ld      de, 256
+        add     hl, de
+        ld      (neo_fw_load_buffer), hl
+
+        ; TR-DOS internal sectors are 0..15; then advance the track.
+        ld      a, (neo_fw_load_sector)
+        inc     a
+        cp      16
+        jr      c, .same_track
+        xor     a
+        ld      (neo_fw_load_sector), a
+        ld      a, (neo_fw_load_track)
+        inc     a
+        ld      (neo_fw_load_track), a
+        jr      .sector_advanced
+.same_track:
+        ld      (neo_fw_load_sector), a
+.sector_advanced:
+        ld      a, (neo_fw_load_remaining)
+        dec     a
+        ld      (neo_fw_load_remaining), a
+        jp      nz, .read_sector_loop
+
+        xor     a
+        ret
+
+.file_not_found:
+        ld      a, 1
+        jr      .load_failed
+.bad_descriptor:
+        ld      a, 2
+        jr      .load_failed
+.bad_length:
+        ld      a, 3
+        jr      .load_failed
+.sector_read_failed:
+        ld      a, 4
+.load_failed:
+        ld      (neo_fw_file_error), a
+        scf
+        ret
+
+; -------------------------------------------------------------------------
 ; upload_firmware
 ; IN : HL = custom firmware binary, DE = byte length.
 ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
@@ -405,6 +528,14 @@ neogs_wait_data_byte::
         in      a, (GSDAT)
         or      a
         ret
+
+; TR-DOS firmware file loader state and fixed 8-character filename.
+neo_fw_filename:        db "neogs   "
+neo_fw_load_buffer:     dw 0
+neo_fw_load_remaining:  db 0
+neo_fw_load_track:      db 0
+neo_fw_load_sector:     db 0
+neo_fw_file_error:      db 0
 
 ; Stage 2 diagnostics consumed by zx_main/main.asm.
 neo_fw_source:          dw 0
