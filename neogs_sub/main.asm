@@ -124,8 +124,9 @@ command_reset:
 
 ; -------------------------------------------------------------------------
 ; CMD_LOAD_X86
-; 1) Select ZX DMA module and set physical target $00D000.
-; 2) Enable DMA by setting DMA_CST bit 7.
+; 1) Map physical page 68 at logical $4000-$7FFF through PG1=#88.
+; 2) Select ZX DMA module and set physical DMA target $110000.
+; 3) Enable DMA by setting DMA_CST bit 7.
 ; 4) Clear CBIT: this is the READY indication to the host.
 ; 5) Wait for host's end marker (#FF written to GSCOM, setting CBIT).
 ; 6) Disable DMA, then clear CBIT to acknowledge completion.
@@ -141,10 +142,10 @@ command_load_x86:
         ld      a, C_DMA_ZX
         out     (DMA_MOD), a
 
+        ld      a, #11
+        out     (DMA_HAD), a            ; physical address bits 21:16 = #11
         xor     a
-        out     (DMA_HAD), a            ; physical address bits 21:16 = 0
-        ld      a, #D0
-        out     (DMA_MAD), a            ; physical address bits 15:8 = #D0
+        out     (DMA_MAD), a            ; physical address bits 15:8 = 0
         xor     a
         out     (DMA_LAD), a            ; physical address bits 7:0 = 0
 
@@ -178,8 +179,6 @@ command_load_x86:
         ld      (neo_dma_error), a
         ld      a, 3
         ld      (x86_exit_status), a
-        ld      a, #03
-        out     (PG1), a                ; restore physical firmware page 1
         jp      main_loop
 
 .dma_host_end:
