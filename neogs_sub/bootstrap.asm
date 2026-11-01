@@ -16,11 +16,26 @@ neogs_bootstrap_start:
         di
         ld      sp, #3FFF
 
-        ; Hide the stock ROM and expose RAM at logical $0000-$3FFF.
+        ; Enable writable RAM-over-ROM and independent WIN2/WIN3 paging.
         in      a, (GSCFG0)
-        and     #FD                    ; clear RAMRO: low RAM must be writable
+        and     #FD                    ; clear RAMRO: all target RAM must be writable
         or      M_NOROM                ; map RAM over the stock ROM at $0000
+        or      M_EXPAG                ; MPAG and MPAGEX independently select WIN2/WIN3
         out     (GSCFG0), a
+
+        ; Physical 16-KiB page map used by the 48-KiB firmware layout:
+        ; WIN0 $0000-$3FFF = fixed RAM page 0
+        ; WIN1 $4000-$7FFF = fixed RAM page 3 (includes untouched DMA $5000-$7FFF)
+        ; WIN2 $8000-$BFFF = RAM page 1; ROL8 encoding of page 1 is $80
+        ; WIN3 $C000-$FFFF = RAM page 2; ROL8 encoding of page 2 is $01
+        ld      a, #80
+        out     (MPAG), a
+        ld      a, #01
+        out     (MPAGEX), a
+
+        ; Stack lives in the reserved $F000-$FFFF part of WIN3. This keeps it
+        ; safe while the bootstrap fills the low and upper firmware windows.
+        ld      sp, #FFFE
 
         ; Tell Spectrum that the tiny loader is running and waiting for length.
         ld      a, NGS_BOOTSTRAP_READY_ACK

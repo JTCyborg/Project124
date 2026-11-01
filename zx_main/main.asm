@@ -252,7 +252,7 @@ msg_stage2_bootstrap:
 msg_stage2_file_start:
         DEFB "[FW] Loading neoprog.C from TR-DOS into #C000...", 13, 0
 msg_stage2_file_ok:
-        DEFB "[FW] neoprog.C verified and loaded into #C000.", 13, 0
+        DEFB "[FW] neoprog.C first sector loaded; remaining sectors stream during upload.", 13, 0
 msg_stage2_file_fail:
         DEFB "[FW] ERROR: neoprog.C missing, corrupt or unreadable; code=#", 0
 

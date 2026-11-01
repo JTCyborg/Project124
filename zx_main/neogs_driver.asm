@@ -9,10 +9,10 @@ IPC_BYTE_TIMEOUT EQU #FFFF
 IPC_CMD_TIMEOUT EQU #FFFF
 
 ; -------------------------------------------------------------------------
-; Load the separately stored NeoGS firmware file from TR-DOS.
-; neoprog.C layout: [WORD bootstrap_length][bootstrap bytes][firmware bytes].
-; OUT: Carry clear, complete package at #C000 and exact file length saved.
-; Uses the same verified TR-DOS 5.04T catalogue/sector API as Stage 5.
+; Open the single NeoGS package on TR-DOS and read its first sector to #C000.
+; The same 256-byte buffer is reused for every following sector while the
+; firmware is streamed to NeoGS. The complete file is NEVER staged in host RAM.
+; OUT: Carry clear, first sector at #C000, file length and next-sector cursor set.
 ; -------------------------------------------------------------------------
 load_neogs_firmware_file::
         ; Search the exact 8.3 catalogue name neoprog.C.
@@ -57,15 +57,6 @@ load_neogs_firmware_file::
         cp      3
         jp      c, .bad_length
 .package_minimum_ok:
-        ; #C000 has at most 16 KiB available before address wrap at #0000.
-        ld      a, h
-        cp      #40
-        jr      c, .package_size_ok
-        jp      nz, .bad_length
-        ld      a, l
-        or      a
-        jp      nz, .bad_length
-.package_size_ok:
         ; Verify sector count = ceil(file_length / 256).
         ld      hl, (neo_fw_file_length)
         ld      de, 255
@@ -73,6 +64,8 @@ load_neogs_firmware_file::
         ld      a, (#5CEA)
         cp      h
         jp      nz, .bad_descriptor
+        or      a
+        jp      z, .bad_descriptor
         ld      (neo_fw_load_remaining), a
 
         ld      a, (#5CEB)
@@ -84,49 +77,10 @@ load_neogs_firmware_file::
         ld      hl, #C000
         ld      (neo_fw_load_buffer), hl
 
-.read_sector_loop:
-        ld      a, (neo_fw_load_track)
-        ld      d, a
-        ld      a, (neo_fw_load_sector)
-        ld      e, a
-        ld      hl, (neo_fw_load_buffer)
-        ld      b, 1
-        ld      c, 5
-        xor     a
-        ld      (#5D0F), a
-        ld      (#5D10), a
-        call    #3D13
-        ld      a, (#5D0F)
-        ld      b, a
-        ld      a, (#5D10)
-        or      b
-        jp      nz, .sector_read_failed
-
-        ; Next 256-byte sector goes to the next host buffer page.
-        ld      hl, (neo_fw_load_buffer)
-        ld      de, 256
-        add     hl, de
-        ld      (neo_fw_load_buffer), hl
-
-        ; TR-DOS internal sectors are 0..15; then advance the track.
-        ld      a, (neo_fw_load_sector)
-        inc     a
-        cp      16
-        jr      c, .same_track
-        xor     a
-        ld      (neo_fw_load_sector), a
-        ld      a, (neo_fw_load_track)
-        inc     a
-        ld      (neo_fw_load_track), a
-        jr      .sector_advanced
-.same_track:
-        ld      (neo_fw_load_sector), a
-.sector_advanced:
-        ld      a, (neo_fw_load_remaining)
-        dec     a
-        ld      (neo_fw_load_remaining), a
-        jp      nz, .read_sector_loop
-
+        ; Read only the first sector now. Later sectors are fetched on demand
+        ; by upload_firmware after the preceding buffer bytes have been sent.
+        call    neo_fw_read_next_sector
+        jp      c, .sector_read_failed
         xor     a
         ret
 
@@ -147,8 +101,60 @@ load_neogs_firmware_file::
         ret
 
 ; -------------------------------------------------------------------------
+; Read one TR-DOS sector into the reusable #C000 buffer.
+; Uses neo_fw_load_track/sector/remaining. Advances the cursor only after a
+; successful read. OUT: carry clear; carry set on disk error/exhaustion.
+; Clobbers AF, BC, DE, HL.
+neo_fw_read_next_sector:
+        ld      a, (neo_fw_load_remaining)
+        or      a
+        jr      nz, .sector_available
+        scf
+        ret
+.sector_available:
+        ld      a, (neo_fw_load_track)
+        ld      d, a
+        ld      a, (neo_fw_load_sector)
+        ld      e, a
+        ld      hl, #C000
+        ld      b, 1
+        ld      c, 5
+        xor     a
+        ld      (#5D0F), a
+        ld      (#5D10), a
+        call    #3D13
+        ld      a, (#5D0F)
+        ld      b, a
+        ld      a, (#5D10)
+        or      b
+        jr      nz, .sector_io_error
+
+        ; Advance TR-DOS cursor: sectors 0..15, then next track.
+        ld      a, (neo_fw_load_sector)
+        inc     a
+        cp      16
+        jr      c, .sector_same_track
+        xor     a
+        ld      (neo_fw_load_sector), a
+        ld      a, (neo_fw_load_track)
+        inc     a
+        ld      (neo_fw_load_track), a
+        jr      .sector_cursor_advanced
+.sector_same_track:
+        ld      (neo_fw_load_sector), a
+.sector_cursor_advanced:
+        ld      a, (neo_fw_load_remaining)
+        dec     a
+        ld      (neo_fw_load_remaining), a
+        or      a
+        ret
+.sector_io_error:
+        scf
+        ret
+
+; -------------------------------------------------------------------------
 ; upload_firmware
-; IN : HL = neoprog package in host RAM, DE = total package length.
+; IN : HL = #C000 reusable first-sector buffer, DE = total package length.
 ; OUT: Carry clear only after custom firmware sends NGS_FIRMWARE_READY_ACK.
 ;
 ; Cold/warm reset path:
@@ -160,7 +166,8 @@ load_neogs_firmware_file::
 ;   send custom firmware bytes to RAM $0000, receive #A2 firmware ready
 ; -------------------------------------------------------------------------
 upload_firmware::
-        ; HL points to the package read once from TR-DOS; DE is its total length.
+        ; Only the first sector is resident at #C000. Remaining sectors are
+        ; read into this same buffer as the firmware stream consumes them.
         ; Layout: WORD bootstrap_length, bootstrap bytes, then firmware bytes.
         ld      (neo_fw_package_source), hl
         ld      (neo_fw_package_length), de
@@ -182,8 +189,14 @@ upload_firmware::
         ld      a, h
         or      l
         jp      z, .upload_failed
+        ; Bootstrap must fit entirely in the first 256-byte sector because it
+        ; is needed before the receiver can be started. The package itself may
+        ; be much larger; only this first sector is buffered at a time.
         ld      a, h
-        cp      #40
+        or      a
+        jp      nz, .upload_failed
+        ld      a, l
+        cp      255                   ; maximum length 254 bytes
         jp      nc, .upload_failed
 
         ; Firmware length = package length - header - bootstrap length.
@@ -198,7 +211,8 @@ upload_firmware::
         jp      c, .upload_failed
         ld      (neo_fw_length), hl
 
-        ; Resolve both section pointers inside the same package buffer.
+        ; Bootstrap and the beginning of firmware follow the two-byte header
+        ; in the first sector. The firmware pointer is advanced as bytes go.
         ld      hl, (neo_fw_package_source)
         inc     hl
         inc     hl
@@ -206,6 +220,13 @@ upload_firmware::
         ld      de, (neo_fw_bootstrap_length)
         add     hl, de
         ld      (neo_fw_source), hl
+
+        ; Number of firmware bytes remaining in the first sector:
+        ; 256 - (2-byte header + bootstrap length) = 254 - bootstrap length.
+        ld      hl, 254
+        or      a
+        sbc     hl, de
+        ld      (neo_fw_buffer_remaining), hl
 
         ; Firmware image must fit below $3400, preserving at least 3 KiB for the stack below SP=$3FFF.
         ld      hl, (neo_fw_length)
@@ -352,11 +373,31 @@ upload_firmware::
         ld      a, d
         or      e
         jr      z, .firmware_stream_done
+
+        ; Refill the same 256-byte host buffer only after its current bytes
+        ; have all been consumed. DE (firmware bytes left) survives the read.
+        ld      bc, (neo_fw_buffer_remaining)
+        ld      a, b
+        or      c
+        jr      nz, .firmware_buffer_ready
+        push    de
+        call    neo_fw_read_next_sector
+        pop     de
+        jp      c, .upload_failed
+        ld      hl, 256
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, #C000
+.firmware_buffer_ready:
         ld      a, (hl)
         call    gs_boot_send_data_byte
         jp      c, .upload_failed
         inc     hl
         dec     de
+        ld      (neo_fw_source), hl
+        ld      hl, (neo_fw_buffer_remaining)
+        dec     hl
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, (neo_fw_source)
         jr      .firmware_stream_loop
 
 .firmware_stream_done:
@@ -598,6 +639,7 @@ neogs_wait_data_byte::
 neo_fw_filename:        db "neoprog "
 neo_fw_load_buffer:     dw 0
 neo_fw_load_remaining:  db 0
+neo_fw_buffer_remaining: dw 0
 neo_fw_load_track:      db 0
 neo_fw_load_sector:     db 0
 neo_fw_file_error:      db 0
