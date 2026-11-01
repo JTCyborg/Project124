@@ -227,11 +227,13 @@ x86_real_mov_write_reg:
         ld      a, l
         ld      (x86_alu8_result), a
         ld      a, (x86_mov_reg_temp)
-        jp      x86_alu8_write_reg
+        call    x86_alu8_write_reg
+        jp      x86_real_next
 .write_word:
         ld      hl, (x86_mov_value)
         ld      a, (x86_mov_reg_temp)
-        jp      x86_alu_write_reg16
+        call    x86_alu_write_reg16
+        jp      x86_real_next
 
 ; Read r/m operand. OUT HL=value; carry on memory fault.
 x86_real_mov_read_rm:
@@ -285,11 +287,15 @@ x86_real_mov_write_rm:
         call    x86_mem_calc_phys
         ld      a, (x86_mov_value)
         ld      (x86_mem_value), a
-        jp      x86_mem_write8
+        call    x86_mem_write8
+        ret     c
+        jp      x86_real_next
 .write_memory_word:
         ld      hl, (x86_mov_value)
         ld      (x86_mem_word_value), hl
-        jp      x86_mem_write16
+        call    x86_mem_write16
+        ret     c
+        jp      x86_real_next
 
 x86_mov_opcode:        db 0
 x86_mov_modrm:         db 0
