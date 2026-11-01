@@ -6,7 +6,7 @@
 ; arithmetic and logical subsets, PUSHF, INC/DEC r16, PUSH/POP r16,
 ; MOV r8/r16,imm, MOV r/m8/r/m16 register-memory forms, short Jcc,
 ; LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
-; Memory ModR/M ALU operands and segment-override prefixes remain unsupported.
+; 16-bit arithmetic memory ModR/M operands and segment overrides are supported; byte arithmetic and logical memory ModR/M remain unsupported.
 ; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
@@ -143,8 +143,12 @@ x86_real_mode_test:
         call    x86_real_clear_vector
         jp      c, x86_real_test_fail_6
 
-        ; Run the independent 16-bit arithmetic regression.
+        ; Run the independent 16-bit register arithmetic regression.
         call    x86_real_alu_test
+        ret     c
+
+        ; Stage 3D: 16-bit arithmetic ModR/M memory operands and overrides.
+        call    x86_real_alu_memory_test
         ret     c
 
         ; Run byte arithmetic and 8/16-bit logical regression.
@@ -153,6 +157,11 @@ x86_real_mode_test:
 
         ; Stage 3B: 8086 MOV between register and memory operands.
         call    x86_real_mov_memory_test
+        ret     c
+
+        ; Stage 3C: all eight 8086 EA forms, signed displacements,
+        ; four segment overrides and word access across offset FFFFh.
+        call    x86_real_mov_addressing_test
         ret     c
 
         ld      hl, #1A02
@@ -241,6 +250,10 @@ x86_real_execute:
         ld      hl, X86_REAL_STEP_LIMIT
         ld      (x86_real_steps), hl
 x86_real_next:
+        ; A segment override applies to exactly one following instruction.
+        xor     a
+        ld      (x86_real_seg_override_active), a
+x86_real_dispatch:
         ld      hl, (x86_real_steps)
         ld      a, h
         or      l
@@ -250,6 +263,17 @@ x86_real_next:
 
         call    x86_real_fetch8
         ret     c
+
+        ; 8086 segment-override prefixes. Multiple prefixes are accepted;
+        ; the last segment prefix before the instruction takes effect.
+        cp      #26
+        jp      z, x86_real_prefix_es
+        cp      #2E
+        jp      z, x86_real_prefix_cs
+        cp      #36
+        jp      z, x86_real_prefix_ss
+        cp      #3E
+        jp      z, x86_real_prefix_ds
 
         cp      #90
         jp      z, x86_real_nop
@@ -383,6 +407,24 @@ x86_real_next:
         ld      (x86_exit_status), a
         scf
         ret
+
+; Prefix handlers continue dispatch without consuming a second step.
+x86_real_prefix_es:
+        ld      hl, (x86_reg_es)
+        jp      x86_real_prefix_set
+x86_real_prefix_cs:
+        ld      hl, (x86_reg_cs)
+        jp      x86_real_prefix_set
+x86_real_prefix_ss:
+        ld      hl, (x86_reg_ss)
+        jp      x86_real_prefix_set
+x86_real_prefix_ds:
+        ld      hl, (x86_reg_ds)
+x86_real_prefix_set:
+        ld      (x86_real_seg_override), hl
+        ld      a, 1
+        ld      (x86_real_seg_override_active), a
+        jp      x86_real_dispatch
 
 x86_real_nop:
         jp      x86_real_next
@@ -1017,6 +1059,8 @@ x86_real_reg_ptr: dw 0
 x86_real_result: dw 0
 x86_real_bounds_enable: db 0
 x86_real_task_end: dw 0
+x86_real_seg_override_active: db 0
+x86_real_seg_override: dw 0
 
 x86_guest_main_image:
         db #B8,#00,#00             ; MOV AX,0000

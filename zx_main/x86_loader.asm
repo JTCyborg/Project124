@@ -182,8 +182,10 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_flow_pass
         MACRO_EF_STRING P124_msg_int_guest_stack_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_pass
+        MACRO_EF_STRING P124_msg_int_guest_alu_memory_pass
         MACRO_EF_STRING P124_msg_int_guest_alu8_logic_pass
         MACRO_EF_STRING P124_msg_int_guest_mov_memory_pass
+        MACRO_EF_STRING P124_msg_int_guest_mov_address_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
 
         ; -------------------------------------------------------------
@@ -722,7 +724,9 @@ neogs_int_test_and_get_result:
 neogs_int_guest_test_and_get_result:
         ld      a, CMD_INT_GUEST_TEST
         out     (GSCOM), a
-        call    neogs_wait_command_done_long
+        ; Drain NeoGS trace characters over DBIT while guest regression runs.
+        ; The same host routine mirrors every byte to emulator port #EF.
+        call    neogs_wait_run_done_with_console
         ret     c
         jp      neogs_get_result_frame
 
@@ -782,9 +786,11 @@ P124_msg_int_guest_start: DEFB "[INT] Stage 2B: executing guest INT 20h handler 
 P124_msg_int_guest_mov_flags_pass: DEFB "[CPU] PASS: MOV r16, INC/DEC and OF/SF/ZF/AF/PF; CF preservation verified.", 13, 0
 P124_msg_int_guest_flow_pass: DEFB "[CPU] PASS: LOOP/JCXZ/JMP and taken/not-taken Jcc paths; FLAGS preserved.", 13, 0
 P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP registers, PUSH SP, POP SP and SS:FFFF offset wrap.", 13, 0
-P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP both ModR/M directions; all six flags verified.", 13, 0
+P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP register ModR/M; all six flags verified.", 13, 0
+P124_msg_int_guest_alu_memory_pass: DEFB "[CPU] PASS: 16-bit arithmetic memory ModR/M; DS/SS and ES/CS/SS/DS overrides verified.", 13, 0
 P124_msg_int_guest_alu8_logic_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP; 8/16-bit AND/OR/XOR/TEST; flags verified.", 13, 0
 P124_msg_int_guest_mov_memory_pass: DEFB "[CPU] PASS: MOV r/m8,r8 and r/m16,r16; DS/SS addressing verified.", 13, 0
+P124_msg_int_guest_mov_address_pass: DEFB "[CPU] PASS: MOV all 8 EA forms, signed disp8/disp16, segment overrides and offset wrap.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
