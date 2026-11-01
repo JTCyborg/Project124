@@ -5,7 +5,7 @@
 ;
 ; DMA mapping used here:
 ;   NeoGS physical DMA destination = $110000 (physical page 68)
-;   NeoGS Z80 logical DMA frame address = $4000 (PG1 direct value #88)
+;   NeoGS Z80 logical DMA frame address = $4000 (PG1 direct value #44)
 ;   two-byte length header at $4000; x86 execution begins at $4002.
 ;
 ; Host DMA writes to Spectrum address $0000-$3FFF. For DMA WRITE there is
@@ -391,6 +391,9 @@ EXECUTE_X86_FILE_STAGE::
         ld      a, (P124_X86_RESULT_STATUS)
         ld      l, a
         ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_ipc_diag_opcode
+        ld      hl, (P124_X86_RESULT_AX)
         MACRO_EF_HEX16 hl
         MACRO_EF_CHAR 13
         scf
@@ -876,6 +879,7 @@ P124_msg_ipc_diag_pass:      defb "[IPC TEST] PASS: x86 HLT completed, AX=#", 0
 P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake timed out.", 13, 0
 P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
 P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter status is not zero: #", 0
+P124_msg_ipc_diag_opcode:     defb " opcode/AX=#", 0
 P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
 P124_msg_ipc_edge_start:      defb "[IPC TEST] Running 5 interpreter edge cases through DMA.", 13, 0
 P124_msg_ipc_edge_pass:       defb "[IPC TEST] PASS: 5 interpreter edge cases; DMA/IPC stable.", 13, 0
