@@ -150,6 +150,10 @@ x86_real_mode_test:
         call    x86_real_alu8_logic_test
         ret     c
 
+        ; Stage 3B: 8086 MOV between register and memory operands.
+        call    x86_real_mov_memory_test
+        ret     c
+
         ld      hl, #1A02
         ld      (saved_x86_ax), hl
         xor     a
@@ -316,6 +320,11 @@ x86_real_next:
         jp      z, x86_real_logic16_modrm
         cp      #85
         jp      z, x86_real_logic16_modrm
+        cp      #88
+        jp      c, .not_mov_rm_reg
+        cp      #8C
+        jp      c, x86_real_mov_modrm
+.not_mov_rm_reg:
         cp      #9C
         jp      z, x86_real_pushf
         cp      #40
