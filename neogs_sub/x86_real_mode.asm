@@ -1,9 +1,10 @@
 ; =========================================================================
 ; PROJECT 124 — 8086 real-mode fetch/execute core, Stage 2B
 ;
-; This first executable slice runs guest instructions through CS:IP and the
-; physical-memory backend. Supported: NOP, INC AX, MOV r8/r16,imm, HLT,
-; INT imm8, INT3, IRET. It is intentionally not a general 8086 emulator.
+; This bounded executable slice runs guest instructions through CS:IP and
+; the physical-memory backend. Supported: NOP, INC/DEC r16, PUSH/POP r16,
+; MOV r8/r16,imm, short Jcc, LOOP/JCXZ, JMP rel8, HLT, INT imm8, INT3, IRET.
+; It is intentionally not a general 8086 emulator.
 ;
 ; x86_real_mode_test installs a guest program at 0000:5002 and an interrupt
 ; handler at 0000:5100. The guest loads all eight general registers with
