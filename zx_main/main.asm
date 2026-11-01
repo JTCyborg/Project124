@@ -138,10 +138,25 @@ START_APPLICATION:
 
 .firmware_file_loaded:
         MACRO_EF_STRING msg_stage2_file_ok
+        MACRO_EF_STRING msg_stage2_file_bytes
+        ld      hl, (neo_fw_file_length)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_file_sectors
+        ld      a, (neo_fw_load_remaining)
+        inc     a                       ; first sector was already read
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
         ld      hl, #C000
         ld      de, (neo_fw_file_length)
         call    upload_firmware
         jr      c, .firmware_upload_failed
+        MACRO_EF_STRING msg_stage2_stream_ok
+        ld      hl, (neo_fw_bytes_sent)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
         MACRO_EF_STRING msg_stage2
         jp      .firmware_upload_done
 
@@ -244,7 +259,7 @@ msg_stage2_initial:
 msg_stage2_status:
         DEFB "[FW] LAST GSSTAT #BB = ", 0
 msg_stage2_phase:
-        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY) = ", 0
+        DEFB "[FW] BOOT PHASE (1=#F4,2=#20,3=#14,4=DATA,5=#13,6=BOOT,7=LEN,8=FW,9=READY,10=COUNT) = ", 0
 msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
 msg_stage2_bootstrap:
@@ -253,6 +268,12 @@ msg_stage2_file_start:
         DEFB "[FW] Loading neoprog.C from TR-DOS into #C000...", 13, 0
 msg_stage2_file_ok:
         DEFB "[FW] neoprog.C first sector loaded; remaining sectors stream during upload.", 13, 0
+msg_stage2_file_bytes:
+        DEFB "[FW] PACKAGE LENGTH (BYTES) = #", 0
+msg_stage2_file_sectors:
+        DEFB "[FW] PACKAGE SECTORS = #", 0
+msg_stage2_stream_ok:
+        DEFB "[FW] STREAM ACK; GS DATA BYTES CONFIRMED = #", 0
 msg_stage2_file_fail:
         DEFB "[FW] ERROR: neoprog.C missing, corrupt or unreadable; code=#", 0
 
