@@ -182,6 +182,7 @@ EXECUTE_X86_FILE_STAGE::
         MACRO_EF_STRING P124_msg_int_guest_flow_pass
         MACRO_EF_STRING P124_msg_int_guest_stack_pass
         MACRO_EF_STRING P124_msg_int_guest_alu_pass
+        MACRO_EF_STRING P124_msg_int_guest_alu8_logic_pass
         MACRO_EF_STRING P124_msg_int_guest_iret_pass
 
         ; -------------------------------------------------------------
@@ -781,6 +782,7 @@ P124_msg_int_guest_mov_flags_pass: DEFB "[CPU] PASS: MOV r16, INC/DEC and OF/SF/
 P124_msg_int_guest_flow_pass: DEFB "[CPU] PASS: LOOP/JCXZ/JMP and taken/not-taken Jcc paths; FLAGS preserved.", 13, 0
 P124_msg_int_guest_stack_pass: DEFB "[CPU] PASS: PUSH/POP registers, PUSH SP, POP SP and SS:FFFF offset wrap.", 13, 0
 P124_msg_int_guest_alu_pass: DEFB "[CPU] PASS: 16-bit ADD/ADC/SUB/SBB/CMP both ModR/M directions; all six flags verified.", 13, 0
+P124_msg_int_guest_alu8_logic_pass: DEFB "[CPU] PASS: 8-bit ADD/ADC/SUB/SBB/CMP; 8/16-bit AND/OR/XOR/TEST; flags verified.", 13, 0
 P124_msg_int_guest_iret_pass: DEFB "[INT] PASS: guest INT 20h handler executed; IRET returned to caller.", 13, 0
 P124_msg_int_guest_transport_fail: DEFB "[INT] FAIL: guest execution command/result timeout.", 13, 0
 P124_msg_int_guest_fail: DEFB "[INT] FAIL: guest execution status/detail = ", 0
