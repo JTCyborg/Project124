@@ -497,10 +497,13 @@ x86_string_test_fail_execute:
         ld      hl, #1D11
         jr      x86_string_test_fail
 x86_string_test_fail_1:
-x86_string_test_fail_1a:
-        ; First checkpoint AX, or second checkpoint LODSW AX.
+        ; Second checkpoint: preserve AX if LODSW result itself is wrong.
         ld      hl, (x86_reg_ax)
         jr      x86_string_test_fail_observed
+x86_string_test_fail_1a:
+        ; First checkpoint AX after LODSB: retain a distinct stage code.
+        ld      hl, #1D01
+        jr      x86_string_test_fail
 x86_string_test_fail_1e:
         ; Second checkpoint SI after LODSW/STOSB/STOSW/CMPSB.
         ld      hl, (x86_reg_si)
