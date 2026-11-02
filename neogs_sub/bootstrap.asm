@@ -8,8 +8,9 @@
 ; length and exactly that many bytes through the documented ZX data channel,
 ; stores the custom firmware at RAM address $0000, then jumps to $0000.
 ;
-; It executes from fixed RAM window $4000-$7FFF. Its stack is moved to
-; reserved $F000-$FFFF after the extended RAM windows are configured.
+; It executes from fixed RAM window $4000-$7FFF. During bootstrap receive,
+; its temporary stack is at $FFFE in WIN3/page #02. Before normal firmware
+; operation, the resident entry relocates the stack to WIN1/page #03 at $4FFE.
 ; =========================================================================
 
 neogs_bootstrap_start:
@@ -33,8 +34,8 @@ neogs_bootstrap_start:
         ld      a, #01
         out     (MPAGEX), a
 
-        ; Stack lives in the reserved $F000-$FFFF part of WIN3. This keeps it
-        ; safe while the bootstrap fills the low and upper firmware windows.
+        ; Temporary bootstrap stack: WIN3/page #02. The resident entry moves
+        ; the operational stack to WIN1 after PG1 has been restored to page #03.
         ld      sp, #FFFE
 
         ; Tell Spectrum that the tiny loader is running and waiting for length.
