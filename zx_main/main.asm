@@ -316,15 +316,14 @@ ProgramEnd:
 ; =========================================================================
         PAGE    0                       ; Возвращаем базовый нулевой банк памяти хоста
 
-        ; Синхронный экспорт бинарных блоков в образ TRD
+        ; Export the host and boot files to the normal V1 disk.
         SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
         SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
-        ; One logical neoprog.C package, appended in 16-KiB chunks from
-        ; separate Spectrum RAM banks. Chunk boundaries are sector-aligned.
+
+        ; V1 firmware package (default filename used by the existing host).
         ASSERT NEOGS_PACKAGE_CHUNK_COUNT >= 1
         ASSERT NEOGS_PACKAGE_CHUNK_COUNT <= 4
         ASSERT NEOGS_PACKAGE_TOTAL_SIZE <= #FF00
-
         PAGE    1
         ORG     #C000
 neoprog_chunk0_start:
@@ -341,16 +340,33 @@ neoprog_chunk1_start:
 neoprog_chunk1_end:
         ASSERT neoprog_chunk1_end - neoprog_chunk1_start = NEOGS_PACKAGE_CHUNK1_SIZE
         SAVETRD "disk_A.trd",&"neoprog.C", #C000, NEOGS_PACKAGE_CHUNK1_SIZE
+        ENDIF
 
-        ; Optional staged V2 test package. In the normal disk it has a distinct
-        ; name; a post-build copy renames it to neoprog.C for disk_A_v2.trd.
-        PAGE    0
-        SAVETRD "disk_A.trd", "proj124.C", 24576, ProgramEnd - 24576
-        SAVETRD "disk_A.trd", "boot.B", BASIC_START, BASIC_END - BASIC_START
+        IF NEOGS_PACKAGE_CHUNK_COUNT > 2
+        PAGE    4
+        ORG     #C000
+neoprog_chunk2_start:
+        INCBIN "zx_main/neoprog_part2.bin"
+neoprog_chunk2_end:
+        ASSERT neoprog_chunk2_end - neoprog_chunk2_start = NEOGS_PACKAGE_CHUNK2_SIZE
+        SAVETRD "disk_A.trd",&"neoprog.C", #C000, NEOGS_PACKAGE_CHUNK2_SIZE
+        ENDIF
+
+        IF NEOGS_PACKAGE_CHUNK_COUNT > 3
+        PAGE    6
+        ORG     #C000
+neoprog_chunk3_start:
+        INCBIN "zx_main/neoprog_part3.bin"
+neoprog_chunk3_end:
+        ASSERT neoprog_chunk3_end - neoprog_chunk3_start = NEOGS_PACKAGE_CHUNK3_SIZE
+        SAVETRD "disk_A.trd",&"neoprog.C", #C000, NEOGS_PACKAGE_CHUNK3_SIZE
+        ENDIF
+
+        ; V2 staged package is also stored on the normal disk under a distinct
+        ; filename. The post-build disk copy makes it the active neoprog.C.
         ASSERT NEOGS_V2_PACKAGE_CHUNK_COUNT >= 1
         ASSERT NEOGS_V2_PACKAGE_CHUNK_COUNT <= 4
         ASSERT NEOGS_V2_PACKAGE_TOTAL_SIZE <= #FF00
-
         PAGE    1
         ORG     #C000
 neoprog_v2_chunk0_start:
@@ -389,36 +405,7 @@ neoprog_v2_chunk3_end:
         SAVETRD "disk_A.trd",&"neoprog2.C", #C000, NEOGS_V2_PACKAGE_CHUNK3_SIZE
         ENDIF
 
-
-
         PAGE    0
         SAVETRD "disk_A.trd", "x86task.C", x86_diag_program, x86_diag_program_end - x86_diag_program
-
-        IF NEOGS_PACKAGE_CHUNK_COUNT > 2
-        PAGE    4
-        ORG     #C000
-neoprog_chunk2_start:
-        INCBIN "zx_main/neoprog_part2.bin"
-neoprog_chunk2_end:
-        ASSERT neoprog_chunk2_end - neoprog_chunk2_start = NEOGS_PACKAGE_CHUNK2_SIZE
-        SAVETRD "disk_A.trd",&"neoprog.C", #C000, NEOGS_PACKAGE_CHUNK2_SIZE
-        ENDIF
-
-        IF NEOGS_PACKAGE_CHUNK_COUNT > 3
-        PAGE    6
-        ORG     #C000
-neoprog_chunk3_start:
-        INCBIN "zx_main/neoprog_part3.bin"
-neoprog_chunk3_end:
-        ASSERT neoprog_chunk3_end - neoprog_chunk3_start = NEOGS_PACKAGE_CHUNK3_SIZE
-        SAVETRD "disk_A.trd",&"neoprog.C", #C000, NEOGS_PACKAGE_CHUNK3_SIZE
-        ENDIF
-
-        PAGE    0
-        ; Separate x86 diagnostic task; never reuse the NeoGS package filename.
-        SAVETRD "disk_A.trd", "x86task.C", x86_diag_program, x86_diag_program_end - x86_diag_program
-
-
-        ENDIF
 
 ; =========================================================================
