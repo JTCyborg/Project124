@@ -139,3 +139,12 @@ Until that is verified, no code change may enlarge the accepted firmware length.
 - Added assembler assertions for trampoline/guard/stack/DMA non-overlap.
 - This is the first code implementation step toward 48 KiB, not yet a 48-KiB loader: the v1 flat-image limit remains 16 KiB until v2 segments, RAM-size validation, bootstrap receiver, packer, host driver and CI are implemented together.
 - Build and hardware runtime have not yet been run for this stack relocation. Require CI build plus a full Pentagon/NeoGS log; the stack guard PASS must now prove the new #4800..#487F region.
+
+## 2026-11-02 — STACK-02 CI result
+
+- Source changes and the updated host marker were built by GitHub Actions run [41365093478](https://github.com/JTCyborg/Project124/actions/runs/41365093478), commit `779d47402ccb4533109a118dd71ada8de9f6518e`.
+- Firmware build, package/host/TR-DOS build, verification and artifact upload all completed successfully.
+- Verified artifact sizes: resident v1 `neogs_code.bin` = 16,006 bytes (`#3E86`); bootstrap = 196 bytes (`#00C4`); package = 16,204 bytes (`#3F4C`, 64 sectors); TR-DOS image = 655,360 bytes.
+- The 16 KiB v1 firmware cap is unchanged. The new 48 KiB segmented v2 receiver is not yet present.
+- STACK-02 is **CI PASS / hardware runtime pending**. New host marker: `[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.`
+- Do not start placing live overlay code into WIN2 until the user confirms this new stack layout on real Pentagon/NeoGS hardware.
