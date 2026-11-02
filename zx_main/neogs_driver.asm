@@ -562,7 +562,6 @@ upload_firmware_v2:
         ld      (neo_fw_bytes_sent), a
         ld      (neo_fw_bytes_sent+1), a
         ld      (neo_fw_timeout_phase), a
-        ld      (neo_fw_timeout_phase), a
         in      a, (GSSTAT)
         ld      (neo_fw_initial_status), a
         ld      (neo_fw_last_status), a
