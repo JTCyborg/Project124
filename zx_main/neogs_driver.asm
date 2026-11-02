@@ -652,6 +652,12 @@ upload_firmware_v2:
         ld      (neo_fw_last_rx_byte), a
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, upload_firmware_v2_failed
+        ; The #A1 response proves the pending #40 was consumed.
+        ld      hl, (neo_fw_bytes_sent)
+        inc     hl
+        ld      (neo_fw_bytes_sent), hl
+        xor     a
+        ld      (neo_fw_tx_wait_state), a
         jr      .v2_stage0_ready
 
 .v2_stage0_jump_tx_done:
@@ -697,6 +703,13 @@ upload_firmware_v2:
         ld      (neo_fw_last_rx_byte), a
         cp      #A4
         jp      nz, upload_firmware_v2_failed
+
+        ; #A4 proves the pending final stage-1 byte was consumed.
+        ld      hl, (neo_fw_bytes_sent)
+        inc     hl
+        ld      (neo_fw_bytes_sent), hl
+        xor     a
+        ld      (neo_fw_tx_wait_state), a
 
         ; The stream helper advances its source counters only after a normal
         ; DBIT-clear observation. #A4 proves the final stage-1 byte was read,
