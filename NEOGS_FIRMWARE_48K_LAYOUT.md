@@ -156,3 +156,5 @@ Until that is verified, no code change may enlarge the accepted firmware length.
 - STACK-02 is now **hardware runtime PASS**.
 - The host ROM probe in `zx_main/neogs_driver.asm` now enforces the minimum RAM capacity required for physical pages 0..69: `#118000` bytes (70 * 16 KiB). This prevents starting a future v2 overlay image on a board whose reported RAM cannot address both pages 68 and 69. Source commit: `39e8632966db0ce3bff1591c2b550f052ac386d9`.
 - The new RAM-size gate has not yet been built or run on hardware. Existing v1 firmware remains limited to 16 KiB; no 48 KiB segment transfer is claimed.
+
+- CI for the RAM-capacity gate: [run 41365546148](https://github.com/JTCyborg/Project124/actions/runs/41365546148), commit `39e8632966db0ce3bff1591c2b550f052ac386d9` — **success** (firmware/package/host/TR-DOS build, verification, artifact upload). This is build validation only; the new ROM-size rejection threshold still needs device runtime validation.
