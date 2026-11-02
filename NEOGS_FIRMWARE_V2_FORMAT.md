@@ -9,11 +9,18 @@ The existing v1 package remains unchanged:
 
 `WORD bootstrap_length` (little-endian), bootstrap bytes, flat resident firmware bytes.
 
-V2 uses the same outer two-byte bootstrap-length prefix and the same bootstrap binary. The bootstrap is expected to negotiate the image format after it starts. V1 must remain the default until the v2 receiver and host stream are implemented and tested together. A larger payload length alone MUST NOT be treated as v2.
+V2 has a distinct two-stage outer package and does not reuse the v1 bootstrap:
+- WORD stage0_length (LE), 1..254
+- stage0 bytes (GS #14/#13 loads at #4000)
+- WORD stage1_length (LE), 1..#0800
+- stage1 bytes (copied by stage0 to #4800 and entered there)
+- v2 payload beginning with P124
+
+Stage-0 sends #A1, receives stage1_length and stage1 bytes, sends #A3, then jumps to #4800. Stage-1 sends #A4, receives the complete v2 payload length and sends #A3 before parsing the P124 payload. V1 remains the default until this outer package, host streamer and receiver are integrated and tested together. A larger payload length alone MUST NOT be treated as v2.
 
 ## Payload layout
 
-After the bootstrap bytes, the firmware payload is:
+After the stage-0 and stage-1 images, the v2 firmware payload is:
 
 | Offset | Size | Field | Required value |
 |---:|---:|---|---|
@@ -69,7 +76,7 @@ Payload records follow the descriptor table in the same order. There is no impli
 - The host continues to stream from the reusable 256-byte #C000 buffer; it must not stage the entire package in Spectrum RAM.
 - V2 host sends the payload length followed by the complete v2 payload unchanged. The receiver owns parsing and segment placement.
 - Host tracks exact bytes sent and compares against the outer package length minus prefix/bootstrap.
-- The first-sector bootstrap constraint remains: two-byte outer length + bootstrap must fit in sector 0.
+- The first-sector constraint applies only to `2 + stage0_length <= 256`; stage-1 and payload may continue across sectors. The host still uses the reusable 256-byte #C000 buffer.
 
 ## Validation matrix
 
@@ -84,8 +91,8 @@ Payload records follow the descriptor table in the same order. There is no impli
 - [x] Host ROM probe now enforces >= #118000 RAM; CI build passed.
 - [x] V2 image builder/packer and positive/negative fixture tests (packer CI PASS, run 41365886610).
 - [x] Independent v2 package verifier and malformed-header fixture suite (CI PASS, run 41405849949).
-- [ ] Host V2 length/accounting path (must be paired with stage-1 bootstrap protocol; v1 path remains active).
-- [ ] Two-stage bootstrap integration: compact stage-0 must load this WIN1 stage-1 module; host must stream its exact payload length before the V2 image.
+- [ ] Host V2 parser/streamer for `[stage0][stage1][P124 payload]`, exact byte accounting and multi-sector refill (v1 path remains active).
+- [x] Isolated stage-0 bootstrap (150 bytes <=254) and stage-1 receiver (530 bytes <=2048), both assembler/CI PASS in run 41406259697; host/package integration pending.
 - [ ] Resident bank-switch/call/data helpers.
 - [ ] Linker split of resident code/data from banked overlays.
 - [ ] 48-KiB firmware boundary packaging fixture (packer CI PASS for exact 48-KiB payload; receiver/build integration pending).
