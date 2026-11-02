@@ -6,7 +6,8 @@ param(
     [string]$Overlay68Path,
     [string]$Overlay69Path,
 
-    [string]$BootstrapPath,
+    [string]$Stage0Path,
+    [string]$Stage1Path,
     [string]$OutputPath
 )
 
