@@ -120,4 +120,4 @@ v20_tx_byte: db 0
 v2_stage0_end:
         ASSERT v2_stage0_start = #4000
         ASSERT v2_stage0_end <= #4100
-        ASSERT v2_stage0_end - v2_stage0_start <= 254
+        ASSERT v2_stage0_end - v2_stage0_start <= 248
