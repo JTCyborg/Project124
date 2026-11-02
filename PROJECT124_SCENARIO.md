@@ -705,3 +705,11 @@ CI run и артефакт остаются теми же: build/verification PA
 - `tools/verify_neogs_v2.ps1` теперь независимо проверяет оба этапа и затем P124 payload. Тесты создают stage0=150 и stage1=530 bytes; проверяют полный пакет, resident-only и двухсегментный вариант, а также повреждения обоих размеров и malformed payload.
 - CI run `41406462212` для commit `cada4a03d8577bb3df832c0a2fca29b9c385a91e` и run `41406487414` для commit `a9ac491438442be1e0c8996bbc51a6d1bc2d63eb` — **success**. Полный тестовый пакет 48 KiB: 49 862 bytes, 195 TR-DOS sectors; stage0=150, stage1=530, payload=49 178 bytes (26-byte header + 49 152 firmware). Verifier подтверждает страницы 0/68/69 и точную длину; malformed fixtures все REJECT PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406487414.
 - Важное ограничение: это CI для упаковки/валидации и отдельной сборки stage0/stage1. Host пока не распознаёт новый staged prefix и продолжает загружать только v1 `neoprog.C`; v2 TR-DOS пакет не запускать. Следующий этап — host parser/streamer, который по v2 marker/format отправит stage1 length+bytes, дождётся #A4, затем отправит P124 payload length+bytes из переиспользуемого #C000 буфера.
+
+
+### 2026-11-02 — V2 package discriminator V2S1 and CI verification
+
+- Добавлен явный ASCII marker `V2S1` между stage-0 и stage-1 в v2 package. Он нужен host parser для однозначного отличия staged v2 от legacy v1 flat package; marker остаётся в файле и не передаётся stage-0.
+- Обновлены packer, independent verifier и fixtures: новый формат `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`. Проверяется marker, stage0/1 limits и malformed package cases.
+- CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: 48-KiB synthetic package `49 866 bytes` / 195 sectors; stage0 150 bytes; stage1 530 bytes; P124 payload 49 178 bytes; all positive and negative fixtures PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
+- Host-side detection and transfer are still pending; active host remains v1-only. `neoprog_v2.bin` is not yet bootable and must not replace `neoprog.C`.
