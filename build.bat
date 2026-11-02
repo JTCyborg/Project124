@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo.
 echo ================================================================
-echo PROJECT 124 BUILD
+echo PROJECT 124 BUILD - V1 + V2
 echo ================================================================
 echo.
 
@@ -13,101 +13,55 @@ if not exist "tools\sjasmplus.exe" (
     goto BUILD_FAILED
 )
 
-rem Download the package script if this working copy does not contain it.
-if not exist "%~dp0pack_neogs.ps1" (
-    echo [SETUP] pack_neogs.ps1 is missing. Downloading from Project124...
+if not exist "build_project124.ps1" (
+    echo ERROR: build_project124.ps1 not found in project root.
+    goto BUILD_FAILED
+)
+
+rem The PowerShell orchestrator generates all V1/V2 binaries and include
+rem files before assembling zx_main/main.asm.
+if not exist "pack_neogs.ps1" (
+    echo [SETUP] pack_neogs.ps1 is missing. Downloading...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1' -OutFile '%~dp0pack_neogs.ps1'; exit 0 } catch { Write-Error $_; exit 1 }"
     if errorlevel 1 goto BUILD_PACKER_FAILED
 )
-if not exist "%~dp0pack_neogs.ps1" goto BUILD_PACKER_FAILED
 
-echo [1/2] Building NeoGS firmware and bootstrap...
-"tools\sjasmplus.exe" --dirbol -I "neogs_sub" -I "shared" --lst="neogs_list.txt" --sym="neogs_map.txt" "neogs_sub/build_firmware.asm"
-if errorlevel 1 goto BUILD_NEOGS_FAILED
+if not exist "pack_neogs.ps1" goto BUILD_PACKER_FAILED
 
-echo [PACK] Creating neoprog.bin...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0pack_neogs.ps1"
-if errorlevel 1 goto BUILD_NEOGS_FAILED
-
-if not exist "neogs_code.bin" (
-    echo ERROR: neogs_code.bin was not created.
-    goto BUILD_NEOGS_FAILED
-)
-if not exist "neogs_bootstrap.bin" (
-    echo ERROR: neogs_bootstrap.bin was not created.
-    goto BUILD_NEOGS_FAILED
-)
-if not exist "neoprog.bin" (
-    echo ERROR: neoprog.bin was not created.
-    goto BUILD_NEOGS_FAILED
-)
-if not exist "zx_main\neoprog.bin" (
-    echo ERROR: zx_main\neoprog.bin was not created.
-    goto BUILD_NEOGS_FAILED
-)
-if not exist "zx_main\neoprog_chunks.inc" (
-    echo ERROR: generated NeoGS chunk include was not created.
-    goto BUILD_NEOGS_FAILED
-)
-if not exist "zx_main\neoprog_part0.bin" (
-    echo ERROR: first NeoGS package chunk was not created.
-    goto BUILD_NEOGS_FAILED
-)
-
-echo [2/2] Building Spectrum host and TR-DOS image...
-"tools\sjasmplus.exe" --dirbol -I "zx_main" -I "shared" -I "neogs_sub" --lst="zx_list.txt" --sym="zx_map.txt" "zx_main/main.asm"
-if errorlevel 1 goto BUILD_ZX_FAILED
+echo [BUILD] Running complete Project124 build pipeline...
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_project124.ps1"
+if errorlevel 1 goto BUILD_FAILED
 
 if not exist "disk_A.trd" (
     echo ERROR: disk_A.trd was not created.
-    goto BUILD_ZX_FAILED
+    goto BUILD_FAILED
+)
+if not exist "disk_A_v2.trd" (
+    echo ERROR: disk_A_v2.trd was not created.
+    goto BUILD_FAILED
+)
+if not exist "zx_main\neoprog_v2_chunks.inc" (
+    echo ERROR: V2 generated include is missing after successful build.
+    goto BUILD_FAILED
 )
 
-echo [VERIFY] Checking complete neoprog.C contents in TR-DOS...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools\verify_neoprog_trd.ps1" -ImagePath "disk_A.trd" -PackagePath "neoprog.bin"
-if errorlevel 1 goto BUILD_VERIFY_FAILED
-
 echo.
 echo ================================================================
-echo BUILD COMPLETED
+echo BUILD COMPLETED - V1 and V2
 echo ================================================================
 echo.
-dir "neogs_code.bin" "neogs_bootstrap.bin" "neoprog.bin" "disk_A.trd"
+dir "neogs_code.bin" "neoprog.bin" "neoprog_v2.bin" "disk_A.trd" "disk_A_v2.trd"
 pause
 exit /b 0
 
 :BUILD_PACKER_FAILED
 echo.
 echo ERROR: pack_neogs.ps1 is missing and could not be downloaded.
-echo Download it from:
-echo https://raw.githubusercontent.com/JTCyborg/Project124/main/pack_neogs.ps1
-echo Save it in the Project124 root folder.
-pause
-exit /b 1
-
-:BUILD_NEOGS_FAILED
-echo.
-echo ERROR: NeoGS build or package creation failed.
-echo Check neogs_list.txt and the messages above.
-pause
-exit /b 1
-
-:BUILD_ZX_FAILED
-echo.
-echo ERROR: Spectrum build failed.
-echo Check zx_list.txt and the messages above.
-pause
-exit /b 1
-
-:BUILD_VERIFY_FAILED
-echo.
-echo ERROR: neoprog.C verification failed.
-echo Check the TR-DOS package chunk export and tools\verify_neoprog_trd.ps1.
 pause
 exit /b 1
 
 :BUILD_FAILED
 echo.
-echo ERROR: tools\sjasmplus.exe is missing.
+echo ERROR: Project124 build failed. See messages above.
 pause
 exit /b 1
