@@ -687,3 +687,12 @@ CI run и артефакт остаются теми же: build/verification PA
 - Commits: stage-1 source `4b4ff947eeec3f13e1a5d34915e2ffddadd255df`; duplicate-page validation `8af557a1cd4d6b06a43dde8159f8c79fbbce36ad`; build target `2f748daa06e3bec16e6cd2909b717c562d8bdacf`; build integration `64be49269e8ab3bc9910ee6fda54fd6aafcff0e5`; workflow artifact `6e32487cd95a8d0f64d4608649f49bb6b52dd0c7`.
 - Сборка stage-1: GitHub Actions run `41406111733` для commit `88c9f8a807485319fb3e658ba7e048806a04bad6` — **success**. SjASMPlus собрал stage-1 без ошибок; размер `530 bytes` при бюджете `2048 bytes` (#4800..#4FFF). В том же run v1 firmware/package/host/TR-DOS build, verification, v2 package tests и artifact upload завершились success. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406111733. Предыдущая сборка выявила дальний JR (-164), заменённый на JP; исправленный commit собран успешно.
 - Ограничение текущего шага: stage-1 пока изолированный бинарный модуль. Его загрузка stage-0 и передача ему v2 payload ещё не подключены к host. Нужны отдельный stage-0 v2, расширение host parser/streamer и тест согласованного пакета. Не использовать `neoprog_v2.bin` для запуска.
+
+
+### 2026-11-02 — V2 implementation step 4: isolated stage-0 bootstrap
+
+- Добавлен `neogs_sub/bootstrap_v2_stage0.asm`: компактный первый этап для GS #14/#13. Он включает RAM-over-ROM/EXPAG, устанавливает MPAG page1 и MPAGEX page2, задаёт временный SP=#FFFE, выдаёт #A1, принимает WORD длины stage-1 (1..#0800), выдаёт #A3, копирует stage-1 в #4800 и передаёт ему управление.
+- Добавлен build target `neogs_sub/build_bootstrap_v2_stage0.asm`; `build_project124.ps1` отдельно собирает stage-0 и проверяет <=254 байта, затем собирает stage-1 и проверяет <=2048 байт. Оба бинарника добавлены в CI artifacts. Активный v1 bootstrap не изменялся.
+- Commits: stage-0 source `962d0ea01899b759a3c7a8580d9fe44616e4e43b`; build target `76d6132888067d8c5fd8a75cc0fa623506a7918d`; build integration `acdc440a331aa11dff3121e49a2f5b3d06c2d268`; workflow artifact `ead559cbe92c518c96801e529f5b007e8364fc73`.
+- Stage-0 protocol is now defined as #A1 -> host sends stage1_length + bytes -> #A3 -> jump #4800. Stage-1 then sends #A4 -> host sends exact v2 payload length -> #A3 -> v2 payload. Host streamer and v2 package outer layout must be updated to this exact sequence before it can run.
+- Build/CI result for this stage-0 addition is pending. No v2 package or hardware test is authorized yet.
