@@ -194,6 +194,37 @@ START_APPLICATION:
         ld      hl, (neo_fw_bootstrap_address)
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_tx_byte
+        ld      a, (neo_fw_last_tx_byte)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_tx_state
+        ld      a, (neo_fw_tx_wait_state)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_stream_left
+        ld      hl, (neo_fw_stream_remaining)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_stream_src
+        ld      hl, (neo_fw_source)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_buffer_left
+        ld      hl, (neo_fw_buffer_remaining)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_trdos_cursor
+        ld      a, (neo_fw_load_track)
+        ld      l, a
+        ld      a, (neo_fw_load_sector)
+        ld      h, a
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
         di
 .firmware_upload_halt:
         halt
@@ -264,6 +295,18 @@ msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
 msg_stage2_bootstrap:
         DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
+msg_stage2_tx_byte:
+        DEFB "[FW] LAST TX BYTE = ", 0
+msg_stage2_tx_state:
+        DEFB "[FW] TX WAIT STATE (0=ACK,1=FREE SLOT,2=CONSUME ACK) = ", 0
+msg_stage2_stream_left:
+        DEFB "[FW] V2 STREAM BYTES LEFT = ", 0
+msg_stage2_stream_src:
+        DEFB "[FW] V2 STREAM SOURCE = ", 0
+msg_stage2_buffer_left:
+        DEFB "[FW] TRDOS BUFFER BYTES LEFT = ", 0
+msg_stage2_trdos_cursor:
+        DEFB "[FW] NEXT TRDOS TRACK:SECTOR = ", 0
 msg_stage2_file_start:
         DEFB "[FW] Loading neoprog.C from TR-DOS into #C000...", 13, 0
 msg_stage2_file_ok:
