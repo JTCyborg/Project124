@@ -454,16 +454,23 @@ gs_boot_probe_rom:
         call    gs_boot_receive_data_byte
         ret     c
         ld      (neo_fw_rom_ram_high), a
-        ; #20 reports total RAM as a 24-bit byte count. The 48-KiB
-        ; memory map needs at least four 16-KiB pages (64 KiB total):
-        ; fixed pages 0 and 3 plus selectable pages 1 and 2.
+        ; #20 reports total RAM as a 24-bit byte count. The banked
+        ; firmware layout reserves physical pages 68 and 69, while the x86
+        ; backend owns pages 4..67. Therefore RAM must contain at least
+        ; 70 unique 16-KiB pages: 70 * #4000 = #118000 bytes.
+        ; 2-MiB boards report >= #200000 and pass; smaller boards are rejected.
         ld      a, (neo_fw_rom_ram_high)
-        or      a
+        cp      #11
+        jr      c, .rom_probe_too_small
         jr      nz, .rom_probe_ok
-        scf
-        ret
+        ld      a, (neo_fw_rom_ram_mid)
+        cp      #80
+        jr      c, .rom_probe_too_small
 .rom_probe_ok:
         or      a
+        ret
+.rom_probe_too_small:
+        scf
         ret
 
 ; Long command wait for #F4 cold restart and ROM self-test.
