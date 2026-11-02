@@ -306,7 +306,6 @@ ProgramEnd:
         ELSE
         INCLUDE "neoprog_chunks.inc"
         ENDIF
-        INCLUDE "neoprog_v2_chunks.inc"
 
 ; Return to bank 0 and place the BASIC boot program at #E000.
         PAGE    0
