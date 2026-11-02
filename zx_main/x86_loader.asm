@@ -928,7 +928,7 @@ P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
 P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
 P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
 P124_msg_x86_result_ready:  defb "[STAGE 5] [RESULT] Status / AX = ", 0
-P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN2 guard intact; stack stayed above #B880.", 13, 0
+P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.", 13, 0
 P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0
 P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
 P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0
