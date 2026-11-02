@@ -118,6 +118,21 @@ v2s_descriptor_overlay:
         jr      nz, v2s_descriptor_page_ok
         ; First overlay cannot duplicate page 69 because it is current.
 v2s_descriptor_page_ok:
+        ; Reject a page already used by an earlier descriptor.
+        ld      a, (v2s_index)
+        or      a
+        jr      z, v2s_descriptor_unique
+        ld      b, a
+        ld      hl, v2s_pages
+v2s_duplicate_scan:
+        ld      a, (hl)
+        ld      c, a
+        ld      a, (v2s_current_page)
+        cp      c
+        jp      z, v2s_error
+        inc     hl
+        djnz    v2s_duplicate_scan
+v2s_descriptor_unique:
         ld      a, (v2s_current_page)
         ld      (ix+0), a
         inc     ix
@@ -170,9 +185,8 @@ v2s_descriptor_flags_ok:
         ld      a, (v2s_index)
         inc     a
         ld      (v2s_index), a
-        ld      a, (v2s_segment_count)
-        cp      a
         ; Compare index with segment_count.
+        ld      a, (v2s_segment_count)
         ld      b, a
         ld      a, (v2s_index)
         cp      b
