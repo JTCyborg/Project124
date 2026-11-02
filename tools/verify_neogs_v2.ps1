@@ -12,8 +12,11 @@ if ($Package.Length -gt 0xFF00) { Fail "outer package exceeds #FF00 bytes ($($Pa
 if ($Package.Length -lt 2) { Fail 'missing outer stage-0-length prefix' }
 $Stage0Length = Read-U16 $Package 0
 if ($Stage0Length -lt 1 -or $Stage0Length -gt 254) { Fail "stage-0 length outside 1..254: $Stage0Length" }
-$Stage1LengthOffset = 2 + $Stage0Length
-if (($Stage1LengthOffset + 2) -gt $Package.Length) { Fail 'truncated before stage-1 length' }
+$Stage1MarkerOffset = 2 + $Stage0Length
+if (($Stage1MarkerOffset + 6) -gt $Package.Length) { Fail 'truncated before stage-1 marker/length' }
+$Stage1Marker = [Text.Encoding]::ASCII.GetString($Package, $Stage1MarkerOffset, 4)
+if ($Stage1Marker -cne 'V2S1') { Fail "missing V2S1 stage marker: '$Stage1Marker'" }
+$Stage1LengthOffset = $Stage1MarkerOffset + 4
 $Stage1Length = Read-U16 $Package $Stage1LengthOffset
 if ($Stage1Length -lt 1 -or $Stage1Length -gt 0x0800) { Fail "stage-1 length outside 1..#0800: $Stage1Length" }
 $PayloadStart = $Stage1LengthOffset + 2 + $Stage1Length
