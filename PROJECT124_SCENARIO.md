@@ -653,3 +653,15 @@ CI run и артефакт остаются теми же: build/verification PA
 - CI для RAM-size guard: run `41365546148`, commit `39e8632966db0ce3bff1591c2b550f052ac386d9` — **success**. Шаги firmware/package/host/TR-DOS build, verify и artifact upload завершились success. Это build PASS; runtime новой проверки размера RAM ещё не выполнен.
 
 - Зафиксирован отдельный v2 wire-format contract: `NEOGS_FIRMWARE_V2_FORMAT.md` (commit `4f904fd414c749c4a66385f95d163415a529957e`). Формат: magic `P124`, version 2, до трёх шестибайтовых segment descriptors, resident page 0 и overlay pages 68/69, payload <= #C000; descriptor validation, reserved map, host streaming и receiver алгоритм описаны точно. Документ не означает, что v2 уже поддерживается runtime.
+
+
+### 2026-11-02 — V2 implementation step 1: isolated segmented packer and fixtures
+
+- Создан `tools/pack_neogs_v2.ps1`. Это отдельный генератор v2, не заменяющий `pack_neogs.ps1` и не меняющий текущий `neoprog.bin`/`zx_main/neoprog.bin`.
+- Входы: обязательный resident image для physical page 0; необязательные overlay images для pages 68 и 69; bootstrap по умолчанию берётся из корневого `neogs_bootstrap.bin`. Выход по умолчанию — отдельный `neoprog_v2.bin`.
+- Генератор формирует внешний v1-compatible prefix `WORD bootstrap_length + bootstrap`, после которого пишет payload v2: `P124`, version 2, segment count, LE total length, descriptors по 6 байт и данные без padding.
+- Встроены проверки: bootstrap 1..254; resident/overlay 1..#4000; только страницы 0/68/69; resident первым, offset 0; total <=#C000; внешний пакет <=#FF00. Overlay descriptor flags=0, resident flags=1.
+- Создан `tools/test_neogs_v2.ps1`: синтетические positive fixtures resident-only, resident+page68 и полный 48-KiB образ; проверяются точные поля заголовка/дескрипторов, порядок данных, размеры и TR-DOS предел. Negative fixtures проверяют пустой resident, сегмент >16 KiB и отсутствующий bootstrap.
+- В `.github/workflows/project124-build.yml` добавлен отдельный шаг запуска v2 fixtures после обычной v1 сборки/проверок. V1 packer, bootstrap, host driver и основной артефакт не переключаются на v2.
+- Commits: packer `8d1bffa6688d5e8e0ee0503847b34b21e36ad086`; fixtures `3a248c201eaf5051be3bf4c7d83449625be1c8ed`; CI workflow `46d5122d11e17a08ee843a6064c2cf20392d2eda`.
+- Статус на момент записи: файлы добавлены; CI ещё не завершён. Нельзя считать packer/fixtures проверенными до успешного GitHub Actions run. V2 bootstrap receiver, host transfer, banked runtime и аппаратная загрузка 48 KiB всё ещё не реализованы.
