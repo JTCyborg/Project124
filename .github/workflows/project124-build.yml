@@ -57,5 +57,6 @@ jobs:
           path: |
             neogs_code.bin
             neogs_bootstrap.bin
+            neogs_v2_stage1.bin
             neoprog.bin
             disk_A.trd
