@@ -107,7 +107,7 @@ try {
     Invoke-MutatedPackageFailure -Source $Package -Offset ($D1 + 3) -Value 0x4001 -Name 'segment length > 16 KiB' -Word
     Invoke-MutatedPackageFailure -Source $Package -Offset ($D1 + 5) -Value 2 -Name 'unknown flags'
     Invoke-MutatedPackageFailure -Source $Package -Offset ($PayloadStart + 6) -Value 0xBFFF -Name 'descriptor sum mismatch' -Word
-    Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 255 -Name 'stage-0 length > 254' -Word
+    Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 249 -Name 'stage-0 length > 248' -Word
     Invoke-MutatedPackageFailure -Source $Package -Offset $Stage1LengthOffset -Value 0x0801 -Name 'stage-1 length > 2048' -Word
     Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 0 -Name 'truncated payload' -Truncate
     Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 0 -Name 'trailing byte' -Append
