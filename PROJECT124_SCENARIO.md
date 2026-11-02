@@ -764,3 +764,9 @@ CI run и артефакт остаются теми же: build/verification PA
 - В `zx_main/main.asm` к существующему failure report добавлен вывод последнего TX byte, TX wait state, оставшегося размера текущего V2 stream, адреса источника в host buffer, оставшегося размера TR-DOS buffer и следующего TR-DOS track/sector cursor. Это позволит отличить timeout ожидания свободного слота от timeout подтверждения конкретного байта и увидеть, на каком source offset остановилась передача.
 - Коммиты: `9490814ab2e855fcf0639733b2cd53201e797a2a` (host TX state) и `c30b7d4779e398678d60d1d75911370301fe77e2` (diagnostic output), оба в `main`.
 - Статус: изменения внесены; assembler/CI ещё не проверены. V2 runtime остаётся FAIL/UNRESOLVED до нового лога. Никаких выводов о неисправности NeoGS RAM, TR-DOS refill или конкретной инструкции stage1 пока не делается.
+
+
+### 2026-11-02 — V2 diagnostics build verification
+
+- Corrected the displayed TR-DOS cursor order so the report prints track in the high byte and sector in the low byte. Commit: `b0c918f4ef6986ae9deb78dcb62e959b4f02ab30`.
+- GitHub Actions run `41413759052` for that commit completed the firmware/package/host/TR-DOS build, package verifiers, and V2 packer fixtures successfully; artifact upload was still running at the time this note was prepared. This is assembler/CI PASS only, not a V2 runtime PASS.
