@@ -53,23 +53,28 @@ function Invoke-MutatedPackageFailure {
 }
 
 try {
-    $Bootstrap = Join-Path $Temp 'bootstrap.bin'
+    $Stage0 = Join-Path $Temp 'stage0.bin'
+    $Stage1 = Join-Path $Temp 'stage1.bin'
     $Resident = Join-Path $Temp 'resident.bin'
     $Overlay68 = Join-Path $Temp 'overlay68.bin'
     $Overlay69 = Join-Path $Temp 'overlay69.bin'
     $Output = Join-Path $Temp 'package.bin'
-    Write-PatternFile $Bootstrap 196 0xA0
+    Write-PatternFile $Stage0 150 0xA0
+    Write-PatternFile $Stage1 530 0xB0
     Write-PatternFile $Resident 0x4000 0x10
     Write-PatternFile $Overlay68 0x4000 0x40
     Write-PatternFile $Overlay69 0x4000 0x70
 
     # Full 48-KiB image: resident page 0 + overlay pages 68 and 69.
-    & $Packer -BootstrapPath $Bootstrap -ResidentPath $Resident -Overlay68Path $Overlay68 -Overlay69Path $Overlay69 -OutputPath $Output
+    & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -Overlay68Path $Overlay68 -Overlay69Path $Overlay69 -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
-    $BootstrapLength = Read-U16 $Package 0
-    $PayloadStart = 2 + $BootstrapLength
-    Assert-True ($BootstrapLength -eq 196) 'outer bootstrap length'
-    Assert-True ($Package.Length -eq (2 + 196 + 26 + 0xC000)) '48-KiB package exact size'
+    $Stage0Length = Read-U16 $Package 0
+    $Stage1LengthOffset = 2 + $Stage0Length
+    $Stage1Length = Read-U16 $Package $Stage1LengthOffset
+    $PayloadStart = $Stage1LengthOffset + 2 + $Stage1Length
+    Assert-True ($Stage0Length -eq 150) 'outer stage-0 length'
+    Assert-True ($Stage1Length -eq 530) 'outer stage-1 length'
+    Assert-True ($Package.Length -eq (2 + 150 + 2 + 530 + 26 + 0xC000)) '48-KiB package exact size'
     Assert-True ($Package[$PayloadStart] -eq 0x50 -and $Package[$PayloadStart + 1] -eq 0x31 -and $Package[$PayloadStart + 2] -eq 0x32 -and $Package[$PayloadStart + 3] -eq 0x34) 'P124 magic'
     Assert-True ($Package[$PayloadStart + 4] -eq 2) 'format version'
     Assert-True ($Package[$PayloadStart + 5] -eq 3) 'segment count'
@@ -100,7 +105,8 @@ try {
     Invoke-MutatedPackageFailure -Source $Package -Offset ($D1 + 3) -Value 0x4001 -Name 'segment length > 16 KiB' -Word
     Invoke-MutatedPackageFailure -Source $Package -Offset ($D1 + 5) -Value 2 -Name 'unknown flags'
     Invoke-MutatedPackageFailure -Source $Package -Offset ($PayloadStart + 6) -Value 0xBFFF -Name 'descriptor sum mismatch' -Word
-    Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 255 -Name 'bootstrap length > 254' -Word
+    Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 255 -Name 'stage-0 length > 254' -Word
+    Invoke-MutatedPackageFailure -Source $Package -Offset $Stage1LengthOffset -Value 0x0801 -Name 'stage-1 length > 2048' -Word
     Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 0 -Name 'truncated payload' -Truncate
     Invoke-MutatedPackageFailure -Source $Package -Offset 0 -Value 0 -Name 'trailing byte' -Append
     Write-Host '[V2-TEST] MALFORMED PACKAGE REJECTION PASS'
@@ -131,7 +137,7 @@ try {
     Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $Empty -OutputPath $Output } 'empty resident'
     Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $TooLarge -OutputPath $Output } 'resident > 16 KiB'
     Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $Resident -Overlay68Path $TooLarge -OutputPath $Output } 'overlay > 16 KiB'
-    Invoke-ExpectedFailure { & $Packer -BootstrapPath (Join-Path $Temp 'missing.bin') -ResidentPath $Resident -OutputPath $Output } 'missing bootstrap'
+    Invoke-ExpectedFailure { & $Packer -Stage0Path (Join-Path $Temp 'missing.bin') -Stage1Path $Stage1 -ResidentPath $Resident -OutputPath $Output } 'missing bootstrap'
 
     Write-Host '[V2-TEST] ALL TESTS PASS'
 }
