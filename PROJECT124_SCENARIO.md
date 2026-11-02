@@ -746,3 +746,12 @@ CI run и артефакт остаются теми же: build/verification PA
 
 - Run `41408492071` for commit `a88f9c9edc2647ca3b8925f22c169c934884483d` — **success**: build, V1 TR-DOS verification, V2 package verification, V2 TR-DOS byte-for-byte verification, V2 positive/negative fixtures and artifact upload all passed. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408492071.
 - The CI artifact `project124-build` contains `disk_A.trd` (V1 default) and `disk_A_v2.trd` (resident-only V2 staged loader test). The V2 image has the same host app, but its `neoprog.C` directory entry points to the V2 package; old V1 package is retained as `neoprog1.C`.
+
+
+### 2026-11-02 — исправлен запуск полной сборки через build.bat
+
+- По фактическому логу пользователя установлено, что ошибка возникает именно при запуске build.bat, а не при ручном запуске SjASMPlus.
+- Причина: build.bat содержал устаревшую последовательность V1. Он собирал firmware и вызывал только pack_neogs.ps1, после чего сразу запускал zx_main/main.asm. Между тем main.asm уже включает neoprog_v2_chunks.inc и использует NEOGS_V2_PACKAGE_*, которые создаёт только tools/pack_neogs_v2.ps1.
+- Полный оркестратор build_project124.ps1 уже выполняет нужный порядок: firmware → V2 stage0 → V2 stage1 → V1 package → V2 package/chunks/include → host assembler → V2 test disk.
+- Исправлен build.bat: теперь он проверяет наличие SjASMPlus и build_project124.ps1, при необходимости загружает отсутствующий корневой pack_neogs.ps1, затем запускает единый build_project124.ps1 и проверяет создание disk_A.trd, disk_A_v2.trd и zx_main/neoprog_v2_chunks.inc.
+- Это устраняет пропуск V2-генератора в batch-сценарии. Изменение отправлено в main; локальная Windows-сборка и runtime пользователя ещё не подтверждены. Не считать build/runtime PASS до получения фактического результата.
