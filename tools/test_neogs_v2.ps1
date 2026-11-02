@@ -69,12 +69,14 @@ try {
     & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -Overlay68Path $Overlay68 -Overlay69Path $Overlay69 -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
     $Stage0Length = Read-U16 $Package 0
-    $Stage1LengthOffset = 2 + $Stage0Length
+    $Stage1MarkerOffset = 2 + $Stage0Length
+    Assert-True ([Text.Encoding]::ASCII.GetString($Package, $Stage1MarkerOffset, 4) -ceq 'V2S1') 'stage-1 marker'
+    $Stage1LengthOffset = $Stage1MarkerOffset + 4
     $Stage1Length = Read-U16 $Package $Stage1LengthOffset
     $PayloadStart = $Stage1LengthOffset + 2 + $Stage1Length
     Assert-True ($Stage0Length -eq 150) 'outer stage-0 length'
     Assert-True ($Stage1Length -eq 530) 'outer stage-1 length'
-    Assert-True ($Package.Length -eq (2 + 150 + 2 + 530 + 26 + 0xC000)) '48-KiB package exact size'
+    Assert-True ($Package.Length -eq (2 + 150 + 4 + 2 + 530 + 26 + 0xC000)) '48-KiB package exact size'
     Assert-True ($Package[$PayloadStart] -eq 0x50 -and $Package[$PayloadStart + 1] -eq 0x31 -and $Package[$PayloadStart + 2] -eq 0x32 -and $Package[$PayloadStart + 3] -eq 0x34) 'P124 magic'
     Assert-True ($Package[$PayloadStart + 4] -eq 2) 'format version'
     Assert-True ($Package[$PayloadStart + 5] -eq 3) 'segment count'
@@ -117,6 +119,8 @@ try {
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
     $Stage0Length = Read-U16 $Package 0
     $Stage1LengthOffset = 2 + $Stage0Length
+    $Stage1MarkerOffset = 2 + $Stage0Length
+    $Stage1LengthOffset = $Stage1MarkerOffset + 4
     $PayloadStart = $Stage1LengthOffset + 2 + (Read-U16 $Package $Stage1LengthOffset)
     Assert-True ($Package[$PayloadStart + 5] -eq 1) 'resident-only segment count'
     Assert-True ((Read-U16 $Package ($PayloadStart + 6)) -eq 0x4000) 'resident-only length'
