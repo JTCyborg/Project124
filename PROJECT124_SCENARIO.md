@@ -770,3 +770,13 @@ CI run и артефакт остаются теми же: build/verification PA
 
 - Corrected the displayed TR-DOS cursor order so the report prints track in the high byte and sector in the low byte. Commit: `b0c918f4ef6986ae9deb78dcb62e959b4f02ab30`.
 - GitHub Actions run `41413759052` for that commit completed the firmware/package/host/TR-DOS build, package verifiers, and V2 packer fixtures successfully; artifact upload was still running at the time this note was prepared. This is assembler/CI PASS only, not a V2 runtime PASS.
+
+
+### 2026-11-02 — V2 immediate reverse-ACK race at bootstrap handoff
+
+- New runtime log: `BOOT PHASE=#000F`, `DATA BYTES SENT=#0099`, `LAST TX BYTE=#40`, `TX WAIT STATE=2`, `LAST GSSTAT=#00FE`. `#0099` = 153 acknowledged host-to-NeoGS data bytes: 3 bytes remaining in the `#14` receive-block header plus the 150-byte stage0 image. The pending byte is the high address byte `#40` for the `#13` jump to `$4000`; stage1 and P124 payload have not started.
+- Stage0's first instruction path sends `#A1` immediately after it starts. The same DBIT flag indicates both a pending host-to-NeoGS byte and a pending NeoGS-to-host byte. Therefore a fast `#A1` response can keep DBIT set while the host's generic TX routine is still waiting for the flag to clear. This is a strong protocol-race explanation for the observed timeout; the log alone does not yet prove that the RX latch contains `#A1`.
+- V2 host transfer now has a narrow recovery path at the two immediate-response boundaries: after a timeout sending the `#13` high address byte, it checks the pending reverse-direction byte for `#A1`; after a timeout sending the final stage1 byte, it checks for `#A4`. These expected replies can only be emitted after the corresponding outgoing byte (and, for `#A4`, the complete stage1 image) has been consumed. On a matching reply, the host accounts for the recovered TX byte, clears its diagnostic wait state, and continues. A nonmatching byte or absent DBIT still fails closed.
+- Stage1 recovery also advances the shared host source pointer, TR-DOS buffer remainder and stage1 stream remainder exactly once, because the ordinary stream loop advances those only after observing DBIT clear.
+- Commits: `6c6f35fae1797e3b7db677cf372a6aea640ad9b5` (early ACK handling), `549fb34cd204d3cd67ff2b75987ac1e0c22bb9aa` (stage1 source accounting), `1142301fdd5bfe343bebbc3ee711c43e288a5bed` (acknowledged byte counter and wait-state accounting). All on `main`.
+- Status: source changes are committed; CI/build pending; runtime remains unverified. This is a targeted protocol-race correction, not a runtime PASS claim.
