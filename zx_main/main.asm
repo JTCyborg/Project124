@@ -220,9 +220,9 @@ START_APPLICATION:
         MACRO_EF_CHAR 13
         MACRO_EF_STRING msg_stage2_trdos_cursor
         ld      a, (neo_fw_load_track)
-        ld      l, a
-        ld      a, (neo_fw_load_sector)
         ld      h, a
+        ld      a, (neo_fw_load_sector)
+        ld      l, a
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
         di
