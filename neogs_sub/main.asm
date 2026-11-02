@@ -3,13 +3,13 @@
 ; Based on NeoGS Programmer's Guide v0.1.A and ports.inc v0.3.
 ;
 ; MEMORY MAP / BOOT:
-; The stock GS105a ROM loads a tiny module at $5B00. That module enables
-; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Firmware occupies fixed WIN0 ($0000-$3FFF). The Z80 stack is moved to fixed WIN2,
-; physical page #01, at $BFFE. x86_mem_map_addr remaps only WIN3 via MPAGEX;
-; MPAG/WIN2 remains fixed throughout guest-memory access. A 128-byte canary
-; at $B800-$B87F detects stack overflow; the usable stack area is ~1.87 KiB.
-; WIN1 remains on physical page #03; the DMA frame at logical $5000 maps to $00D000.
+; WIN0 ($0000-$3FFF), PG0/page #00: fixed resident Z80 firmware.
+; WIN1 ($4000-$7FFF), PG1/page #03: ROM-return trampoline at $4000,
+;   Z80 stack at $4FFE with guard $4800-$487F, DMA frame at $5000-$7FFF.
+; WIN2 ($8000-$BFFF), PG2 via MPAG: reserved for banked firmware overlays.
+; WIN3 ($C000-$FFFF), PG3 via MPAGEX: x86 physical-memory window (pages 4..67).
+; The resident stack is deliberately outside WIN2 and WIN3 so both windows
+; can be bank-switched independently without moving the active Z80 stack.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -19,8 +19,8 @@
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
 X86_DMA_HEADER_ADDR        EQU $5000
 X86_RAM_RUN_ADDR           EQU $5002
-Z80_STACK_TOP              EQU $BFFE
-Z80_STACK_GUARD_BASE       EQU $B800
+Z80_STACK_TOP              EQU $4FFE
+Z80_STACK_GUARD_BASE       EQU $4800
 Z80_STACK_GUARD_SIZE       EQU $0080
 Z80_STACK_FILL_LENGTH      EQU Z80_STACK_TOP - Z80_STACK_GUARD_BASE - 1
 DMA_WAIT_LIMIT   EQU #FFFF
@@ -37,9 +37,13 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, Z80_STACK_TOP     ; fixed WIN2/page #01; only WIN3 is remapped by MPAGEX
-        ; Fill the reserved stack area with a canary before the first CALL/PUSH.
-        ; The lower 128 bytes remain a guard; normal stack use grows down from BFFE.
+        ; PG1 must be the physical page #03 before SP is moved into WIN1.
+        ; At this point the bootstrap stack is still in WIN3 at #FFFE.
+        ld      a, #03
+        call    neo_set_pg1
+        ld      sp, Z80_STACK_TOP     ; WIN1/page #03; DMA begins at #5000
+        ; Fill the stack region with a canary before the first normal CALL/PUSH.
+        ; The lower 128 bytes remain a guard; normal stack use grows down from #4FFE.
         ld      hl, Z80_STACK_GUARD_BASE
         ld      (hl), #A5
         ld      de, Z80_STACK_GUARD_BASE + 1
@@ -412,8 +416,8 @@ command_run_x86_real:
         out     (CLRCBIT), a
         jp      main_loop
 
-; Check the lower 128-byte canary in fixed WIN2/page #01.
-; Carry set means the Z80 stack crossed the #B880 safety boundary.
+; Check the lower 128-byte canary in WIN1/page #03.
+; Carry set means the Z80 stack crossed the #4880 safety boundary.
 z80_stack_guard_check:
         ld      hl, Z80_STACK_GUARD_BASE
         ld      b, Z80_STACK_GUARD_SIZE
@@ -602,7 +606,11 @@ rom_return_trampoline_end:
         INCLUDE "x86_strings.asm"
         INCLUDE "bios/bios_video.asm"
 
-; The return trampoline occupies $4000; the DMA frame starts at $5000.
+; WIN1 layout: trampoline $4000-$400F, guard $4800-$487F, stack grows
+; down from $4FFE, and the DMA frame starts at $5000.
+        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= Z80_STACK_GUARD_BASE
+        ASSERT Z80_STACK_GUARD_BASE + Z80_STACK_GUARD_SIZE <= Z80_STACK_TOP
+        ASSERT Z80_STACK_TOP < X86_DMA_HEADER_ADDR
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_DMA_HEADER_ADDR = #5000
         ASSERT neogs_dma_handler_end <= #5000
