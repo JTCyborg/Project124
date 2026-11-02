@@ -649,3 +649,5 @@ CI run и артефакт остаются теми же: build/verification PA
 - Изменение кода: commit `39e8632966db0ce3bff1591c2b550f052ac386d9`; CI build для него ещё не проверен.
 - Это safety gate для будущего v2, не реализация передачи overlay и не 48-KiB runtime. Текущий v1 package остаётся <=16 KiB resident.
 - Следующий этап: проверить сборку; затем зафиксировать v2 header/segment descriptor и написать тесты packer на адреса назначения, размер каждого сегмента, total firmware <= #C000 и overlap с reserved pages. Только после этого менять bootstrap/host transfer в согласованном порядке.
+
+- CI для RAM-size guard: run `41365546148`, commit `39e8632966db0ce3bff1591c2b550f052ac386d9` — **success**. Шаги firmware/package/host/TR-DOS build, verify и artifact upload завершились success. Это build PASS; runtime новой проверки размера RAM ещё не выполнен.
