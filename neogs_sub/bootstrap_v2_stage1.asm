@@ -190,7 +190,7 @@ v2s_descriptor_flags_ok:
         ld      b, a
         ld      a, (v2s_index)
         cp      b
-        jr      nz, v2s_descriptor_loop
+        jp      nz, v2s_descriptor_loop
 
         ; Require descriptor sum == declared total.
         ld      hl, (v2s_sum)
