@@ -13,8 +13,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 
-if ([string]::IsNullOrWhiteSpace($BootstrapPath)) {
-    $BootstrapPath = Join-Path $Root 'neogs_bootstrap.bin'
+if ([string]::IsNullOrWhiteSpace($Stage0Path)) {
+    $Stage0Path = Join-Path $Root 'neogs_v2_bootstrap.bin'
+}
+if ([string]::IsNullOrWhiteSpace($Stage1Path)) {
+    $Stage1Path = Join-Path $Root 'neogs_v2_stage1.bin'
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path $Root 'neoprog_v2.bin'
@@ -32,7 +35,8 @@ function Read-RequiredBinary {
     return ,$Bytes
 }
 
-[byte[]]$Bootstrap = Read-RequiredBinary -Path $BootstrapPath -Role 'Bootstrap' -Maximum 254
+[byte[]]$Stage0 = Read-RequiredBinary -Path $Stage0Path -Role 'V2 stage-0 bootstrap' -Maximum 254
+[byte[]]$Stage1 = Read-RequiredBinary -Path $Stage1Path -Role 'V2 stage-1 receiver' -Maximum 0x0800
 [byte[]]$Resident = Read-RequiredBinary -Path $ResidentPath -Role 'Resident page 0' -Maximum 0x4000
 
 $Segments = New-Object 'System.Collections.Generic.List[object]'
@@ -95,15 +99,18 @@ foreach ($Segment in $Segments) {
     $DataOffset += $Segment.Bytes.Length
 }
 
-$PackageLength = 2 + $Bootstrap.Length + $Payload.Length
+$PackageLength = 2 + $Stage0.Length + 2 + $Stage1.Length + $Payload.Length
 if ($PackageLength -gt 0xFF00) {
     throw "V2 package exceeds TR-DOS 255-sector limit: $PackageLength bytes"
 }
 
 $Package = New-Object byte[] $PackageLength
-[Array]::Copy([BitConverter]::GetBytes([UInt16]$Bootstrap.Length), 0, $Package, 0, 2)
-[Array]::Copy($Bootstrap, 0, $Package, 2, $Bootstrap.Length)
-[Array]::Copy($Payload, 0, $Package, 2 + $Bootstrap.Length, $Payload.Length)
+[Array]::Copy([BitConverter]::GetBytes([UInt16]$Stage0.Length), 0, $Package, 0, 2)
+[Array]::Copy($Stage0, 0, $Package, 2, $Stage0.Length)
+$Stage1LengthOffset = 2 + $Stage0.Length
+[Array]::Copy([BitConverter]::GetBytes([UInt16]$Stage1.Length), 0, $Package, $Stage1LengthOffset, 2)
+[Array]::Copy($Stage1, 0, $Package, $Stage1LengthOffset + 2, $Stage1.Length)
+[Array]::Copy($Payload, 0, $Package, $Stage1LengthOffset + 2 + $Stage1.Length, $Payload.Length)
 
 $OutputDirectory = Split-Path -Parent $OutputPath
 if (-not [string]::IsNullOrWhiteSpace($OutputDirectory) -and -not (Test-Path -LiteralPath $OutputDirectory)) {
@@ -111,5 +118,5 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory) -and -not (Test-Path -Li
 }
 [IO.File]::WriteAllBytes($OutputPath, $Package)
 
-Write-Host ("[V2-PACK] {0}: {1} bytes; segments={2}; firmware={3} bytes; header={4}; TR-DOS sectors={5}" -f
-    $OutputPath, $Package.Length, $Segments.Count, $TotalLength, $HeaderLength, [Math]::Ceiling($Package.Length / 256.0))
+Write-Host ("[V2-PACK] {0}: {1} bytes; stage0={2}; stage1={3}; segments={4}; firmware={5}; header={6}; TR-DOS sectors={7}" -f
+    $OutputPath, $Package.Length, $Stage0.Length, $Stage1.Length, $Segments.Count, $TotalLength, $HeaderLength, [Math]::Ceiling($Package.Length / 256.0))
