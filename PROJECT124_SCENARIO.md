@@ -46,7 +46,7 @@
 | CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
 | CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** |
 | CPU-I/O-02 | Сборка и runtime-регрессия гостевых IN/OUT | **Runtime PASS 2026-11-02 (подтверждён по общему успешному результату self-test)** | Пять сценариев выполнены внутри `x86_real_mode_test`; явный host marker добавлен отдельным коммитом после запуска |
-| STACK-01 | Z80 stack relocation + guard | **Runtime PASS 2026-11-02** | WIN2 guard #B800..#B87F intact; stack stayed above #B880 after Stage 5. Stack moved to fixed WIN2/page #01 (SP=#BFFE); 128-byte canary #B800..#B87F; check after Stage 5 |
+| STACK-01 | Z80 stack relocation + guard (previous layout) | Historical Runtime PASS 2026-11-02 | Previous WIN2/page #01 layout, SP=#BFFE, guard #B800..#B87F; superseded by STACK-02 |\n| STACK-02 | Z80 stack relocation to WIN1 + guard | **CI build PASS; hardware runtime pending** | New SP=#4FFE in PG1/page #03; 128-byte guard #4800..#487F; DMA still starts #5000; marker updated to WIN1/#4880 |
 | CPU-STR-01 | MOVS/CMPS/STOS/LODS/SCAS byte/word, no REP | **Runtime PASS 2026-11-02** | All ten forms; source segment override; DF +/-; compare FLAGS checkpoints passed. Ten opcode forms, source segment override, DF +/- and CMPS/SCAS FLAGS regression | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
 
 ## Обязательные критерии завершения потоковой загрузки
@@ -624,3 +624,15 @@ CI run и артефакт остаются теми же: build/verification PA
 - Важно: это только подготовительный шаг к banked firmware; лимит v1 16 КиБ не увеличен. v2 сегментный формат, packer, host streaming и bootstrap receiver ещё впереди.
 - Статус STACK-01 (#BFFE / guard #B800) остаётся историческим runtime PASS. Для новой конфигурации создана отдельная задача STACK-02: **исходники обновлены; build и hardware runtime ожидают**. Нельзя переносить старый PASS на новый адрес.
 - Build/CI и runtime для этого коммита ещё не подтверждены. Следующий шаг: запустить CI и проверить assembler ASSERT/firmware size; затем спроектировать v2 segment header и RAM-size guard.
+
+
+### 2026-11-02 — STACK-02 build verification
+
+- Обновлён host PASS marker в `zx_main/x86_loader.asm`: теперь он сообщает `[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.` Старый текст про WIN2/#B880 больше не должен появляться в новом логе.
+- GitHub Actions run `41365093478` для commit `779d47402ccb4533109a118dd71ada8de9f6518e`: build firmware/package/host/TR-DOS — success; firmware/package verification — success; artifact upload — success. Job cleanup ещё мог оставаться в состоянии in_progress, но все функциональные build/verify/upload steps завершены success.
+- Скачан и проверен артефакт `project124-build` (artifact ID `13106199874`):
+  - `neogs_code.bin`: 16 006 bytes = `#3E86`, запас до v1 лимита `#4000` — 378 bytes;
+  - `neogs_bootstrap.bin`: 196 bytes = `#00C4`;
+  - `neoprog.bin`: 16 204 bytes = `#3F4C`, 64 TR-DOS sectors;
+  - `disk_A.trd`: 655 360 bytes.
+- Это CI/build PASS, не hardware runtime PASS. Требуется запуск на Pentagon/NeoGS и полный лог, где новый marker подтверждает guard #4800..#487F после Stage 5. До этого не начинать перенос кода в banked WIN2.
