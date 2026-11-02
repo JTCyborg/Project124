@@ -36,7 +36,7 @@ function Read-RequiredBinary {
     return ,$Bytes
 }
 
-[byte[]]$Stage0 = Read-RequiredBinary -Path $Stage0Path -Role 'V2 stage-0 bootstrap' -Maximum 254
+[byte[]]$Stage0 = Read-RequiredBinary -Path $Stage0Path -Role 'V2 stage-0 bootstrap' -Maximum 248
 [byte[]]$Stage1 = Read-RequiredBinary -Path $Stage1Path -Role 'V2 stage-1 receiver' -Maximum 0x0800
 [byte[]]$Resident = Read-RequiredBinary -Path $ResidentPath -Role 'Resident page 0' -Maximum 0x4000
 
