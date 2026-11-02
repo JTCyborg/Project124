@@ -10,7 +10,7 @@ The existing v1 package remains unchanged:
 `WORD bootstrap_length` (little-endian), bootstrap bytes, flat resident firmware bytes.
 
 V2 has a distinct two-stage outer package and does not reuse the v1 bootstrap:
-- WORD stage0_length (LE), 1..254
+- WORD stage0_length (LE), 1..248
 - stage0 bytes (GS #14/#13 loads at #4000)
 - ASCII marker `V2S1` (lets the host select v2 unambiguously; never sent to stage-0)
 - WORD stage1_length (LE), 1..#0800
@@ -77,7 +77,7 @@ Payload records follow the descriptor table in the same order. There is no impli
 - The host continues to stream from the reusable 256-byte #C000 buffer; it must not stage the entire package in Spectrum RAM.
 - V2 host sends the payload length followed by the complete v2 payload unchanged. The receiver owns parsing and segment placement.
 - Host tracks exact bytes sent and compares against the outer package length minus prefix/bootstrap.
-- The first-sector constraint applies only to `2 + stage0_length <= 256`; stage-1 and payload may continue across sectors. The host still uses the reusable 256-byte #C000 buffer.
+- The first-sector constraint is `2 + stage0_length + 4-byte V2S1 marker + 2-byte stage1_length <= 256`, therefore stage0_length is limited to 248; stage-1 and payload may continue across sectors. The host still uses the reusable 256-byte #C000 buffer.
 
 ## Validation matrix
 
