@@ -232,3 +232,14 @@ DMA-регистры Spectrum-side и внутреннее отображени�
 - **Ограничение вывода:** это устранение потенциального ложного локального timeout, а не доказанное исправление причины отсутствия DBIT-clear на `#12`. Следующий runtime log должен показать, прошёл ли обмен длиной и дошёл ли host до `#A3`.
 - **Коммит кода:** `0a04c107ca63c24beba84c037aa5a07a6eb7c13c`.
 - **Проверка:** GitHub commit создан в `main`; assembler/CI и runtime для этого изменения ещё не подтверждены. Не считать V2 runtime PASS.
+
+
+### 2026-11-02 — runtime log: Stage0 does not acknowledge first length byte
+
+- **Получен runtime log пользователя:** package length `#4123`, sectors `#0042`; `DATA BYTES SENT=#007A`; `BOOT PHASE=#0010`; `LAST RX BYTE=#00A1`; `LAST TX BYTE=#0002`; `TX WAIT STATE=#0002`; `LAST GSSTAT=#00FE`; buffer remaining `#0083`, next TR-DOS sector `08:07`.
+- **Интерпретация:** Stage0 отправил READY `#A1`; host затем выставил DBIT с байтом `#02` и ожидает его чтения. DBIT остаётся установленным, поэтому host не засчитывает этот байт. По host code `gs_boot_send_data_byte` счётчик `DATA BYTES SENT` увеличивается только после DBIT-clear. Таким образом, `#02` не подтверждён как принятый.
+- **Сопоставлено с моделью Unreal Speccy:** ZX-side `GSDAT=#B3` write устанавливает DBIT; GS-side `ZXSTAT=#04` читает состояние; GS-side `ZXDATRD=#02` возвращает `gsdata_out` и очищает DBIT. Определения находятся в `NeoGS/ports.inc`, реализация — в `NeoGS/gsz80.cpp`.
+- **Важное ограничение:** лог доказывает отсутствие DBIT-clear после host write, но не показывает PC/состояние GS Z80. Пока нельзя заключить, завис ли Stage0 в receive loop, остановился ли CPU scheduler или исполнение ушло по иному пути. Удаление локальных Stage0 timeout не исправило runtime.
+- **Изменения кода:** не вносились. Не добавлять новые задержки/переходы без диагностики причины.
+- **Проверка:** GitHub Actions для коммитов `0a04c107ca63c24beba84c037aa5a07a6eb7c13c` и `2dce9a30020f16aae448035606d5b3363ece9649` завершились `success` (build/assembler CI PASS). Runtime V2 остаётся FAIL по приведённому логу.
+- **Следующий шаг:** проверить GS Z80 execution/synchronization на участке после чтения host READY `#A1`: установить, доходит ли PC до цикла `v20_receive_byte` и выполняется ли `in (#02)` после установки DBIT. До получения такого доказательства не менять handshake.
