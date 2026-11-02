@@ -780,3 +780,5 @@ CI run и артефакт остаются теми же: build/verification PA
 - Stage1 recovery also advances the shared host source pointer, TR-DOS buffer remainder and stage1 stream remainder exactly once, because the ordinary stream loop advances those only after observing DBIT clear.
 - Commits: `6c6f35fae1797e3b7db677cf372a6aea640ad9b5` (early ACK handling), `549fb34cd204d3cd67ff2b75987ac1e0c22bb9aa` (stage1 source accounting), `1142301fdd5bfe343bebbc3ee711c43e288a5bed` (acknowledged byte counter and wait-state accounting). All on `main`.
 - Status: source changes are committed; CI/build pending; runtime remains unverified. This is a targeted protocol-race correction, not a runtime PASS claim.
+
+- CI verification completed successfully for code commit `1142301fdd5bfe343bebbc3ee711c43e288a5bed`: GitHub Actions run `41414464939` completed with success, including assembler build, firmware/package/TR-DOS verification, V2 packer tests and artifact upload. This is CI/build PASS; hardware/emulator runtime remains pending.
