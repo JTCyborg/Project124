@@ -8,8 +8,9 @@
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; Firmware occupies fixed WIN0 and may use the full 16 KiB window.
-; The Z80 stack is in fixed WIN2/page #01 at $BFFE; WIN3 is remapped by MPAGEX.
+; Resident firmware occupies WIN0. WIN2 is being reserved for banked
+; firmware overlays; the resident Z80 stack is in WIN1/page #03 at $4FFE.
+; WIN3 remains the independently switched x86 physical-memory window.
         ASSERT neogs_firmware_end <= $4000
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
