@@ -91,7 +91,7 @@ Payload records follow the descriptor table in the same order. There is no impli
 - [x] Host ROM probe now enforces >= #118000 RAM; CI build passed.
 - [x] V2 image builder/packer and positive/negative fixture tests (packer CI PASS, run 41365886610).
 - [x] Independent v2 package verifier and malformed-header fixture suite (CI PASS, run 41405849949).
-- [ ] Host V2 parser/streamer for `[stage0][stage1][P124 payload]`, exact byte accounting and multi-sector refill (v1 path remains active).
+- [ ] Host V2 parser/streamer for `[WORD stage0][stage0][WORD stage1][stage1][P124 payload]`, exact byte accounting and multi-sector refill (v1 path remains active).
 - [x] Isolated stage-0 bootstrap (150 bytes <=254) and stage-1 receiver (530 bytes <=2048), both assembler/CI PASS in run 41406259697; host/package integration pending.
 - [ ] Resident bank-switch/call/data helpers.
 - [ ] Linker split of resident code/data from banked overlays.
