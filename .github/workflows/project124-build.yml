@@ -45,6 +45,10 @@ jobs:
 
           ./tools/verify_neoprog_trd.ps1 -ImagePath 'disk_A.trd' -PackagePath 'neoprog.bin'
 
+      - name: Test isolated NeoGS v2 segmented packer (v1 remains default)
+        shell: pwsh
+        run: ./tools/test_neogs_v2.ps1
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
