@@ -85,7 +85,7 @@ Payload records follow the descriptor table in the same order. There is no impli
 - [x] V2 image builder/packer and positive/negative fixture tests (packer CI PASS, run 41365886610).
 - [ ] Independent v2 package verifier and malformed-header fixture suite (CI pending, runs 41405827968 / 41405849949).
 - [ ] Host V2 length/accounting path (must be paired with stage-1 bootstrap protocol; v1 path remains active).
-- [ ] Two-stage bootstrap: compact stage-0 plus WIN1 stage-1 V2 header/descriptor receiver and bank writes.
+- [ ] Two-stage bootstrap integration: compact stage-0 must load this WIN1 stage-1 module; host must stream its exact payload length before the V2 image.
 - [ ] Resident bank-switch/call/data helpers.
 - [ ] Linker split of resident code/data from banked overlays.
 - [ ] 48-KiB firmware boundary packaging fixture (packer CI PASS for exact 48-KiB payload; receiver/build integration pending).
