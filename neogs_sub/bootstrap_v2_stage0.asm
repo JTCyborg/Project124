@@ -73,47 +73,32 @@ v20_halt:
         halt
         jr      v20_halt
 
+; The host has the authoritative timeout. Do not run an independent
+; instruction-count timeout here: the two CPUs advance in different clock
+; domains, and a host-side turnaround can otherwise expire this receiver.
 v20_receive_byte:
-        ld      bc, #FFFF
 .v20_rx_wait:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
-        jr      nz, .v20_rx_ready
-        dec     bc
-        ld      a, b
-        or      c
-        jr      nz, .v20_rx_wait
-        jp      v20_error
-.v20_rx_ready:
+        jr      z, .v20_rx_wait
         in      a, (ZXDATRD)
         ret
 
+; Wait for the host to consume our byte, then return. The host owns timeout
+; and recovery; keeping this side waiting avoids a false local timeout while
+; the host/emulator synchronizes the shared DBIT flag.
 v20_send_byte:
         ld      (v20_tx_byte), a
-        ld      bc, #FFFF
 .v20_tx_wait_free:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
-        jr      z, .v20_tx_slot
-        dec     bc
-        ld      a, b
-        or      c
         jr      nz, .v20_tx_wait_free
-        jp      v20_halt
-.v20_tx_slot:
         ld      a, (v20_tx_byte)
         out     (ZXDATWR), a
-        ld      bc, #FFFF
 .v20_tx_wait_read:
         in      a, (ZXSTAT)
         bit     B_DBIT, a
-        jr      z, .v20_tx_done
-        dec     bc
-        ld      a, b
-        or      c
         jr      nz, .v20_tx_wait_read
-        jp      v20_halt
-.v20_tx_done:
         ret
 
 v20_tx_byte: db 0
