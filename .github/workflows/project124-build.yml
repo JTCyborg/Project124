@@ -44,6 +44,12 @@ jobs:
           Write-Host ("[CI] Package: {0} bytes; sectors: {1}." -f $package.Length, [Math]::Ceiling($package.Length / 256.0))
 
           ./tools/verify_neoprog_trd.ps1 -ImagePath 'disk_A.trd' -PackagePath 'neoprog.bin'
+          ./tools/verify_neogs_v2.ps1 -PackagePath 'neoprog_v2.bin'
+          ./tools/verify_neoprog_trd.ps1 -ImagePath 'disk_A_v2.trd' -PackagePath 'neoprog_v2.bin'
+
+      - name: Test isolated NeoGS v2 segmented packer (v1 remains default)
+        shell: pwsh
+        run: ./tools/test_neogs_v2.ps1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -53,5 +59,9 @@ jobs:
           path: |
             neogs_code.bin
             neogs_bootstrap.bin
+            neogs_v2_bootstrap.bin
+            neogs_v2_stage1.bin
             neoprog.bin
+            neoprog_v2.bin
             disk_A.trd
+            disk_A_v2.trd

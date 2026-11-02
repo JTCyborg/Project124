@@ -22,11 +22,20 @@ try {
     $OldOutputs = @(
         'neogs_code.bin',
         'neogs_bootstrap.bin',
+        'neogs_v2_bootstrap.bin',
+        'neogs_v2_stage1.bin',
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
         'neoprog.bin',
+        'neoprog_v2.bin',
+        'zx_main/neoprog_v2_chunks.inc',
+        'zx_main/neoprog_v2_part0.bin',
+        'zx_main/neoprog_v2_part1.bin',
+        'zx_main/neoprog_v2_part2.bin',
+        'zx_main/neoprog_v2_part3.bin',
         'zx_main/neoprog.bin',
-        'disk_A.trd'
+        'disk_A.trd',
+        'disk_A_v2.trd'
     )
     foreach ($File in $OldOutputs) {
         if (Test-Path $File) { Remove-Item $File -Force }
@@ -38,9 +47,37 @@ try {
         throw "NeoGS firmware build failed (sjasmplus exit code $LASTEXITCODE)."
     }
 
+    # Assemble the isolated V2 first-stage bootstrap; it must fit the first sector.
+    & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_bootstrap_v2_stage0.asm'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS V2 stage-0 build failed (sjasmplus exit code $LASTEXITCODE)."
+    }
+    $V2Stage0 = Get-Item 'neogs_v2_bootstrap.bin'
+    if ($V2Stage0.Length -le 0 -or $V2Stage0.Length -gt 248) {
+        throw "V2 stage-0 exceeds stage-0 + marker + stage-1 length must fit sector 0: $($V2Stage0.Length) bytes."
+    }
+    Write-Host ("[V2-STAGE0] Bootstrap: {0} bytes / 248-byte first-sector budget." -f $V2Stage0.Length)
+
+    # Assemble the isolated V2 second-stage receiver and enforce its WIN1 budget.
+    & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_bootstrap_v2_stage1.asm'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS V2 stage-1 build failed (sjasmplus exit code $LASTEXITCODE)."
+    }
+    $V2Stage1 = Get-Item 'neogs_v2_stage1.bin'
+    if ($V2Stage1.Length -le 0 -or $V2Stage1.Length -gt 0x0800) {
+        throw "V2 stage-1 exceeds temporary WIN1 area #4800..#4FFF: $($V2Stage1.Length) bytes."
+    }
+    Write-Host ("[V2-STAGE1] Isolated receiver: {0} bytes / 2048-byte budget." -f $V2Stage1.Length)
+
     & (Join-Path $Root 'pack_neogs.ps1')
     if ($LASTEXITCODE -ne 0) {
         throw "NeoGS package creation failed."
+    }
+
+    # Build a separate resident-only V2 package and its 16-KiB host chunks.
+    & (Join-Path $Root 'tools/pack_neogs_v2.ps1') -ResidentPath 'neogs_code.bin' -OutputPath 'neoprog_v2.bin'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS V2 package creation failed."
     }
 
     $Generated = @(
@@ -49,6 +86,8 @@ try {
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
         'neoprog.bin',
+        'neoprog_v2.bin',
+        'zx_main/neoprog_v2_chunks.inc',
         'zx_main/neoprog.bin'
     )
     foreach ($File in $Generated) {
@@ -62,12 +101,17 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Spectrum host build failed (sjasmplus exit code $LASTEXITCODE)."
     }
+
     if (-not (Test-Path 'disk_A.trd')) {
         throw 'Assembler returned success, but disk_A.trd was not created.'
     }
+    & (Join-Path $Root 'tools/create_v2_test_disk.ps1') -SourceImage 'disk_A.trd' -OutputImage 'disk_A_v2.trd' -PackagePath 'neoprog_v2.bin'
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'disk_A_v2.trd')) {
+        throw 'V2 test-disk creation failed.'
+    }
 
     Write-Host "Build completed. Output files:" -ForegroundColor Green
-    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','neoprog.bin','disk_A.trd' |
+    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','neoprog.bin','neoprog_v2.bin','disk_A.trd','disk_A_v2.trd' |
         Select-Object Name,Length,LastWriteTime |
         Format-Table -AutoSize
 }

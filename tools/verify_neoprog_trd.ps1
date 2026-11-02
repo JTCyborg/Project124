@@ -94,7 +94,7 @@ try {
 
     Write-Host ("[VERIFY] neoprog.C found in TR-DOS catalogue.")
     Write-Host ("[VERIFY] Package size: {0} bytes ({1} sectors)." -f $package.Length, $sectorCount)
-    Write-Host "[VERIFY] Every package byte in disk_A.trd matches neoprog.bin."
+    Write-Host ("[VERIFY] Every package byte in {0} matches {1}." -f $ImagePath, $PackagePath)
     exit 0
 }
 catch {

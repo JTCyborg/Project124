@@ -636,3 +636,122 @@ CI run и артефакт остаются теми же: build/verification PA
   - `neoprog.bin`: 16 204 bytes = `#3F4C`, 64 TR-DOS sectors;
   - `disk_A.trd`: 655 360 bytes.
 - Это CI/build PASS, не hardware runtime PASS. Требуется запуск на Pentagon/NeoGS и полный лог, где новый marker подтверждает guard #4800..#487F после Stage 5. До этого не начинать перенос кода в banked WIN2.
+
+
+### 2026-11-02 — STACK-02 hardware runtime PASS и следующий шаг v2
+
+- Получен полный свежий лог запуска пользователя на сборке с WIN1 stack relocation.
+- Новый маркер подтверждён аппаратным runtime:
+  `[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.`
+- В том же запуске повторно прошли: RTC/firmware bootstrap, IPC HLT AX=#BBAB, 5 interpreter edge cases, 64-page x86 RAM test, IVT/BDA, INT Stage 2A/2B, CPU arithmetic/flow/stack/ModR/M, CPU-I/O, CPU-STR, CPU-STR-02 REP/REPE/REPNE, BIOS INT10, Stage 5 TR-DOS/DMA (status/AX=`0000 BBAB`) и штатный HALT.
+- STACK-02 теперь имеет **hardware runtime PASS**. WIN1 stack #4FFE и guard #4800..#487F проверены после полной последовательности; WIN2 больше не нужен для стека и может быть выделен под banked overlay.
+- Начат следующий кодовый шаг: `gs_boot_probe_rom` теперь требует не просто ненулевой high byte, а не менее `#118000` байт RAM (70 уникальных страниц по 16 КиБ), поскольку pages 68/69 планируются под firmware overlay, а pages 4..67 заняты x86 RAM. Порог сравнивается с 24-bit #20 response [low, mid, high]. Для RAM меньше порога загрузка будет отвергнута до отправки bootstrap.
+- Изменение кода: commit `39e8632966db0ce3bff1591c2b550f052ac386d9`; CI build для него ещё не проверен.
+- Это safety gate для будущего v2, не реализация передачи overlay и не 48-KiB runtime. Текущий v1 package остаётся <=16 KiB resident.
+- Следующий этап: проверить сборку; затем зафиксировать v2 header/segment descriptor и написать тесты packer на адреса назначения, размер каждого сегмента, total firmware <= #C000 и overlap с reserved pages. Только после этого менять bootstrap/host transfer в согласованном порядке.
+
+- CI для RAM-size guard: run `41365546148`, commit `39e8632966db0ce3bff1591c2b550f052ac386d9` — **success**. Шаги firmware/package/host/TR-DOS build, verify и artifact upload завершились success. Это build PASS; runtime новой проверки размера RAM ещё не выполнен.
+
+- Зафиксирован отдельный v2 wire-format contract: `NEOGS_FIRMWARE_V2_FORMAT.md` (commit `4f904fd414c749c4a66385f95d163415a529957e`). Формат: magic `P124`, version 2, до трёх шестибайтовых segment descriptors, resident page 0 и overlay pages 68/69, payload <= #C000; descriptor validation, reserved map, host streaming и receiver алгоритм описаны точно. Документ не означает, что v2 уже поддерживается runtime.
+
+
+### 2026-11-02 — V2 implementation step 1: isolated segmented packer and fixtures
+
+- Создан `tools/pack_neogs_v2.ps1`. Это отдельный генератор v2, не заменяющий `pack_neogs.ps1` и не меняющий текущий `neoprog.bin`/`zx_main/neoprog.bin`.
+- Входы: обязательный resident image для physical page 0; необязательные overlay images для pages 68 и 69; bootstrap по умолчанию берётся из корневого `neogs_bootstrap.bin`. Выход по умолчанию — отдельный `neoprog_v2.bin`.
+- Генератор формирует внешний v1-compatible prefix `WORD bootstrap_length + bootstrap`, после которого пишет payload v2: `P124`, version 2, segment count, LE total length, descriptors по 6 байт и данные без padding.
+- Встроены проверки: bootstrap 1..254; resident/overlay 1..#4000; только страницы 0/68/69; resident первым, offset 0; total <=#C000; внешний пакет <=#FF00. Overlay descriptor flags=0, resident flags=1.
+- Создан `tools/test_neogs_v2.ps1`: синтетические positive fixtures resident-only, resident+page68 и полный 48-KiB образ; проверяются точные поля заголовка/дескрипторов, порядок данных, размеры и TR-DOS предел. Negative fixtures проверяют пустой resident, сегмент >16 KiB и отсутствующий bootstrap.
+- В `.github/workflows/project124-build.yml` добавлен отдельный шаг запуска v2 fixtures после обычной v1 сборки/проверок. V1 packer, bootstrap, host driver и основной артефакт не переключаются на v2.
+- Commits: packer `8d1bffa6688d5e8e0ee0503847b34b21e36ad086`; fixtures `3a248c201eaf5051be3bf4c7d83449625be1c8ed`; CI workflow `46d5122d11e17a08ee843a6064c2cf20392d2eda`.
+- GitHub Actions run `41365886610` для commit `9143b8e198216739489b52c7ff20a7d94081eb38` завершился **success**. Шаги v1 firmware/package/host/TR-DOS build, v1 package verification, новый v2 fixture test и artifact upload — success. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41365886610. Отдельный workflow run `41365883154` для commit workflow также прошёл все функциональные шаги success.
+- CI подтверждает синтаксис/исполнение PowerShell packer и positive/negative fixtures в Windows runner. Это не hardware runtime и не подтверждение, что bootstrap/host уже понимают v2.
+- V2 bootstrap receiver, host transfer, banked runtime и аппаратная загрузка 48 KiB всё ещё не реализованы.
+
+
+### 2026-11-02 — V2 implementation step 2: strict package verifier and malformed-input fixtures
+
+- Добавлен `tools/verify_neogs_v2.ps1`: независимая проверка готового пакета, не доверяющая packer. Проверяет внешний bootstrap prefix (1..254), предел #FF00, `P124`/version 2, count 1..3, таблицу descriptor, разрешённые physical pages 0/68/69, уникальность страниц, resident page 0 первым и executable, offset 0 для текущего canonical profile, flags, длины 1..#4000, сумму длин и точное совпадение конца файла (без усечения/лишних байтов).
+- `tools/test_neogs_v2.ps1` теперь запускает verifier на resident-only, двухсегментном и полном 48-KiB пакетах, а также модифицирует корректный пакет для проверки отказа на wrong magic/version, count 0/4, duplicate/reserved/unsupported page, nonzero offset, zero/oversize segment, unknown flags, total mismatch, bootstrap length >254, truncated payload и trailing byte.
+- Commits: verifier `f2016ff837922bcc662810242e730f88f72acd91`; malformed fixtures `ba6ed4b55532c2ae30183800c63cb6600d5682c0`.
+- CI run `41405849949` для commit `ba6ed4b55532c2ae30183800c63cb6600d5682c0` — **success**: сборка, v1 verification, v2 packer + malformed package verifier fixtures и artifact upload завершились PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41405849949. Более ранний run `41405827968` проверял только промежуточный verifier commit; окончательным результатом считать `41405849949`.
+- Архитектурный вывод для следующего этапа: текущий 196-byte bootstrap не может быть просто расширен парсером v2 без нарушения первого-sector ограничения 254 байта. Поэтому v2 загрузчик должен быть двухступенчатым: stage-0 остаётся маленьким и совместимым с GS #14/#13, stage-1 исполняется из временной области WIN1 вне DMA frame, принимает/проверяет v2 заголовок и выполняет bank writes в WIN0/WIN2. Нельзя посылать v2 `P124` payload через текущий v1 bootstrap: он воспримет его как flat firmware и выполнит magic. Требуется отдельный согласованный package/host protocol, v1 остаётся default.
+
+
+### 2026-11-02 — V2 implementation step 3: isolated stage-1 receiver source
+
+- Добавлен `neogs_sub/bootstrap_v2_stage1.asm`: второй этап загрузчика, размещаемый в WIN1 по адресу #4800. Он исполняется из WIN1, поэтому переключает только WIN2/MPAG; стек остаётся в WIN3/page2 до передачи управления resident firmware.
+- Реализован протокол stage-1: отправляет #A4 READY, принимает точную длину v2 payload, подтверждает #A3, проверяет `P124`/version/count/total и все дескрипторы до первой записи в RAM; проверяет допустимые pages 0/68/69, уникальность, offset=0, длины 1..#4000, flags и сумму длин; затем копирует page0 через WIN0, pages68/69 через MPAG (#22/#A2), восстанавливая default MPAG=#80 после каждого overlay.
+- Ошибка/тайм-аут ведут к #E1 и HALT; после полной записи stage-1 делает JP 0000, где resident firmware выдаёт существующий #A2. Сам stage-1 не выдаёт ложный firmware-ready ACK.
+- Добавлен отдельный build target `neogs_sub/build_bootstrap_v2_stage1.asm`; `build_project124.ps1` теперь ассемблирует его отдельно и проверяет лимит 2048 байт (#4800..#4FFF). Workflow публикует `neogs_v2_stage1.bin`. Основной v1 bootstrap, packer и TR-DOS пакет не переключаются на v2.
+- Commits: stage-1 source `4b4ff947eeec3f13e1a5d34915e2ffddadd255df`; duplicate-page validation `8af557a1cd4d6b06a43dde8159f8c79fbbce36ad`; build target `2f748daa06e3bec16e6cd2909b717c562d8bdacf`; build integration `64be49269e8ab3bc9910ee6fda54fd6aafcff0e5`; workflow artifact `6e32487cd95a8d0f64d4608649f49bb6b52dd0c7`.
+- Сборка stage-1: GitHub Actions run `41406111733` для commit `88c9f8a807485319fb3e658ba7e048806a04bad6` — **success**. SjASMPlus собрал stage-1 без ошибок; размер `530 bytes` при бюджете `2048 bytes` (#4800..#4FFF). В том же run v1 firmware/package/host/TR-DOS build, verification, v2 package tests и artifact upload завершились success. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406111733. Предыдущая сборка выявила дальний JR (-164), заменённый на JP; исправленный commit собран успешно.
+- Ограничение текущего шага: stage-1 пока изолированный бинарный модуль. Его загрузка stage-0 и передача ему v2 payload ещё не подключены к host. Нужны отдельный stage-0 v2, расширение host parser/streamer и тест согласованного пакета. Не использовать `neoprog_v2.bin` для запуска.
+
+
+### 2026-11-02 — V2 implementation step 4: isolated stage-0 bootstrap
+
+- Добавлен `neogs_sub/bootstrap_v2_stage0.asm`: компактный первый этап для GS #14/#13. Он включает RAM-over-ROM/EXPAG, устанавливает MPAG page1 и MPAGEX page2, задаёт временный SP=#FFFE, выдаёт #A1, принимает WORD длины stage-1 (1..#0800), выдаёт #A3, копирует stage-1 в #4800 и передаёт ему управление.
+- Добавлен build target `neogs_sub/build_bootstrap_v2_stage0.asm`; `build_project124.ps1` отдельно собирает stage-0 и проверяет <=254 байта, затем собирает stage-1 и проверяет <=2048 байт. Оба бинарника добавлены в CI artifacts. Активный v1 bootstrap не изменялся.
+- Commits: stage-0 source `962d0ea01899b759a3c7a8580d9fe44616e4e43b`; build target `76d6132888067d8c5fd8a75cc0fa623506a7918d`; build integration `acdc440a331aa11dff3121e49a2f5b3d06c2d268`; workflow artifact `ead559cbe92c518c96801e529f5b007e8364fc73`.
+- Stage-0 protocol is now defined as #A1 -> host sends stage1_length + bytes -> #A3 -> jump #4800. Stage-1 then sends #A4 -> host sends exact v2 payload length -> #A3 -> v2 payload. Host streamer and v2 package outer layout must be updated to this exact sequence before it can run.
+- GitHub Actions run `41406259697` для commit `acdc440a331aa11dff3121e49a2f5b3d06c2d268` — **success**: stage-0 assembled to `150 bytes` (budget 254); stage-1 assembled to `530 bytes` (budget 2048); existing v1 build, package verification, v2 package fixtures and artifact upload also passed. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406259697. Это assembler/CI PASS, не runtime.
+- Следующий шаг: обновить v2 package outer layout под `[WORD stage0][stage0][WORD stage1][stage1][P124 payload]`, затем согласовать host parser/streamer. No v2 hardware test is authorized yet.
+
+
+### 2026-11-02 — V2 implementation step 5: staged package format + packer integration
+
+- `tools/pack_neogs_v2.ps1` изменён: внешний пакет теперь содержит `[WORD stage0_length][stage0][WORD stage1_length][stage1][P124 payload]`. По умолчанию берёт собранные `neogs_v2_bootstrap.bin` и `neogs_v2_stage1.bin`; v1 packer не затронут.
+- `tools/verify_neogs_v2.ps1` теперь независимо проверяет оба этапа и затем P124 payload. Тесты создают stage0=150 и stage1=530 bytes; проверяют полный пакет, resident-only и двухсегментный вариант, а также повреждения обоих размеров и malformed payload.
+- CI run `41406462212` для commit `cada4a03d8577bb3df832c0a2fca29b9c385a91e` и run `41406487414` для commit `a9ac491438442be1e0c8996bbc51a6d1bc2d63eb` — **success**. Полный тестовый пакет 48 KiB: 49 862 bytes, 195 TR-DOS sectors; stage0=150, stage1=530, payload=49 178 bytes (26-byte header + 49 152 firmware). Verifier подтверждает страницы 0/68/69 и точную длину; malformed fixtures все REJECT PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406487414.
+- Важное ограничение: это CI для упаковки/валидации и отдельной сборки stage0/stage1. Host пока не распознаёт новый staged prefix и продолжает загружать только v1 `neoprog.C`; v2 TR-DOS пакет не запускать. Следующий этап — host parser/streamer, который по v2 marker/format отправит stage1 length+bytes, дождётся #A4, затем отправит P124 payload length+bytes из переиспользуемого #C000 буфера.
+
+
+### 2026-11-02 — V2 package discriminator V2S1 and CI verification
+
+- Добавлен явный ASCII marker `V2S1` между stage-0 и stage-1 в v2 package. Он нужен host parser для однозначного отличия staged v2 от legacy v1 flat package; marker остаётся в файле и не передаётся stage-0.
+- Обновлены packer, independent verifier и fixtures: новый формат `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`. Проверяется marker, stage0/1 limits и malformed package cases.
+- CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: 48-KiB synthetic package `49 866 bytes` / 195 sectors; stage0 150 bytes; stage1 530 bytes; P124 payload 49 178 bytes; all positive and negative fixtures PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
+- Host-side detection and transfer are still pending; active host remains v1-only. `neoprog_v2.bin` is not yet bootable and must not replace `neoprog.C`.
+
+
+### 2026-11-02 — V2S1 package discriminator verification
+
+- V2 package получил marker `V2S1` сразу после stage-0. Host сможет однозначно распознать v2, не пытаясь интерпретировать v1 firmware как stage-1 length. Marker остаётся в package, но не передаётся в NeoGS.
+- Packer/verifier/tests обновлены под `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`; stage1 length смещён после marker. Проверяется точное наличие marker.
+- CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: полный 48-KiB synthetic package `49 866 bytes`, 195 sectors; stage0=150, stage1=530, payload=49 178; malformed inputs rejected, resident-only и two-segment fixtures verified. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
+- Stage0/stage1/packer пока не интегрированы с host transfer. Ветка v1 остаётся единственным активным runtime путём. Следующий шаг — распознавание V2S1 и отдельная host-последовательность загрузки stage0, stage1 и payload; затем TR-DOS v2 test package с отдельным именем файла.
+
+
+### 2026-11-02 — V2 host parser and staged transfer path
+
+- В `zx_main/neogs_driver.asm` добавлено распознавание точного marker `V2S1` после stage-0 prefix. Проверка выполняется только если stage0+marker+stage1 length metadata помещаются в первый сектор; отсутствие marker оставляет прежний v1 путь без изменений.
+- Добавлен отдельный `upload_firmware_v2`: повторный #F4/#20 RAM probe; #14/#13 установка stage-0; передача stage1 length+bytes; ожидание #A4; передача P124 payload length+bytes; ожидание resident #A2; точный byte-count check по всем DBIT-acknowledged GS bytes. Для stage1 и payload используется общий stream helper с переиспользованием #C000 и подкачкой TR-DOS секторов без буфера всего файла.
+- Stage0 metadata budget ограничен 248 bytes, потому что в первом секторе после `WORD stage0 + stage0` должны также находиться `V2S1` и WORD stage1 length. Stage0=150 bytes, stage1=530 bytes; это подтверждено сборкой.
+- GitHub Actions run `41407099336` для commit `20f459c2ff1d8f60067256c57e0cd9abbacdf7a3` — **success**: Z80 host/firmware assembler, v1 package/TR-DOS verification, v2 staged package fixtures, stage0/1 assembly и artifact upload прошли. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41407099336.
+- Это только host/assembler CI PASS. V2 TR-DOS test disk и аппаратная загрузка ещё не созданы/не проверены. Следующий шаг — собирать реальный resident-only v2 package из `neogs_code.bin`, помещать его в отдельный `disk_A_v2.trd` под именем `neoprog.C`, затем просить пользователя проверить аппаратный runtime. Полный 48-KiB firmware split/linker и overlay runtime usage остаются отдельно.
+
+
+### 2026-11-02 — V2 resident-only TR-DOS test image generated and verified
+
+- V2 packer теперь создаёт 16-KiB assembly chunks `zx_main/neoprog_v2_partN.bin` + include `neoprog_v2_chunks.inc`. Основная сборка помещает v1 package как `neoprog.C`, а staged v2 package как `neopv2.C` в тот же `disk_A.trd`.
+- Добавлен `tools/create_v2_test_disk.ps1`: копирует `disk_A.trd` в `disk_A_v2.trd`, переименовывает v1 directory entry в `neoprog1.C`, а v2 package в `neoprog.C`; также фиксирует length/sector count для V2 entry. Данные пакета при этом не перекладываются.
+- `build_project124.ps1` автоматически создаёт отдельный `disk_A_v2.trd`. Workflow проверяет v1 `disk_A.trd` против `neoprog.bin`, v2 package через independent verifier и `disk_A_v2.trd` против `neoprog_v2.bin` побайтно.
+- GitHub Actions run `41408352512` для commit `5fca893e260e10d3b222c95fd04245fdb328809c` — **success**. Реальный resident-only v2 package: `16 708 bytes`, 66 sectors; stage0=150, stage1=530, resident=16 006. `disk_A_v2.trd` — 655 360 bytes; проверка каталога и каждого байта package в TR-DOS image прошла. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408352512.
+- Важная граница результата: это полностью собранный и побайтно проверенный V2 test disk и CI build PASS, но не аппаратный запуск. V1 disk `disk_A.trd` остаётся без изменений и использует `neoprog.C`; V2 для теста — только `disk_A_v2.trd`, где `neoprog.C` указывает на staged v2 package.
+- Следующий обязательный шаг: пользователь запускает `disk_A_v2.trd` в Unreal/Pentagon или на NeoGS hardware и присылает полный лог. Проверяем: stage0 #A1, stage1 #A4, stage1 #A3, resident #A2, затем существующие RTC/IPC/RAM/BIOS/CPU/INT/TR-DOS регрессии. Не объявлять V2 runtime PASS до этого лога.
+
+
+### 2026-11-02 — Final CI after V2 TR-DOS verifier message correction
+
+- Run `41408492071` for commit `a88f9c9edc2647ca3b8925f22c169c934884483d` — **success**: build, V1 TR-DOS verification, V2 package verification, V2 TR-DOS byte-for-byte verification, V2 positive/negative fixtures and artifact upload all passed. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408492071.
+- The CI artifact `project124-build` contains `disk_A.trd` (V1 default) and `disk_A_v2.trd` (resident-only V2 staged loader test). The V2 image has the same host app, but its `neoprog.C` directory entry points to the V2 package; old V1 package is retained as `neoprog1.C`.
+
+
+### 2026-11-02 — исправлен запуск полной сборки через build.bat
+
+- По фактическому логу пользователя установлено, что ошибка возникает именно при запуске build.bat, а не при ручном запуске SjASMPlus.
+- Причина: build.bat содержал устаревшую последовательность V1. Он собирал firmware и вызывал только pack_neogs.ps1, после чего сразу запускал zx_main/main.asm. Между тем main.asm уже включает neoprog_v2_chunks.inc и использует NEOGS_V2_PACKAGE_*, которые создаёт только tools/pack_neogs_v2.ps1.
+- Полный оркестратор build_project124.ps1 уже выполняет нужный порядок: firmware → V2 stage0 → V2 stage1 → V1 package → V2 package/chunks/include → host assembler → V2 test disk.
+- Исправлен build.bat: теперь он проверяет наличие SjASMPlus и build_project124.ps1, при необходимости загружает отсутствующий корневой pack_neogs.ps1, затем запускает единый build_project124.ps1 и проверяет создание disk_A.trd, disk_A_v2.trd и zx_main/neoprog_v2_chunks.inc.
+- Это устраняет пропуск V2-генератора в batch-сценарии. Изменение отправлено в main; локальная Windows-сборка и runtime пользователя ещё не подтверждены. Не считать build/runtime PASS до получения фактического результата.

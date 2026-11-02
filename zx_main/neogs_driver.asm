@@ -199,6 +199,38 @@ upload_firmware::
         cp      255                   ; maximum length 254 bytes
         jp      nc, .upload_failed
 
+        ; V2 has an explicit V2S1 marker after its stage-0 image. Check only
+        ; when the marker and stage-1 length word are guaranteed to be in
+        ; sector 0 (stage0 <= 248). A non-match follows the untouched v1 path.
+        ld      hl, (neo_fw_bootstrap_length)
+        ld      a, h
+        or      a
+        jr      nz, .v1_package_format
+        ld      a, l
+        cp      249
+        jr      nc, .v1_package_format
+        ld      hl, (neo_fw_package_source)
+        inc     hl
+        inc     hl
+        ld      de, (neo_fw_bootstrap_length)
+        add     hl, de
+        ld      a, (hl)
+        cp      'V'
+        jr      nz, .v1_package_format
+        inc     hl
+        ld      a, (hl)
+        cp      '2'
+        jr      nz, .v1_package_format
+        inc     hl
+        ld      a, (hl)
+        cp      'S'
+        jr      nz, .v1_package_format
+        inc     hl
+        ld      a, (hl)
+        cp      '1'
+        jp      z, upload_firmware_v2
+.v1_package_format:
+
         ; Firmware length = package length - header - bootstrap length.
         ld      hl, (neo_fw_package_length)
         ld      de, 2
@@ -435,6 +467,309 @@ upload_firmware::
         scf
         ret
 
+
+
+; -------------------------------------------------------------------------
+; V2 staged upload. Package:
+;   WORD stage0_length, stage0, "V2S1", WORD stage1_length, stage1, P124 payload
+; The V1 upload path above remains unchanged and is selected when V2S1 is absent.
+; -------------------------------------------------------------------------
+upload_firmware_v2:
+        ; Validate the V2 stage-0 first-sector layout.
+        ld      hl, (neo_fw_bootstrap_length)
+        ld      a, h
+        or      a
+        jp      nz, upload_firmware_v2_failed
+        ld      a, l
+        or      a
+        jp      z, upload_firmware_v2_failed
+        cp      249
+        jp      nc, upload_firmware_v2_failed
+
+        ; Stage-0 source is the bytes immediately after the outer WORD.
+        ld      hl, (neo_fw_package_source)
+        inc     hl
+        inc     hl
+        ld      (neo_fw_bootstrap_source), hl
+
+        ; Locate stage-1 length after the four-byte V2S1 marker.
+        ld      de, (neo_fw_bootstrap_length)
+        add     hl, de
+        ld      de, 4
+        add     hl, de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        ld      (neo_fw_stage1_length), de
+
+        ; Stage-1 receiver must fit in temporary WIN1 #4800..#4FFF.
+        ld      a, d
+        cp      8
+        jr      c, .v2_stage1_high_ok
+        jp      nz, upload_firmware_v2_failed
+        ld      a, e
+        or      a
+        jp      nz, upload_firmware_v2_failed
+.v2_stage1_high_ok:
+        ld      a, d
+        or      e
+        jp      z, upload_firmware_v2_failed
+
+        ; Stage-1 source starts immediately after its length word.
+        inc     hl
+        inc     hl
+        ld      (neo_fw_stage1_source), hl
+        ld      de, (neo_fw_stage1_length)
+        add     hl, de
+        ld      (neo_fw_source), hl       ; v2 payload follows stage-1 exactly
+
+        ; The first sector has consumed 2 + stage0 + 4-byte marker + 2-byte
+        ; stage1 length. The remaining bytes are streamed from this buffer.
+        ld      hl, 248
+        ld      de, (neo_fw_bootstrap_length)
+        or      a
+        sbc     hl, de
+        ld      (neo_fw_buffer_remaining), hl
+
+        ; Payload length = package length - (stage0 + stage1 + 8 framing bytes).
+        ld      hl, (neo_fw_package_length)
+        ld      de, (neo_fw_bootstrap_length)
+        or      a
+        sbc     hl, de
+        jp      c, upload_firmware_v2_failed
+        ld      de, (neo_fw_stage1_length)
+        sbc     hl, de
+        jp      c, upload_firmware_v2_failed
+        ld      de, 8
+        sbc     hl, de
+        jp      c, upload_firmware_v2_failed
+        ld      (neo_fw_length), hl
+        ld      a, h
+        cp      #C1
+        jp      nc, upload_firmware_v2_failed
+        ld      a, h
+        cp      #C0
+        jr      c, .v2_payload_length_ok
+        ld      a, l
+        cp      #1B
+        jp      nc, upload_firmware_v2_failed
+.v2_payload_length_ok:
+        ld      a, h
+        or      l
+        jp      z, upload_firmware_v2_failed
+
+        xor     a
+        ld      (neo_fw_bytes_sent), a
+        ld      (neo_fw_bytes_sent+1), a
+        ld      (neo_fw_timeout_phase), a
+        in      a, (GSSTAT)
+        ld      (neo_fw_initial_status), a
+        ld      (neo_fw_last_status), a
+
+        ; Phase 11: cold restart and verify at least 70 physical RAM pages.
+        ld      a, 11
+        ld      (neo_fw_timeout_phase), a
+        ld      a, GS_CMD_COLD_RESTART
+        call    gs_boot_send_command_long
+        jp      c, upload_firmware_v2_failed
+        ld      a, 12
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_probe_rom
+        jr      nc, .v2_stock_rom_ready
+        ld      a, 11
+        ld      (neo_fw_timeout_phase), a
+        ld      a, GS_CMD_COLD_RESTART
+        call    gs_boot_send_command_long
+        jp      c, upload_firmware_v2_failed
+        ld      a, 12
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_probe_rom
+        jp      c, upload_firmware_v2_failed
+.v2_stock_rom_ready:
+
+        ; Install stage-0 into fixed WIN1 at $4000 using ROM command #14.
+        ld      a, 13
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, 0
+        ld      de, (neo_fw_bootstrap_length)
+        or      a
+        sbc     hl, de
+        ld      (neo_fw_block_length), hl
+        ld      a, l
+        call    gs_boot_write_command_argument
+        jp      c, upload_firmware_v2_failed
+        ld      a, GS_CMD_RECEIVE_BLOCK
+        call    gs_boot_send_command
+        jp      c, upload_firmware_v2_failed
+        ld      a, (neo_fw_block_length+1)
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        xor     a
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        ld      a, #40
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+
+        ; Send the complete stage-0 image.
+        ld      a, 14
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_bootstrap_source)
+        ld      de, (neo_fw_bootstrap_length)
+.v2_stage0_loop:
+        ld      a, d
+        or      e
+        jr      z, .v2_stage0_done
+        ld      a, (hl)
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        inc     hl
+        dec     de
+        jr      .v2_stage0_loop
+.v2_stage0_done:
+
+        ; Enter stage-0 at $4000 with ROM command #13.
+        ld      a, 15
+        ld      (neo_fw_timeout_phase), a
+        xor     a
+        call    gs_boot_write_command_argument
+        jp      c, upload_firmware_v2_failed
+        ld      a, GS_CMD_JUMP_ADDRESS
+        call    gs_boot_send_command
+        jp      c, upload_firmware_v2_failed
+        ld      a, #40
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+
+        ; Stage-0 #A1, stage1 length, then stage-0's #A3 acceptance.
+        ld      a, 16
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
+        cp      NGS_BOOTSTRAP_READY_ACK
+        jp      nz, upload_firmware_v2_failed
+        ld      hl, (neo_fw_stage1_length)
+        ld      a, l
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        ld      a, h
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
+        cp      NGS_BOOTSTRAP_LENGTH_ACK
+        jp      nz, upload_firmware_v2_failed
+
+        ; Stream stage-1 bytes using the same 256-byte #C000 buffer.
+        ld      a, 17
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_stage1_source)
+        ld      (neo_fw_source), hl
+        ld      hl, (neo_fw_stage1_length)
+        ld      (neo_fw_stream_remaining), hl
+        call    neo_fw_v2_stream_bytes
+        jp      c, upload_firmware_v2_failed
+
+        ; Stage-1 is now executing from WIN1/#4800 and signals #A4.
+        ld      a, 18
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
+        cp      #A4
+        jp      nz, upload_firmware_v2_failed
+
+        ; Send complete P124 payload length and require stage-1 #A3.
+        ld      a, 19
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_length)
+        ld      a, l
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        ld      a, h
+        call    gs_boot_send_data_byte
+        jp      c, upload_firmware_v2_failed
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
+        cp      NGS_BOOTSTRAP_LENGTH_ACK
+        jp      nz, upload_firmware_v2_failed
+
+        ; Stream P124 header, descriptors and data unchanged.
+        ld      a, 20
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_length)
+        ld      (neo_fw_stream_remaining), hl
+        call    neo_fw_v2_stream_bytes
+        jp      c, upload_firmware_v2_failed
+
+        ; Resident entry sends the established #A2 firmware-ready ACK.
+        ld      a, 21
+        ld      (neo_fw_timeout_phase), a
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
+        cp      NGS_FIRMWARE_READY_ACK
+        jp      nz, upload_firmware_v2_failed
+
+        ; Total DBIT-acknowledged bytes must equal the whole package length:
+        ; #14 remainder 3 + stage0 + #13 high 1 + stage1 length 2 + stage1
+        ; + payload length 2 + payload = stage0 + stage1 + payload + 8.
+        ld      a, 22
+        ld      (neo_fw_timeout_phase), a
+        ld      hl, (neo_fw_bootstrap_length)
+        ld      de, (neo_fw_stage1_length)
+        add     hl, de
+        ld      de, (neo_fw_length)
+        add     hl, de
+        ld      de, 8
+        add     hl, de
+        ld      de, (neo_fw_bytes_sent)
+        or      a
+        sbc     hl, de
+        jp      nz, upload_firmware_v2_failed
+
+        xor     a
+        ret
+
+upload_firmware_v2_failed:
+        scf
+        ret
+
+; Stream neo_fw_stream_remaining bytes from neo_fw_source. The buffer pointer
+; and remaining-byte count persist across the stage1 and payload calls.
+neo_fw_v2_stream_bytes:
+.v2_stream_loop:
+        ld      hl, (neo_fw_stream_remaining)
+        ld      a, h
+        or      l
+        jr      z, .v2_stream_done
+        ld      hl, (neo_fw_buffer_remaining)
+        ld      a, h
+        or      l
+        jr      nz, .v2_stream_buffer_ready
+        call    neo_fw_read_next_sector
+        ret     c
+        ld      hl, 256
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, #C000
+        ld      (neo_fw_source), hl
+.v2_stream_buffer_ready:
+        ld      hl, (neo_fw_source)
+        ld      a, (hl)
+        call    gs_boot_send_data_byte
+        ret     c
+        inc     hl
+        ld      (neo_fw_source), hl
+        ld      hl, (neo_fw_buffer_remaining)
+        dec     hl
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, (neo_fw_stream_remaining)
+        dec     hl
+        ld      (neo_fw_stream_remaining), hl
+        jr      .v2_stream_loop
+.v2_stream_done:
+        or      a
+        ret
+
+
 ; -------------------------------------------------------------------------
 ; Standard GS105a ROM transport primitives.
 ; Commands use CBIT; data bytes use DBIT. All waits are bounded.
@@ -454,16 +789,23 @@ gs_boot_probe_rom:
         call    gs_boot_receive_data_byte
         ret     c
         ld      (neo_fw_rom_ram_high), a
-        ; #20 reports total RAM as a 24-bit byte count. The 48-KiB
-        ; memory map needs at least four 16-KiB pages (64 KiB total):
-        ; fixed pages 0 and 3 plus selectable pages 1 and 2.
+        ; #20 reports total RAM as a 24-bit byte count. The banked
+        ; firmware layout reserves physical pages 68 and 69, while the x86
+        ; backend owns pages 4..67. Therefore RAM must contain at least
+        ; 70 unique 16-KiB pages: 70 * #4000 = #118000 bytes.
+        ; 2-MiB boards report >= #200000 and pass; smaller boards are rejected.
         ld      a, (neo_fw_rom_ram_high)
-        or      a
+        cp      #11
+        jr      c, .rom_probe_too_small
         jr      nz, .rom_probe_ok
-        scf
-        ret
+        ld      a, (neo_fw_rom_ram_mid)
+        cp      #80
+        jr      c, .rom_probe_too_small
 .rom_probe_ok:
         or      a
+        ret
+.rom_probe_too_small:
+        scf
         ret
 
 ; Long command wait for #F4 cold restart and ROM self-test.
@@ -667,6 +1009,9 @@ neo_fw_package_source:  dw 0
 neo_fw_package_length:  dw 0
 neo_fw_bootstrap_source: dw 0
 neo_fw_bootstrap_length: dw 0
+neo_fw_stage1_source:  dw 0
+neo_fw_stage1_length:  dw 0
+neo_fw_stream_remaining: dw 0
 neo_fw_source:          dw 0
 neo_fw_length:          dw 0
 neo_fw_bootstrap_address: dw #4000
