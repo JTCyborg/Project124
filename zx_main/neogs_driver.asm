@@ -639,15 +639,32 @@ upload_firmware_v2:
         jp      c, upload_firmware_v2_failed
         ld      a, #40
         call    gs_boot_send_data_byte
-        jp      c, upload_firmware_v2_failed
+        jr      nc, .v2_stage0_jump_tx_done
 
+        ; Stage-0 can consume #40, start immediately and publish #A1
+        ; before the host observes the brief DBIT-clear interval. In that
+        ; case DBIT is set by the incoming ACK, not by an unconsumed TX byte.
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jp      z, upload_firmware_v2_failed
+        in      a, (GSDAT)
+        ld      (neo_fw_last_rx_byte), a
+        cp      NGS_BOOTSTRAP_READY_ACK
+        jp      nz, upload_firmware_v2_failed
+        jr      .v2_stage0_ready
+
+.v2_stage0_jump_tx_done:
         ; Stage-0 #A1, stage1 length, then stage-0's #A3 acceptance.
         ld      a, 16
         ld      (neo_fw_timeout_phase), a
         call    gs_boot_receive_data_byte
         jp      c, upload_firmware_v2_failed
+        ld      (neo_fw_last_rx_byte), a
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, upload_firmware_v2_failed
+
+.v2_stage0_ready:
         ld      hl, (neo_fw_stage1_length)
         ld      a, l
         call    gs_boot_send_data_byte
@@ -668,15 +685,31 @@ upload_firmware_v2:
         ld      hl, (neo_fw_stage1_length)
         ld      (neo_fw_stream_remaining), hl
         call    neo_fw_v2_stream_bytes
-        jp      c, upload_firmware_v2_failed
+        jr      nc, .v2_stage1_stream_tx_done
 
+        ; As with stage-0, stage-1 may publish #A4 immediately after its
+        ; final byte is consumed. Recover that early reverse-direction ACK.
+        in      a, (GSSTAT)
+        ld      (neo_fw_last_status), a
+        bit     B_DBIT, a
+        jp      z, upload_firmware_v2_failed
+        in      a, (GSDAT)
+        ld      (neo_fw_last_rx_byte), a
+        cp      #A4
+        jp      nz, upload_firmware_v2_failed
+        jr      .v2_stage1_ready
+
+.v2_stage1_stream_tx_done:
         ; Stage-1 is now executing from WIN1/#4800 and signals #A4.
         ld      a, 18
         ld      (neo_fw_timeout_phase), a
         call    gs_boot_receive_data_byte
         jp      c, upload_firmware_v2_failed
+        ld      (neo_fw_last_rx_byte), a
         cp      #A4
         jp      nz, upload_firmware_v2_failed
+
+.v2_stage1_ready:
 
         ; Send complete P124 payload length and require stage-1 #A3.
         ld      a, 19
