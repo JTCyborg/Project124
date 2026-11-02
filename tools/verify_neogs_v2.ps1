@@ -9,10 +9,14 @@ function Read-U16([byte[]]$Data, [int]$Offset) {
 if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) { Fail "file not found: $PackagePath" }
 [byte[]]$Package = [IO.File]::ReadAllBytes($PackagePath)
 if ($Package.Length -gt 0xFF00) { Fail "outer package exceeds #FF00 bytes ($($Package.Length))" }
-if ($Package.Length -lt 2) { Fail 'missing outer bootstrap-length prefix' }
-$BootstrapLength = Read-U16 $Package 0
-if ($BootstrapLength -lt 1 -or $BootstrapLength -gt 254) { Fail "bootstrap length outside 1..254: $BootstrapLength" }
-$PayloadStart = 2 + $BootstrapLength
+if ($Package.Length -lt 2) { Fail 'missing outer stage-0-length prefix' }
+$Stage0Length = Read-U16 $Package 0
+if ($Stage0Length -lt 1 -or $Stage0Length -gt 254) { Fail "stage-0 length outside 1..254: $Stage0Length" }
+$Stage1LengthOffset = 2 + $Stage0Length
+if (($Stage1LengthOffset + 2) -gt $Package.Length) { Fail 'truncated before stage-1 length' }
+$Stage1Length = Read-U16 $Package $Stage1LengthOffset
+if ($Stage1Length -lt 1 -or $Stage1Length -gt 0x0800) { Fail "stage-1 length outside 1..#0800: $Stage1Length" }
+$PayloadStart = $Stage1LengthOffset + 2 + $Stage1Length
 if (($PayloadStart + 8) -gt $Package.Length) { Fail 'truncated before v2 base header' }
 $Magic = [Text.Encoding]::ASCII.GetString($Package, $PayloadStart, 4)
 if ($Magic -cne 'P124') { Fail "bad magic '$Magic'" }
@@ -50,7 +54,7 @@ if ($Sum -ne $TotalLength) { Fail "descriptor sum $Sum differs from header total
 $ExpectedLength = $DataStart + $TotalLength
 if ($Package.Length -lt $ExpectedLength) { Fail "truncated segment data: got $($Package.Length), expected $ExpectedLength" }
 if ($Package.Length -gt $ExpectedLength) { Fail "trailing bytes after payload: got $($Package.Length), expected $ExpectedLength" }
-Write-Host ("[V2-VERIFY] PASS: bootstrap={0}; segments={1}; firmware={2}; package={3}" -f $BootstrapLength, $Count, $TotalLength, $Package.Length)
+Write-Host ("[V2-VERIFY] PASS: stage0={0}; stage1={1}; segments={2}; firmware={3}; package={4}" -f $Stage0Length, $Stage1Length, $Count, $TotalLength, $Package.Length)
 foreach ($Descriptor in $Descriptors) {
     Write-Host ("[V2-VERIFY] PAGE={0} OFFSET=#{1:X4} LENGTH=#{2:X4} FLAGS=#{3:X2}" -f $Descriptor.Page, $Descriptor.Offset, $Descriptor.Length, $Descriptor.Flags)
 }
