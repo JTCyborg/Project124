@@ -713,3 +713,11 @@ CI run и артефакт остаются теми же: build/verification PA
 - Обновлены packer, independent verifier и fixtures: новый формат `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`. Проверяется marker, stage0/1 limits и malformed package cases.
 - CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: 48-KiB synthetic package `49 866 bytes` / 195 sectors; stage0 150 bytes; stage1 530 bytes; P124 payload 49 178 bytes; all positive and negative fixtures PASS. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
 - Host-side detection and transfer are still pending; active host remains v1-only. `neoprog_v2.bin` is not yet bootable and must not replace `neoprog.C`.
+
+
+### 2026-11-02 — V2S1 package discriminator verification
+
+- V2 package получил marker `V2S1` сразу после stage-0. Host сможет однозначно распознать v2, не пытаясь интерпретировать v1 firmware как stage-1 length. Marker остаётся в package, но не передаётся в NeoGS.
+- Packer/verifier/tests обновлены под `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`; stage1 length смещён после marker. Проверяется точное наличие marker.
+- CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: полный 48-KiB synthetic package `49 866 bytes`, 195 sectors; stage0=150, stage1=530, payload=49 178; malformed inputs rejected, resident-only и two-segment fixtures verified. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
+- Stage0/stage1/packer пока не интегрированы с host transfer. Ветка v1 остаётся единственным активным runtime путём. Следующий шаг — распознавание V2S1 и отдельная host-последовательность загрузки stage0, stage1 и payload; затем TR-DOS v2 test package с отдельным именем файла.
