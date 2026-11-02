@@ -13,7 +13,7 @@ if ($Image.Length -ne 655360) {
     throw "Unexpected TR-DOS image size: $($Image.Length), expected 655360"
 }
 
-$DirectoryOffset = 0x100
+$DirectoryOffset = 0
 $EntrySize = 16
 $EntryCount = 128
 $V1Name = 'neoprog '
