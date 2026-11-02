@@ -730,3 +730,13 @@ CI run и артефакт остаются теми же: build/verification PA
 - Stage0 metadata budget ограничен 248 bytes, потому что в первом секторе после `WORD stage0 + stage0` должны также находиться `V2S1` и WORD stage1 length. Stage0=150 bytes, stage1=530 bytes; это подтверждено сборкой.
 - GitHub Actions run `41407099336` для commit `20f459c2ff1d8f60067256c57e0cd9abbacdf7a3` — **success**: Z80 host/firmware assembler, v1 package/TR-DOS verification, v2 staged package fixtures, stage0/1 assembly и artifact upload прошли. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41407099336.
 - Это только host/assembler CI PASS. V2 TR-DOS test disk и аппаратная загрузка ещё не созданы/не проверены. Следующий шаг — собирать реальный resident-only v2 package из `neogs_code.bin`, помещать его в отдельный `disk_A_v2.trd` под именем `neoprog.C`, затем просить пользователя проверить аппаратный runtime. Полный 48-KiB firmware split/linker и overlay runtime usage остаются отдельно.
+
+
+### 2026-11-02 — V2 resident-only TR-DOS test image generated and verified
+
+- V2 packer теперь создаёт 16-KiB assembly chunks `zx_main/neoprog_v2_partN.bin` + include `neoprog_v2_chunks.inc`. Основная сборка помещает v1 package как `neoprog.C`, а staged v2 package как `neopv2.C` в тот же `disk_A.trd`.
+- Добавлен `tools/create_v2_test_disk.ps1`: копирует `disk_A.trd` в `disk_A_v2.trd`, переименовывает v1 directory entry в `neoprog1.C`, а v2 package в `neoprog.C`; также фиксирует length/sector count для V2 entry. Данные пакета при этом не перекладываются.
+- `build_project124.ps1` автоматически создаёт отдельный `disk_A_v2.trd`. Workflow проверяет v1 `disk_A.trd` против `neoprog.bin`, v2 package через independent verifier и `disk_A_v2.trd` против `neoprog_v2.bin` побайтно.
+- GitHub Actions run `41408352512` для commit `5fca893e260e10d3b222c95fd04245fdb328809c` — **success**. Реальный resident-only v2 package: `16 708 bytes`, 66 sectors; stage0=150, stage1=530, resident=16 006. `disk_A_v2.trd` — 655 360 bytes; проверка каталога и каждого байта package в TR-DOS image прошла. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408352512.
+- Важная граница результата: это полностью собранный и побайтно проверенный V2 test disk и CI build PASS, но не аппаратный запуск. V1 disk `disk_A.trd` остаётся без изменений и использует `neoprog.C`; V2 для теста — только `disk_A_v2.trd`, где `neoprog.C` указывает на staged v2 package.
+- Следующий обязательный шаг: пользователь запускает `disk_A_v2.trd` в Unreal/Pentagon или на NeoGS hardware и присылает полный лог. Проверяем: stage0 #A1, stage1 #A4, stage1 #A3, resident #A2, затем существующие RTC/IPC/RAM/BIOS/CPU/INT/TR-DOS регрессии. Не объявлять V2 runtime PASS до этого лога.
