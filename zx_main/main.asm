@@ -33,7 +33,19 @@ ENABLE_TRDOS_DEBUG        EQU 1
                     "neogs_sub/main.asm",
                     "neogs_sub/bootstrap.asm",
                     "neogs_sub/x86_interpreter.asm",
+                    "neogs_sub/x86_cpu_state.asm",
+                    "neogs_sub/x86_decode.asm",
+                    "neogs_sub/x86_exec_base.asm",
+                    "neogs_sub/x86_runtime.asm",
+                    "neogs_sub/x86_system.asm",
                     "neogs_sub/x86_memory.asm",
+                    "neogs_sub/bios/bios_core.asm",
+                    "tests/TEST.ASM",
+                    "tests/README.md",
+                    "tests/suites/decoder.asm",
+                    "tests/suites/registers.asm",
+                    "tests/suites/arithmetic.asm",
+                    "tests/suites/control_flow.asm",
                     "neogs_sub/build_firmware.asm"
                 }
 
@@ -196,10 +208,16 @@ START_APPLICATION:
         MACRO_EF_STRING msg_stage4
 
         ; ЭТАП 5 — ДИАГНОСТИКА УЖЕ ЗАГРУЖЕННОЙ ПРОШИВКИ NEOGS.
-        ; x86-тесты находятся в основном проекте и передаются по DMA.
-        ; neoprog.C повторно не читается и не исполняется как x86-код.
+        ; Встроенные транспортные диагностики проверяют DMA/IPC и память.
+        ; Отдельный TEST.C загружается следующим этапом и исполняется как x86.
         di
         call    RUN_NEOGS_DIAGNOSTICS
+        ei
+        jr      c, .diagnostics_failed
+
+        ; ЭТАП 6 — ЗАГРУЗКА ВНЕШНЕГО НАБОРА ИЗ TR-DOS TEST.C.
+        ; TEST.ASM собирается NASM в TEST.BIN, затем экспортируется как TEST.C.
+        call    RUN_TRDOS_X86_TEST
         ei
         jr      c, .diagnostics_failed
 
@@ -293,6 +311,17 @@ neogs_firmware_disk_end:
         ASSERT  neogs_firmware_disk_end - neogs_firmware_disk_start <= #3000
         ASSERT  neogs_firmware_disk_end <= #F000
         SAVETRD "disk_A.trd", "neoprog.C", neogs_firmware_disk_start, neogs_firmware_disk_end - neogs_firmware_disk_start
+
+        ; TEST.C — внешний контейнер x86-тестов, собранный из tests/TEST.ASM.
+        ; Хост загружает его в #C000 и передаёт каждый машинный блок NeoGS.
+        PAGE    0
+        ORG     #C000
+x86_tests_disk_start:
+        INCBIN  "TEST.BIN"
+x86_tests_disk_end:
+        ASSERT  x86_tests_disk_end - x86_tests_disk_start <= #3000
+        ASSERT  x86_tests_disk_end <= #F000
+        SAVETRD "disk_A.trd", "TEST.C", x86_tests_disk_start, x86_tests_disk_end - x86_tests_disk_start
 
 
 ; =========================================================================

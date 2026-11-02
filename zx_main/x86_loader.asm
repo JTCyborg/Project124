@@ -1,147 +1,80 @@
 ; =========================================================================
 ; PROJECT 124 — NeoGS interpreter and physical-memory diagnostics
 ;
-; All diagnostic x86 payloads are embedded in the host application and are
-; sent to the already-running NeoGS firmware through the existing DMA path.
-; neoprog.C is reserved exclusively for the NeoGS firmware image.
+; Built-in transport diagnostics remain embedded in the host application.
+; The external regression suite is loaded separately from TR-DOS TEST.C.
+; Both paths send raw x86 payloads to the running NeoGS firmware via DMA.
+; neoprog.C remains reserved exclusively for the NeoGS firmware image.
 ; =========================================================================
 
 DMA_HOST_WINDOW    EQU #0000
 DMA_WINDOW_LIMIT   EQU #3000
 
 RUN_NEOGS_DIAGNOSTICS::
-        MACRO_EF_STRING P124_msg_ipc_diag_start
+        MACRO_EF_STRING P124_msg_boot_diag_start
 
-        ; Unknown-command release and explicit firmware reset before DMA.
+        ; Release any stale command and reset the firmware protocol state.
         ld      a, #FE
         out     (GSCOM), a
         call    neogs_wait_command_done
-        jp      c, .diag_protocol_error
+        jp      c, .boot_protocol_error
 
         ld      a, CMD_RESET
         out     (GSCOM), a
         call    neogs_wait_command_done
-        jp      c, .diag_protocol_error
+        jp      c, .boot_protocol_error
 
-        ; MOV AX,BBAA / INC AX / NOP / HLT -> status 0, AX=BBAB.
-        ld      hl, x86_diag_program
-        ld      bc, x86_diag_program_end - x86_diag_program
-        call    neogs_send_dma_block
-        jp      c, .diag_dma_error
-
-        call    neogs_run_and_get_result
-        jp      c, .diag_protocol_error
-
-        ld      a, (P124_X86_RESULT_STATUS)
-        or      a
-        jp      nz, .diag_execution_error
-        ld      hl, (P124_X86_RESULT_AX)
-        ld      de, #BBAB
-        or      a
-        sbc     hl, de
-        jp      nz, .diag_wrong_result
-
-        MACRO_EF_STRING P124_msg_ipc_diag_pass
-        ld      hl, (P124_X86_RESULT_AX)
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-
-        ; Five interpreter edge cases. Every payload crosses the real DMA
-        ; transport and every result is fetched back from NeoGS over GSDAT.
-        MACRO_EF_STRING P124_msg_ipc_edge_start
-
-        ld      hl, x86_diag_inc_wrap
-        ld      bc, x86_diag_inc_wrap_end - x86_diag_inc_wrap
-        xor     a
-        ld      de, #0000
-        call    neogs_run_diag_case
-        jp      c, .diag_extended_fail
-
-        ld      hl, x86_diag_nop_hlt
-        ld      bc, x86_diag_nop_hlt_end - x86_diag_nop_hlt
-        xor     a
-        ld      de, #0000
-        call    neogs_run_diag_case
-        jp      c, .diag_extended_fail
-
-        ld      hl, x86_diag_unsupported
-        ld      bc, x86_diag_unsupported_end - x86_diag_unsupported
-        ld      a, 2
-        ld      de, #0000
-        call    neogs_run_diag_case
-        jp      c, .diag_extended_fail
-
-        ld      hl, x86_diag_truncated_mov
-        ld      bc, x86_diag_truncated_mov_end - x86_diag_truncated_mov
-        ld      a, 4
-        ld      de, #0000
-        call    neogs_run_diag_case
-        jp      c, .diag_extended_fail
-
-        ld      hl, x86_diag_fallthrough
-        ld      bc, x86_diag_fallthrough_end - x86_diag_fallthrough
-        ld      a, 4
-        ld      de, #0000
-        call    neogs_run_diag_case
-        jp      c, .diag_extended_fail
-
-        MACRO_EF_STRING P124_msg_ipc_edge_pass
-
-        ; This command invokes x86_mem_test inside the NeoGS firmware.
-        ; The host accepts PASS only after receiving status=0 and AX=1.
+        ; Run the NeoGS-side physical memory/addressing self-test.
+        ; Instruction-level x86 tests are no longer embedded here: they all
+        ; come from the external TEST.C suite loaded in the next stage.
         MACRO_EF_STRING P124_msg_memtest_start
         call    neogs_mem_test_and_get_result
-        jp      c, .diag_memtest_transport_fail
+        jp      c, .boot_memtest_transport_fail
         ld      a, (P124_X86_RESULT_STATUS)
         or      a
-        jp      nz, .diag_memtest_fail
+        jp      nz, .boot_memtest_fail
         ld      hl, (P124_X86_RESULT_AX)
         ld      de, 1
         or      a
         sbc     hl, de
-        jp      nz, .diag_memtest_fail
+        jp      nz, .boot_memtest_fail
+
         MACRO_EF_STRING P124_msg_memtest_pass
 
-        MACRO_EF_STRING P124_msg_diag_all_pass
+        ; BIOS foundation POST: clear IVT/BDA, publish and verify BDA profile.
+        MACRO_EF_STRING P124_msg_bios_post_start
+        call    neogs_bios_post_and_get_result
+        jp      c, .boot_bios_transport_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        or      a
+        jp      nz, .boot_bios_fail
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, #B105
+        or      a
+        sbc     hl, de
+        jp      nz, .boot_bios_fail
+        MACRO_EF_STRING P124_msg_bios_post_pass
+        MACRO_EF_STRING P124_msg_boot_diag_pass
         or      a
         ret
 
-; -------------------------------------------------------------------------
-; Failure exits. No PASS message is emitted unless a NeoGS result frame
-; has been received and its signature, status and expected result checked.
-; -------------------------------------------------------------------------
-.diag_dma_error:
-        MACRO_EF_STRING P124_msg_ipc_diag_dma_fail
+.boot_protocol_error:
+        MACRO_EF_STRING P124_msg_boot_protocol_fail
         scf
         ret
 
-.diag_protocol_error:
-        MACRO_EF_STRING P124_msg_ipc_diag_frame_fail
-        scf
-        ret
-
-.diag_execution_error:
-        MACRO_EF_STRING P124_msg_ipc_diag_status_fail
-        ld      a, (P124_X86_RESULT_STATUS)
-        ld      l, a
-        ld      h, 0
-        MACRO_EF_HEX16 hl
-        MACRO_EF_CHAR 13
-        scf
-        ret
-
-.diag_extended_fail:
-        MACRO_EF_STRING P124_msg_ipc_edge_fail
-        scf
-        ret
-
-.diag_memtest_transport_fail:
+.boot_memtest_transport_fail:
         MACRO_EF_STRING P124_msg_memtest_transport_fail
         scf
         ret
 
-.diag_memtest_fail:
-        MACRO_EF_STRING P124_msg_memtest_fail
+.boot_bios_transport_fail:
+        MACRO_EF_STRING P124_msg_bios_transport_fail
+        scf
+        ret
+
+.boot_bios_fail:
+        MACRO_EF_STRING P124_msg_bios_fail
         ld      a, (P124_X86_RESULT_STATUS)
         ld      l, a
         ld      h, 0
@@ -153,8 +86,13 @@ RUN_NEOGS_DIAGNOSTICS::
         scf
         ret
 
-.diag_wrong_result:
-        MACRO_EF_STRING P124_msg_ipc_diag_wrong_ax
+.boot_memtest_fail:
+        MACRO_EF_STRING P124_msg_memtest_fail
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 32
         ld      hl, (P124_X86_RESULT_AX)
         MACRO_EF_HEX16 hl
         MACRO_EF_CHAR 13
@@ -237,6 +175,16 @@ neogs_run_and_get_result:
         ret     c
         jp      neogs_get_result_frame
 
+; Run the BIOS foundation POST and fetch its standard result frame.
+neogs_bios_post_and_get_result:
+        ld      a, CMD_BIOS_POST
+        out     (GSCOM), a
+        call    neogs_wait_command_done_long
+        ret     c
+        call    neogs_drain_debug
+        ret     c
+        jp      neogs_get_result_frame
+
 ; Run the NeoGS physical-memory self-test and fetch its result frame.
 neogs_mem_test_and_get_result:
         ld      a, CMD_MEM_TEST
@@ -268,6 +216,14 @@ neogs_get_result_frame:
         ld      (P124_X86_RESULT_AX), de
         ld      (X86_RESULT_AX), de
 
+        call    neogs_wait_data_byte
+        ret     c
+        ld      e, a
+        call    neogs_wait_data_byte
+        ret     c
+        ld      d, a
+        ld      (P124_X86_RESULT_IP), de
+
         call    neogs_wait_command_done
         ret     c
 
@@ -281,59 +237,6 @@ neogs_get_result_frame:
         ret
 
 ; -------------------------------------------------------------------------
-; x86 diagnostic programs are host-side payloads, not the NeoGS firmware.
-; They are copied into NeoGS by neogs_send_dma_block immediately before RUN.
-; -------------------------------------------------------------------------
-x86_diag_program:
-        defb    #B8, #AA, #BB, #40, #90, #F4
-x86_diag_program_end:
-
-x86_diag_inc_wrap:
-        defb    #B8, #FF, #FF, #40, #F4
-x86_diag_inc_wrap_end:
-
-x86_diag_nop_hlt:
-        defb    #90, #F4
-x86_diag_nop_hlt_end:
-
-x86_diag_unsupported:
-        defb    #CC
-x86_diag_unsupported_end:
-
-x86_diag_truncated_mov:
-        defb    #B8, #34
-x86_diag_truncated_mov_end:
-
-x86_diag_fallthrough:
-        defb    #90
-x86_diag_fallthrough_end:
-
-; IN: HL=payload, BC=length, A=expected status, DE=expected AX.
-; OUT: carry clear only when the returned NeoGS frame matches both values.
-neogs_run_diag_case:
-        ld      (P124_DIAG_EXPECT_STATUS), a
-        ld      (P124_DIAG_EXPECT_AX), de
-        call    neogs_send_dma_block
-        ret     c
-        call    neogs_run_and_get_result
-        ret     c
-        ld      a, (P124_X86_RESULT_STATUS)
-        ld      b, a
-        ld      a, (P124_DIAG_EXPECT_STATUS)
-        cp      b
-        jr      nz, .diag_case_failed
-        ld      hl, (P124_X86_RESULT_AX)
-        ld      de, (P124_DIAG_EXPECT_AX)
-        or      a
-        sbc     hl, de
-        jr      nz, .diag_case_failed
-        or      a
-        ret
-.diag_case_failed:
-        scf
-        ret
-
-; -------------------------------------------------------------------------
 ; Diagnostic state and messages
 ; -------------------------------------------------------------------------
 P124_DMA_SOURCE:             dw 0
@@ -342,20 +245,318 @@ P124_DMA_HEADER:             dw 0
 P124_X86_RESULT_MAGIC:       db 0
 P124_X86_RESULT_STATUS:      db 0
 P124_X86_RESULT_AX:          dw 0
-P124_DIAG_EXPECT_STATUS:     db 0
-P124_DIAG_EXPECT_AX:         dw 0
-
-P124_msg_ipc_diag_start:     defb "[IPC TEST] Starting NeoGS interpreter diagnostic.", 13, 0
-P124_msg_ipc_diag_pass:      defb "[IPC TEST] PASS: x86 HLT completed, AX=#", 0
-P124_msg_ipc_diag_dma_fail:  defb "[IPC TEST] FAIL: DMA ready/end handshake timed out.", 13, 0
-P124_msg_ipc_diag_frame_fail:defb "[IPC TEST] FAIL: command/data frame timeout or bad signature.", 13, 0
-P124_msg_ipc_diag_status_fail:defb "[IPC TEST] FAIL: x86 interpreter returned status #", 0
-P124_msg_ipc_diag_wrong_ax:  defb "[IPC TEST] FAIL: expected AX=#BBAB, got #", 0
-P124_msg_ipc_edge_start:     defb "[IPC TEST] Running 5 interpreter edge cases through DMA.", 13, 0
-P124_msg_ipc_edge_pass:      defb "[IPC TEST] PASS: 5 interpreter edge cases; DMA/IPC stable.", 13, 0
-P124_msg_ipc_edge_fail:      defb "[IPC TEST] FAIL: interpreter edge-case or repeated DMA test.", 13, 0
+P124_X86_RESULT_IP:          dw 0
+P124_msg_boot_diag_start:    defb "[CORE] Checking NeoGS firmware and physical x86 memory map.", 13, 0
+P124_msg_boot_diag_pass:     defb "[CORE] PASS: NeoGS firmware and memory subsystem ready.", 13, 0
+P124_msg_boot_protocol_fail: defb "[CORE] FAIL: NeoGS command/data protocol error.", 13, 0
 P124_msg_memtest_start:      defb "[MEM] Testing 64 x 16 KiB page mappings at both boundaries...", 13, 0
 P124_msg_memtest_pass:       defb "[MEM] PASS: 64 page mappings and 128 boundary bytes verified.", 13, 0
+P124_msg_bios_post_start:    defb "[BIOS] Stage 1: initializing IVT and BIOS Data Area...", 13, 0
+P124_msg_bios_post_pass:     defb "[BIOS] PASS: IVT/BDA initialized; 640 KiB and text profile verified.", 13, 0
+P124_msg_bios_transport_fail:defb "[BIOS] FAIL: POST command/result transport timeout.", 13, 0
+P124_msg_bios_fail:          defb "[BIOS] FAIL: POST status/detail = ", 0
 P124_msg_memtest_fail:       defb "[MEM] FAIL: status / phase:page = ", 0
 P124_msg_memtest_transport_fail: defb "[MEM] FAIL: NeoGS memory-test command/result timeout.", 13, 0
 P124_msg_diag_all_pass:      defb "[DIAG] PASS: all NeoGS firmware diagnostics returned verified results.", 13, 0
+
+
+; =========================================================================
+; EXTERNAL X86T TEST CONTAINER — TR-DOS -> HOST RAM -> NeoGS DMA
+; Container v1:
+;   header: "X86T", version:u8, record_count:u8
+;   record: id:u16, expected_status:u8, expected_AX:u16,
+;           payload_length:u16, payload bytes
+; =========================================================================
+
+RUN_TRDOS_X86_TEST::
+        MACRO_EF_STRING P124_msg_test_suite_start
+
+        ; neogs_load_trdos_file reads TEST.C into #C000. The application
+        ; stack remains at #AFFF, safely below the staging buffer.
+        ld      hl, P124_test_filename
+        ld      a, 'C'
+        call    neogs_load_trdos_file
+        jp      c, .test_file_error
+
+        ld      (P124_TEST_FILE_LENGTH), de
+        ld      a, d
+        cp      0
+        jr      nz, .test_minimum_size_ok
+        ld      a, e
+        cp      6
+        jp      c, .test_bad_container
+.test_minimum_size_ok:
+
+        ; Validate X86T signature and supported version.
+        ld      hl, TRDOS_PANEL_BUFFER
+        ld      a, (hl)
+        cp      'X'
+        jp      nz, .test_bad_container
+        inc     hl
+        ld      a, (hl)
+        cp      '8'
+        jp      nz, .test_bad_container
+        inc     hl
+        ld      a, (hl)
+        cp      '6'
+        jp      nz, .test_bad_container
+        inc     hl
+        ld      a, (hl)
+        cp      'T'
+        jp      nz, .test_bad_container
+        inc     hl
+        ld      a, (hl)
+        cp      1
+        jp      nz, .test_bad_version
+        inc     hl
+        ld      a, (hl)
+        or      a
+        jp      z, .test_bad_container
+        ld      (P124_TEST_REMAINING_RECORDS), a
+
+        ; Cursor starts immediately after the six-byte X86T header.
+        inc     hl
+        ld      (P124_TEST_CURSOR), hl
+        ld      hl, (P124_TEST_FILE_LENGTH)
+        ld      de, 6
+        or      a
+        sbc     hl, de
+        ld      (P124_TEST_BYTES_REMAINING), hl
+
+        xor     a
+        ld      (P124_TEST_PASS_COUNT), a
+        ld      (P124_TEST_FAIL_COUNT), a
+
+.test_record_loop:
+        ld      a, (P124_TEST_REMAINING_RECORDS)
+        or      a
+        jp      z, .test_suite_complete
+
+        ; Every record header is exactly seven bytes.
+        ld      hl, (P124_TEST_BYTES_REMAINING)
+        ld      de, 7
+        or      a
+        sbc     hl, de
+        jp      c, .test_bad_container
+        ld      (P124_TEST_BYTES_REMAINING), hl
+
+        ; Decode ID, expected status, expected AX and payload length.
+        ld      hl, (P124_TEST_CURSOR)
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_ID), de
+
+        ld      a, (hl)
+        inc     hl
+        ld      (P124_TEST_EXPECT_STATUS), a
+
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_EXPECT_AX), de
+
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        ld      (P124_TEST_PAYLOAD_LENGTH), de
+        ld      (P124_TEST_CURSOR), hl
+
+        ; Reject zero-length payloads and any payload extending past EOF.
+        ld      hl, (P124_TEST_PAYLOAD_LENGTH)
+        ld      a, h
+        or      l
+        jp      z, .test_bad_container
+        ld      de, (P124_TEST_BYTES_REMAINING)
+        or      a
+        sbc     hl, de
+        jp      c, .test_payload_length_ok
+        jp      z, .test_payload_length_ok
+        jp      .test_bad_container
+
+.test_payload_length_ok:
+        ld      hl, (P124_TEST_CURSOR)
+        ld      (P124_TEST_PAYLOAD), hl
+        ld      bc, (P124_TEST_PAYLOAD_LENGTH)
+        call    neogs_send_dma_block
+        jp      c, .test_dma_error
+
+        call    neogs_run_and_get_result
+        jp      c, .test_result_error
+
+        ; Compare both expected fields. A mismatch is recorded but does not
+        ; stop the suite; transport/container errors still abort immediately.
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      b, a
+        ld      a, (P124_TEST_EXPECT_STATUS)
+        cp      b
+        jr      nz, .test_record_mismatch
+
+        ld      hl, (P124_X86_RESULT_AX)
+        ld      de, (P124_TEST_EXPECT_AX)
+        or      a
+        sbc     hl, de
+        jr      nz, .test_record_mismatch
+
+        ld      a, 1
+        ld      (P124_TEST_RESULT_MATCH), a
+        jr      .test_record_report
+
+.test_record_mismatch:
+        xor     a
+        ld      (P124_TEST_RESULT_MATCH), a
+
+.test_record_report:
+        MACRO_EF_STRING P124_msg_test_id
+        ld      hl, (P124_TEST_ID)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_expected_status
+        ld      a, (P124_TEST_EXPECT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_actual_status
+        ld      a, (P124_X86_RESULT_STATUS)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_expected_ax
+        ld      hl, (P124_TEST_EXPECT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_actual_ax
+        ld      hl, (P124_X86_RESULT_AX)
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_actual_ip
+        ld      hl, (P124_X86_RESULT_IP)
+        MACRO_EF_HEX16 hl
+
+        ld      a, (P124_TEST_RESULT_MATCH)
+        or      a
+        jr      z, .test_record_failed
+        ld      a, (P124_TEST_PASS_COUNT)
+        inc     a
+        ld      (P124_TEST_PASS_COUNT), a
+        MACRO_EF_STRING P124_msg_test_pass
+        jr      .test_record_advance
+
+.test_record_failed:
+        ld      a, (P124_TEST_FAIL_COUNT)
+        inc     a
+        ld      (P124_TEST_FAIL_COUNT), a
+        MACRO_EF_STRING P124_msg_test_fail
+
+.test_record_advance:
+        ; Advance over the payload and reduce the exact remaining byte count.
+        ld      hl, (P124_TEST_CURSOR)
+        ld      de, (P124_TEST_PAYLOAD_LENGTH)
+        add     hl, de
+        ld      (P124_TEST_CURSOR), hl
+
+        ld      hl, (P124_TEST_BYTES_REMAINING)
+        ld      de, (P124_TEST_PAYLOAD_LENGTH)
+        or      a
+        sbc     hl, de
+        ld      (P124_TEST_BYTES_REMAINING), hl
+
+        ld      a, (P124_TEST_REMAINING_RECORDS)
+        dec     a
+        ld      (P124_TEST_REMAINING_RECORDS), a
+        jp      .test_record_loop
+
+.test_suite_complete:
+        ; The container must end exactly after the last declared record.
+        ld      hl, (P124_TEST_BYTES_REMAINING)
+        ld      a, h
+        or      l
+        jp      nz, .test_bad_container
+
+        MACRO_EF_STRING P124_msg_test_summary
+        ld      a, (P124_TEST_PASS_COUNT)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_STRING P124_msg_test_summary_fail
+        ld      a, (P124_TEST_FAIL_COUNT)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+
+        ld      a, (P124_TEST_FAIL_COUNT)
+        or      a
+        jr      nz, .test_suite_failed
+        MACRO_EF_STRING P124_msg_test_suite_pass
+        or      a
+        ret
+
+.test_suite_failed:
+        MACRO_EF_STRING P124_msg_test_suite_fail
+        scf
+        ret
+
+.test_file_error:
+        MACRO_EF_STRING P124_msg_test_file_error
+        ld      a, (neo_trdos_error)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 hl
+        MACRO_EF_CHAR 13
+        scf
+        ret
+
+.test_bad_version:
+        MACRO_EF_STRING P124_msg_test_bad_version
+        scf
+        ret
+
+.test_bad_container:
+        MACRO_EF_STRING P124_msg_test_bad_container
+        scf
+        ret
+
+.test_dma_error:
+        MACRO_EF_STRING P124_msg_test_dma_error
+        scf
+        ret
+
+.test_result_error:
+        MACRO_EF_STRING P124_msg_test_result_error
+        scf
+        ret
+
+; Test container state. All values surviving NeoGS calls are stored here.
+P124_test_filename:             defb "TEST    "
+P124_TEST_FILE_LENGTH:          dw 0
+P124_TEST_CURSOR:               dw 0
+P124_TEST_BYTES_REMAINING:      dw 0
+P124_TEST_REMAINING_RECORDS:    db 0
+P124_TEST_ID:                   dw 0
+P124_TEST_EXPECT_STATUS:        db 0
+P124_TEST_EXPECT_AX:            dw 0
+P124_TEST_PAYLOAD_LENGTH:       dw 0
+P124_TEST_PAYLOAD:              dw 0
+P124_TEST_RESULT_MATCH:         db 0
+P124_TEST_PASS_COUNT:           db 0
+P124_TEST_FAIL_COUNT:           db 0
+
+P124_msg_test_suite_start:       defb "[X86TEST] Loading external TEST.C suite...", 13, 0
+P124_msg_test_id:                defb 13, "[X86TEST] ID=", 0
+P124_msg_test_expected_status:   defb " EXPECT_STATUS=", 0
+P124_msg_test_actual_status:     defb " ACTUAL_STATUS=", 0
+P124_msg_test_expected_ax:       defb " EXPECT_AX=", 0
+P124_msg_test_actual_ax:         defb " ACTUAL_AX=", 0
+P124_msg_test_actual_ip:         defb " ACTUAL_IP=", 0
+P124_msg_test_pass:              defb " PASS", 13, 0
+P124_msg_test_fail:              defb " FAIL", 13, 0
+P124_msg_test_summary:           defb "[X86TEST] PASS COUNT=", 0
+P124_msg_test_summary_fail:      defb " FAIL COUNT=", 0
+P124_msg_test_suite_pass:        defb "[X86TEST] SUITE PASS.", 13, 0
+P124_msg_test_suite_fail:        defb "[X86TEST] SUITE FAILED.", 13, 0
+P124_msg_test_file_error:        defb "[X86TEST] ERROR: cannot load TEST.C; TR-DOS error=", 0
+P124_msg_test_bad_version:       defb "[X86TEST] ERROR: unsupported X86T container version.", 13, 0
+P124_msg_test_bad_container:     defb "[X86TEST] ERROR: malformed X86T container or truncated record.", 13, 0
+P124_msg_test_dma_error:         defb "[X86TEST] ERROR: NeoGS DMA transport failed.", 13, 0
+P124_msg_test_result_error:      defb "[X86TEST] ERROR: NeoGS execution/result transport failed.", 13, 0

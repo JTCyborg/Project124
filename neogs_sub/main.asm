@@ -44,10 +44,11 @@ start_neoprogram:
 
         xor     a
         ld      (neo_dma_error), a
-        ld      (saved_z80_ax), a
-        ld      (saved_z80_ax+1), a
+        ld      (x86_reg_ax), a
+        ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
+        call    x86_cpu_reset
         ld      (x86_exit_status), a
         ld      (neo_command), a
         ld      (neo_tx_byte), a
@@ -90,6 +91,8 @@ main_loop:
         jp      z, command_get_status
         cp      CMD_MEM_TEST
         jp      z, command_mem_test
+        cp      CMD_BIOS_POST
+        jp      z, command_bios_post
         cp      CMD_DEBUG_DRAIN
         jp      z, command_debug_drain
 
@@ -109,10 +112,13 @@ command_reset:
         xor     a
         ld      (neo_dma_error), a
         ld      (x86_exit_status), a
-        ld      (saved_z80_ax), a
-        ld      (saved_z80_ax+1), a
+        ld      (x86_reg_ax), a
+        ld      (x86_reg_ax+1), a
         ld      (saved_x86_ax), a
         ld      (saved_x86_ax+1), a
+        call    x86_cpu_reset
+        ld      (x86_last_ip), a
+        ld      (x86_last_ip+1), a
         out     (CLRCBIT), a
         jp      main_loop
 
@@ -184,66 +190,13 @@ command_run_x86:
         out     (CLRCBIT), a
         jp      main_loop
 
-execute_neogs_x86:
-        ld      a, (neo_dma_error)
-        or      a
-        jr      z, .dma_ok
-        ld      hl, $FFFF
-        ld      (saved_x86_ax), hl
-        ld      a, 3
-        ld      (x86_exit_status), a
-        ret
-
-.dma_ok:
-        ; DMA frame begins with a little-endian x86 byte length at $5000.
-        ld      hl, (X86_DMA_HEADER_ADDR)
-        ld      a, h
-        or      l
-        jp      z, .invalid_x86_length
-
-        ; Maximum code length is $2FFE: $5002 + length must not exceed $8000.
-        ld      a, h
-        cp      #2F
-        jr      c, .x86_length_valid
-        jp      nz, .invalid_x86_length
-        ld      a, l
-        cp      #FF
-        jp      nc, .invalid_x86_length
-
-.x86_length_valid:
-        ld      de, X86_RAM_RUN_ADDR
-        add     hl, de
-        ld      (x86_program_end), hl
-
-        ld      hl, 0
-        ld      (saved_z80_ax), hl
-        ld      hl, #FFFF
-        ld      (x86_steps_remaining), hl
-        xor     a
-        ld      (x86_exit_status), a
-
-        ld      hl, neo_debug_msg_x86_started
-        call    neo_debug_puts
-        ld      bc, X86_RAM_RUN_ADDR
-        call    x86_execute_loop
-
-        ld      hl, (saved_z80_ax)
-        ld      (saved_x86_ax), hl
-        ret
-
-.invalid_x86_length:
-        ld      hl, #FFFF
-        ld      (saved_z80_ax), hl
-        ld      (saved_x86_ax), hl
-        ld      a, 4
-        ld      (x86_exit_status), a
-        ret
-
 ; -------------------------------------------------------------------------
 ; CMD_MEM_TEST — destructive test of the reserved 1 MiB x86 RAM region.
 ; Result is returned through the existing CMD_GET_STATUS frame.
 ; -------------------------------------------------------------------------
 command_mem_test:
+        ld      hl, 0
+        ld      (x86_last_ip), hl
         ld      hl, neo_debug_msg_memtest_started
         call    neo_debug_puts
         call    x86_mem_test
@@ -257,6 +210,13 @@ command_mem_test:
         ld      hl, neo_debug_msg_memtest_fail
         call    neo_debug_puts
 .memtest_done:
+        xor     a
+        out     (CLRCBIT), a
+        jp      main_loop
+
+; BIOS POST foundation. Uses the existing x86 RAM backend and result frame.
+command_bios_post:
+        call    bios_post
         xor     a
         out     (CLRCBIT), a
         jp      main_loop
@@ -292,9 +252,8 @@ command_debug_drain:
         jp      main_loop
 
 ; -------------------------------------------------------------------------
-; CMD_GET_STATUS — application-level frame over the documented GSDAT stream:
-;   A5 signature, exit status, AX low, AX high.
-; Every byte uses DBIT: write ZXDATWR -> host reads GSDAT -> DBIT clears.
+; CMD_GET_STATUS — structured frame:
+;   A5 signature, exit status, AX low/high, x86 IP low/high.
 ; -------------------------------------------------------------------------
 command_get_status:
         ld      a, NGS_RESULT_SIGNATURE
@@ -306,6 +265,15 @@ command_get_status:
         jr      c, .status_tx_failed
 
         ld      hl, (saved_x86_ax)
+        ld      a, l
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      a, h
+        call    neo_send_data_byte
+        jr      c, .status_tx_failed
+
+        ld      hl, (x86_last_ip)
         ld      a, l
         call    neo_send_data_byte
         jr      c, .status_tx_failed
@@ -418,12 +386,11 @@ neo_debug_buffer:
         BLOCK   255, 0
 neo_startup_message:
         db "[NEOGS] STARTUP OK: LOADED FIRMWARE EXECUTION STARTED.", 13, 0
-neo_debug_msg_x86_started: db "[NEOGS] X86 PAYLOAD EXECUTION STARTED.", 13, 0
 neo_debug_msg_memtest_started: db "[NEOGS] MEMORY TEST STARTED.", 13, 0
 neo_debug_msg_memtest_pass: db "[NEOGS] MEMORY TEST PASS.", 13, 0
 neo_debug_msg_memtest_fail: db "[NEOGS] MEMORY TEST FAIL.", 13, 0
-saved_z80_ax:      dw 0
 saved_x86_ax:      dw 0
+x86_last_ip:       dw 0
 
 ; This code is copied to $4000 during startup. Its OUT changes the ROM map,
 ; but the following JP is still fetched from RAM because PC remains in $4000.
@@ -435,6 +402,9 @@ rom_return_trampoline_code:
 rom_return_trampoline_end:
 
         INCLUDE "x86_memory.asm"
+        INCLUDE "bios/bios_core.asm"
+        INCLUDE "x86_system.asm"
+        INCLUDE "x86_runtime.asm"
         INCLUDE "x86_interpreter.asm"
 
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
