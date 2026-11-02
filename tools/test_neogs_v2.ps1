@@ -113,18 +113,22 @@ try {
     Write-Host '[V2-TEST] FULL 48-KiB fixture PASS'
 
     # Resident-only migration fixture.
-    & $Packer -BootstrapPath $Bootstrap -ResidentPath $Resident -OutputPath $Output
+    & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
-    $PayloadStart = 2 + (Read-U16 $Package 0)
+    $Stage0Length = Read-U16 $Package 0
+    $Stage1LengthOffset = 2 + $Stage0Length
+    $PayloadStart = $Stage1LengthOffset + 2 + (Read-U16 $Package $Stage1LengthOffset)
     Assert-True ($Package[$PayloadStart + 5] -eq 1) 'resident-only segment count'
     Assert-True ((Read-U16 $Package ($PayloadStart + 6)) -eq 0x4000) 'resident-only length'
     & $Verifier -PackagePath $Output
     Write-Host '[V2-TEST] RESIDENT-ONLY FIXTURE PASS'
 
     # Resident + one overlay migration fixture.
-    & $Packer -BootstrapPath $Bootstrap -ResidentPath $Resident -Overlay68Path $Overlay68 -OutputPath $Output
+    & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -Overlay68Path $Overlay68 -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
-    $PayloadStart = 2 + (Read-U16 $Package 0)
+    $Stage0Length = Read-U16 $Package 0
+    $Stage1LengthOffset = 2 + $Stage0Length
+    $PayloadStart = $Stage1LengthOffset + 2 + (Read-U16 $Package $Stage1LengthOffset)
     Assert-True ($Package[$PayloadStart + 5] -eq 2) 'two-segment count'
     Assert-True ((Read-U16 $Package ($PayloadStart + 6)) -eq 0x8000) 'two-segment length'
     & $Verifier -PackagePath $Output
@@ -134,10 +138,10 @@ try {
     $TooLarge = Join-Path $Temp 'too-large.bin'
     Write-PatternFile $Empty 0 0
     Write-PatternFile $TooLarge 0x4001 0x55
-    Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $Empty -OutputPath $Output } 'empty resident'
-    Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $TooLarge -OutputPath $Output } 'resident > 16 KiB'
-    Invoke-ExpectedFailure { & $Packer -BootstrapPath $Bootstrap -ResidentPath $Resident -Overlay68Path $TooLarge -OutputPath $Output } 'overlay > 16 KiB'
-    Invoke-ExpectedFailure { & $Packer -Stage0Path (Join-Path $Temp 'missing.bin') -Stage1Path $Stage1 -ResidentPath $Resident -OutputPath $Output } 'missing bootstrap'
+    Invoke-ExpectedFailure { & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Empty -OutputPath $Output } 'empty resident'
+    Invoke-ExpectedFailure { & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $TooLarge -OutputPath $Output } 'resident > 16 KiB'
+    Invoke-ExpectedFailure { & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -Overlay68Path $TooLarge -OutputPath $Output } 'overlay > 16 KiB'
+    Invoke-ExpectedFailure { & $Packer -Stage0Path (Join-Path $Temp 'missing.bin') -Stage1Path $Stage1 -ResidentPath $Resident -OutputPath $Output } 'missing stage-0'
 
     Write-Host '[V2-TEST] ALL TESTS PASS'
 }
