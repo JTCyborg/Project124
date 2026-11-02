@@ -228,7 +228,9 @@ upload_firmware::
         sbc     hl, de
         ld      (neo_fw_buffer_remaining), hl
 
-        ; Firmware low-window image must fit in $0000-$3FFF; stack is now in reserved WIN3.
+        ; V1 resident firmware is still limited to WIN0. During transfer the bootstrap
+        ; stack remains at #FFFE in WIN3; the resident entry later moves its stack
+        ; to WIN1/#4FFE, leaving WIN2 available for the future banked-image format.
         ld      hl, (neo_fw_length)
         ld      a, h
         or      a
