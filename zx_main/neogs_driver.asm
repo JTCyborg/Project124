@@ -880,6 +880,9 @@ gs_boot_write_command_argument:
 
 gs_boot_send_data_byte:
         ld      (neo_fw_tx_byte), a
+        ld      (neo_fw_last_tx_byte), a
+        ld      a, 1
+        ld      (neo_fw_tx_wait_state), a
         ld      bc, FW_BYTE_TIMEOUT
 .data_wait_free:
         in      a, (GSSTAT)
@@ -895,6 +898,8 @@ gs_boot_send_data_byte:
 .data_slot_free:
         ld      a, (neo_fw_tx_byte)
         out     (GSDAT), a
+        ld      a, 2
+        ld      (neo_fw_tx_wait_state), a
         ld      bc, FW_BYTE_TIMEOUT
 .data_wait_consumed:
         in      a, (GSSTAT)
@@ -913,6 +918,8 @@ gs_boot_send_data_byte:
         inc     hl
         ld      (neo_fw_bytes_sent), hl
         pop     hl
+        xor     a
+        ld      (neo_fw_tx_wait_state), a
         or      a
         ret
 
@@ -1021,6 +1028,9 @@ neo_fw_rom_ram_mid:     db 0
 neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
+neo_fw_last_tx_byte:    db 0
+; 0=idle/acknowledged, 1=waiting for a free host data slot, 2=waiting for NeoGS ACK.
+neo_fw_tx_wait_state:   db 0
 neo_fw_last_rx_byte:    db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0

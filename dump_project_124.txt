@@ -312,6 +312,37 @@ START_APPLICATION:
         ld      hl, (neo_fw_bootstrap_address)
         MACRO_EF_HEX16 HL
         MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_tx_byte
+        ld      a, (neo_fw_last_tx_byte)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_tx_state
+        ld      a, (neo_fw_tx_wait_state)
+        ld      l, a
+        ld      h, 0
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_stream_left
+        ld      hl, (neo_fw_stream_remaining)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_stream_src
+        ld      hl, (neo_fw_source)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_buffer_left
+        ld      hl, (neo_fw_buffer_remaining)
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
+        MACRO_EF_STRING msg_stage2_trdos_cursor
+        ld      a, (neo_fw_load_track)
+        ld      h, a
+        ld      a, (neo_fw_load_sector)
+        ld      l, a
+        MACRO_EF_HEX16 HL
+        MACRO_EF_CHAR 13
         di
 .firmware_upload_halt:
         halt
@@ -382,6 +413,18 @@ msg_stage2_rx:
         DEFB "[FW] LAST RX BYTE = ", 0
 msg_stage2_bootstrap:
         DEFB "[FW] BOOTSTRAP ADDRESS = ", 0
+msg_stage2_tx_byte:
+        DEFB "[FW] LAST TX BYTE = ", 0
+msg_stage2_tx_state:
+        DEFB "[FW] TX WAIT STATE (0=ACK,1=FREE SLOT,2=CONSUME ACK) = ", 0
+msg_stage2_stream_left:
+        DEFB "[FW] V2 STREAM BYTES LEFT = ", 0
+msg_stage2_stream_src:
+        DEFB "[FW] V2 STREAM SOURCE = ", 0
+msg_stage2_buffer_left:
+        DEFB "[FW] TRDOS BUFFER BYTES LEFT = ", 0
+msg_stage2_trdos_cursor:
+        DEFB "[FW] NEXT TRDOS TRACK:SECTOR = ", 0
 msg_stage2_file_start:
         DEFB "[FW] Loading neoprog.C from TR-DOS into #C000...", 13, 0
 msg_stage2_file_ok:
@@ -1555,6 +1598,9 @@ gs_boot_write_command_argument:
 
 gs_boot_send_data_byte:
         ld      (neo_fw_tx_byte), a
+        ld      (neo_fw_last_tx_byte), a
+        ld      a, 1
+        ld      (neo_fw_tx_wait_state), a
         ld      bc, FW_BYTE_TIMEOUT
 .data_wait_free:
         in      a, (GSSTAT)
@@ -1570,6 +1616,8 @@ gs_boot_send_data_byte:
 .data_slot_free:
         ld      a, (neo_fw_tx_byte)
         out     (GSDAT), a
+        ld      a, 2
+        ld      (neo_fw_tx_wait_state), a
         ld      bc, FW_BYTE_TIMEOUT
 .data_wait_consumed:
         in      a, (GSSTAT)
@@ -1588,6 +1636,8 @@ gs_boot_send_data_byte:
         inc     hl
         ld      (neo_fw_bytes_sent), hl
         pop     hl
+        xor     a
+        ld      (neo_fw_tx_wait_state), a
         or      a
         ret
 
@@ -1696,6 +1746,9 @@ neo_fw_rom_ram_mid:     db 0
 neo_fw_rom_ram_high:    db 0
 neo_fw_command_byte:    db 0
 neo_fw_tx_byte:         db 0
+neo_fw_last_tx_byte:    db 0
+; 0=idle/acknowledged, 1=waiting for a free host data slot, 2=waiting for NeoGS ACK.
+neo_fw_tx_wait_state:   db 0
 neo_fw_last_rx_byte:    db 0
 neo_fw_bytes_sent:      dw 0
 neo_fw_initial_status:  db 0
