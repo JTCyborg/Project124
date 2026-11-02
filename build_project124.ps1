@@ -102,17 +102,12 @@ try {
         throw "Spectrum host build failed (sjasmplus exit code $LASTEXITCODE)."
     }
 
-    # Run a second assembler pass to create a dedicated V2 disk image. SjASMPlus
-    # writes one TR-DOS image per pass; the V1 disk above remains unchanged.
-    & $AssemblerPath -I 'zx_main' -I 'shared' -I 'neogs_sub' 'zx_main/build_v2_disk.asm'
-    if ($LASTEXITCODE -ne 0) {
-        throw "Spectrum V2 test-disk build failed (sjasmplus exit code $LASTEXITCODE)."
-    }
     if (-not (Test-Path 'disk_A.trd')) {
         throw 'Assembler returned success, but disk_A.trd was not created.'
     }
-    if (-not (Test-Path 'disk_A_v2.trd')) {
-        throw 'Assembler returned success, but disk_A_v2.trd was not created.'
+    & (Join-Path $Root 'tools/create_v2_test_disk.ps1') -SourceImage 'disk_A.trd' -OutputImage 'disk_A_v2.trd'
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'disk_A_v2.trd')) {
+        throw 'V2 test-disk creation failed.'
     }
 
     Write-Host "Build completed. Output files:" -ForegroundColor Green
