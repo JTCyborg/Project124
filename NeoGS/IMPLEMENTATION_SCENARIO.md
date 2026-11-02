@@ -260,3 +260,14 @@ DMA-регистры Spectrum-side и внутреннее отображени�
 - **Изменения кода:** не вносились. Stage0, host handshake и эмулятор не менялись.
 - **Статус:** runtime V2 FAIL; этот лог не является новой CI-проверкой.
 - **Следующий шаг:** продолжить анализ instrumentation/debugger GS Z80 в эмуляторе; требуется наблюдать PC и обращения к #04/#02 после host write #02. Не менять протокол на основании одинаковых логов.
+
+### 2026-11-02 — V1/V2 forensic comparison (repository history)
+
+- **Рабочая контрольная точка V1:** commit `39e8632966db0ce3bff1591c2b550f052ac386d9`. На этой точке `zx_main/neogs_driver.asm` содержит только исходный `upload_firmware` V1 и общий GS105a транспорт; отдельного V2 пути ещё нет.
+- **Первое крупное включение host V2:** commit `8c46ec207fff531ffb92636f668919c9d9e19f21` (`feat: add isolated host transfer path for staged NeoGS v2`). Сравнение с V1 baseline: добавлено 339 строк в `zx_main/neogs_driver.asm`, V1 path не заменён; добавлены `bootstrap_v2_stage0.asm`, `bootstrap_v2_stage1.asm`, их build targets, packer и verifier.
+- **Выбор формата:** host проверяет маркер `V2S1` после Stage0; при совпадении делает переход в отдельный `upload_firmware_v2`, при отсутствии маркера продолжает исходный V1 код. Это подтверждено diff commit `8c46ec2...`.
+- **V1/V2 Stage0 receive comparison:** V1 `neogs_sub/bootstrap.asm` получает байт циклом `IN ZXSTAT / BIT DBIT / IN ZXDATRD`, затем записывает его в целевую память. V2 Stage0 использует тот же порядок чтения DBIT и ZXDATRD, но копит Stage1 по адресу `#4800), а не firmware с `#0000). В V1 ожидания имеют локальный счётчик `#FFFF` и timeout/error path; в V2 после commit `0a04c107...` локальный timeout удалён, ожидание бесконечное.
+- **Наблюдаемый отказ относится к новому V2 этапу:** Stage0 уже отправил READY `#A1); host распознал его и начал передачу Stage1 length, первый байт `#02). Счётчик подтверждённых DBIT байтов не увеличился, поэтому отказ до передачи Stage1 и до исполнения Stage1. Следовательно, пока не нужно искать причину в V2 descriptor parser, bank-copy loop или resident entry — они ещё не выполняются.
+- **Подтверждённое по эмулятору:** GS-side `IN (#04)` возвращает `gsstat`; `IN (#02)` очищает DBIT и возвращает `gsdata_out`; host `OUT (#B3)` записывает `gsdata_out` и устанавливает DBIT. Адреса/декодирование ZXSTAT/ZXDATRD в `shared/neogs_io.inc` соответствуют `NeoGS/ports.inc`. Это не доказывает, что Stage0 фактически выполнил `IN (#02)` во время неудачного запуска.
+- **Текущий вывод:** регрессия локализована до границы V2 Stage0 receive handshake, но конкретная причина (PC/путь исполнения/временная граница) ещё не доказана. Нельзя объявлять scheduler или эмулятор виновником без трассы.
+- **Следующая работа:** сосредоточить сравнение на первом обмене после `#A1`: V1 receiver wait vs V2 `v20_receive_byte`, порядок host slot-clear/turnaround/write, и фактический PC GS Z80. Не менять V1 и не менять handshake наугад.
