@@ -373,7 +373,7 @@ neoprog_v2_chunk0_start:
         INCBIN "zx_main/neoprog_v2_part0.bin"
 neoprog_v2_chunk0_end:
         ASSERT neoprog_v2_chunk0_end - neoprog_v2_chunk0_start = NEOGS_V2_PACKAGE_CHUNK0_SIZE
-        SAVETRD "disk_A.trd", "neoprog2.C", #C000, NEOGS_V2_PACKAGE_CHUNK0_SIZE
+        SAVETRD "disk_A.trd", "neopv2.C", #C000, NEOGS_V2_PACKAGE_CHUNK0_SIZE
 
         IF NEOGS_V2_PACKAGE_CHUNK_COUNT > 1
         PAGE    3
@@ -382,7 +382,7 @@ neoprog_v2_chunk1_start:
         INCBIN "zx_main/neoprog_v2_part1.bin"
 neoprog_v2_chunk1_end:
         ASSERT neoprog_v2_chunk1_end - neoprog_v2_chunk1_start = NEOGS_V2_PACKAGE_CHUNK1_SIZE
-        SAVETRD "disk_A.trd",&"neoprog2.C", #C000, NEOGS_V2_PACKAGE_CHUNK1_SIZE
+        SAVETRD "disk_A.trd",&"neopv2.C", #C000, NEOGS_V2_PACKAGE_CHUNK1_SIZE
         ENDIF
 
         IF NEOGS_V2_PACKAGE_CHUNK_COUNT > 2
@@ -392,7 +392,7 @@ neoprog_v2_chunk2_start:
         INCBIN "zx_main/neoprog_v2_part2.bin"
 neoprog_v2_chunk2_end:
         ASSERT neoprog_v2_chunk2_end - neoprog_v2_chunk2_start = NEOGS_V2_PACKAGE_CHUNK2_SIZE
-        SAVETRD "disk_A.trd",&"neoprog2.C", #C000, NEOGS_V2_PACKAGE_CHUNK2_SIZE
+        SAVETRD "disk_A.trd",&"neopv2.C", #C000, NEOGS_V2_PACKAGE_CHUNK2_SIZE
         ENDIF
 
         IF NEOGS_V2_PACKAGE_CHUNK_COUNT > 3
@@ -402,7 +402,7 @@ neoprog_v2_chunk3_start:
         INCBIN "zx_main/neoprog_v2_part3.bin"
 neoprog_v2_chunk3_end:
         ASSERT neoprog_v2_chunk3_end - neoprog_v2_chunk3_start = NEOGS_V2_PACKAGE_CHUNK3_SIZE
-        SAVETRD "disk_A.trd",&"neoprog2.C", #C000, NEOGS_V2_PACKAGE_CHUNK3_SIZE
+        SAVETRD "disk_A.trd",&"neopv2.C", #C000, NEOGS_V2_PACKAGE_CHUNK3_SIZE
         ENDIF
 
         PAGE    0
