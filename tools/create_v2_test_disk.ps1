@@ -16,8 +16,8 @@ if ($Image.Length -ne 655360) {
 $DirectoryOffset = 0
 $EntrySize = 16
 $EntryCount = 128
-$V1Name = 'neoprog '
-$V2Name = 'neopv2 '
+$V1Name = 'neoprog'
+$V2Name = 'neopv2'
 $V1Entry = -1
 $V2Entry = -1
 
@@ -26,11 +26,11 @@ for ($Index = 0; $Index -lt $EntryCount; $Index++) {
     $Name = [Text.Encoding]::ASCII.GetString($Image, $Offset, 8)
     $Type = [char]$Image[$Offset + 8]
     if ($Type -ne 'C') { continue }
-    if ($Name -ceq $V1Name) {
+    if ($Name.TrimEnd() -ceq $V1Name) {
         if ($V1Entry -ge 0) { throw 'Duplicate neoprog.C directory entries in source image' }
         $V1Entry = $Offset
     }
-    if ($Name -ceq $V2Name) {
+    if ($Name.TrimEnd() -ceq $V2Name) {
         if ($V2Entry -ge 0) { throw 'Duplicate neopv2.C directory entries in source image' }
         $V2Entry = $Offset
     }
