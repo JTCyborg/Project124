@@ -782,3 +782,11 @@ CI run и артефакт остаются теми же: build/verification PA
 - Status: source changes are committed; CI/build pending; runtime remains unverified. This is a targeted protocol-race correction, not a runtime PASS claim.
 
 - CI verification completed successfully for code commit `1142301fdd5bfe343bebbc3ee711c43e288a5bed`: GitHub Actions run `41414464939` completed with success, including assembler build, firmware/package/TR-DOS verification, V2 packer tests and artifact upload. This is CI/build PASS; hardware/emulator runtime remains pending.
+
+### 2026-11-02 — V2 runtime log: Stage0 #A1 received, stage1 length TX stalls
+
+- Новый runtime log пользователя: `DATA BYTES SENT=#009A`, `LAST RX BYTE=#A1`, `LAST TX BYTE=#12`, `TX WAIT STATE=2`, `BOOT PHASE=#000F`, `LAST GSSTAT=#00FE`. Stage0 уже ответил `#A1`; `#12` — младший байт stage1 length `#0212` (530 bytes). Таким образом, предыдущая точка отказа на `#13` jump handoff пройдена, но передача длины Stage1 не подтверждена.
+- Анализ host/Stage0 handshake выявил возможную гонку общего DBIT data-slot при смене направления: после чтения входящего `#A1` хост может записать следующий байт до того, как Stage0 успеет увидеть DBIT-clear от чтения своего ACK. Если clear-edge пропущен, Stage0 остаётся в ожидании завершения собственного TX `#A1`, а host ожидает consume ACK для `#12`. Это согласуется с логом, но требует runtime-проверки.
+- В `zx_main/neogs_driver.asm` добавлена bounded turnaround delay после чтения входящего data byte в `gs_boot_receive_data_byte`; early ACK recovery для `#A1` и `#A4` переведён на этот общий helper, чтобы пауза применялась и к ранним ответам. После подтверждённого `#A1` фаза теперь устанавливается в `#10` (decimal 16, stage1 length handshake), чтобы следующий лог не оставался на фазе jump.
+- Commit: `d2f5d9dbdb636ead9e287dbef1bc96da47253b1f` в `main`.
+- Статус: исходник обновлён; CI и runtime для этого изменения ещё не подтверждены. Предыдущий V2 runtime остаётся FAIL/UNRESOLVED; не считать Stage0/Stage1 или весь V2 runtime PASS.
