@@ -82,10 +82,10 @@ Payload records follow the descriptor table in the same order. There is no impli
 
 - [x] WIN1 stack relocation accepted by hardware runtime.
 - [x] Host ROM probe now enforces >= #118000 RAM; CI build passed.
-- [ ] V2 image builder/packer and positive/negative fixture tests.
+- [x] V2 image builder/packer and positive/negative fixture tests (CI PASS, run 41365886610).
 - [ ] Host V2 length/accounting path.
 - [ ] Bootstrap V2 header/descriptor receiver and bank writes.
 - [ ] Resident bank-switch/call/data helpers.
 - [ ] Linker split of resident code/data from banked overlays.
-- [ ] 48-KiB CI boundary tests and artifact.
+- [ ] 48-KiB firmware boundary packaging fixture (packer CI PASS for exact 48-KiB payload; receiver/build integration pending).
 - [ ] Hardware V2 runtime acceptance.
