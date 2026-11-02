@@ -648,8 +648,8 @@ upload_firmware_v2:
         ld      (neo_fw_last_status), a
         bit     B_DBIT, a
         jp      z, upload_firmware_v2_failed
-        in      a, (GSDAT)
-        ld      (neo_fw_last_rx_byte), a
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
         cp      NGS_BOOTSTRAP_READY_ACK
         jp      nz, upload_firmware_v2_failed
         ; The #A1 response proves the pending #40 was consumed.
@@ -671,6 +671,9 @@ upload_firmware_v2:
         jp      nz, upload_firmware_v2_failed
 
 .v2_stage0_ready:
+        ; #A1 has been consumed; report the stage-1 length handshake phase.
+        ld      a, 16
+        ld      (neo_fw_timeout_phase), a
         ld      hl, (neo_fw_stage1_length)
         ld      a, l
         call    gs_boot_send_data_byte
@@ -699,8 +702,8 @@ upload_firmware_v2:
         ld      (neo_fw_last_status), a
         bit     B_DBIT, a
         jp      z, upload_firmware_v2_failed
-        in      a, (GSDAT)
-        ld      (neo_fw_last_rx_byte), a
+        call    gs_boot_receive_data_byte
+        jp      c, upload_firmware_v2_failed
         cp      #A4
         jp      nz, upload_firmware_v2_failed
 
@@ -998,6 +1001,19 @@ gs_boot_receive_data_byte:
 .receive_ready:
         in      a, (GSDAT)
         ld      (neo_fw_last_rx_byte), a
+        ; DBIT is shared by both directions. After reading a NeoGS byte,
+        ; let the sender observe the cleared slot before the host writes
+        ; the next byte; otherwise a fast turnaround can hide the clear edge.
+        push    af
+        push    bc
+        ld      bc, #0400
+.receive_turnaround_delay:
+        dec     bc
+        ld      a, b
+        or      c
+        jr      nz, .receive_turnaround_delay
+        pop     bc
+        pop     af
         or      a
         ret
 
