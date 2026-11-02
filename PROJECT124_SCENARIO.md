@@ -755,3 +755,12 @@ CI run и артефакт остаются теми же: build/verification PA
 - Полный оркестратор build_project124.ps1 уже выполняет нужный порядок: firmware → V2 stage0 → V2 stage1 → V1 package → V2 package/chunks/include → host assembler → V2 test disk.
 - Исправлен build.bat: теперь он проверяет наличие SjASMPlus и build_project124.ps1, при необходимости загружает отсутствующий корневой pack_neogs.ps1, затем запускает единый build_project124.ps1 и проверяет создание disk_A.trd, disk_A_v2.trd и zx_main/neoprog_v2_chunks.inc.
 - Это устраняет пропуск V2-генератора в batch-сценарии. Изменение отправлено в main; локальная Windows-сборка и runtime пользователя ещё не подтверждены. Не считать build/runtime PASS до получения фактического результата.
+
+
+### 2026-11-02 — V2 runtime failure diagnostics (host-side, first pass)
+
+- Анализ фактического runtime-лога уточнил границу: при `BOOT PHASE=#14` и `DATA BYTES SENT=#02BF` подтверждены 703 байта. Из них 688 байт относятся к передаче до P124 payload, следовательно payload receiver подтвердил 15 байт: 8-байтовый P124 header, один 6-байтовый descriptor и первый байт resident data. Следующий байт не получил DBIT acknowledgement. Это локализует сбой на границе начала resident copy, но само по себе не доказывает причину.
+- В `zx_main/neogs_driver.asm` добавлены host-side диагностические переменные: последний отправленный data byte и состояние передачи (`0` — ACK получен, `1` — ожидание свободного data slot, `2` — ожидание потребления отправленного байта). Состояние обновляется внутри общей `gs_boot_send_data_byte`; V1/V2 transport protocol не менялся.
+- В `zx_main/main.asm` к существующему failure report добавлен вывод последнего TX byte, TX wait state, оставшегося размера текущего V2 stream, адреса источника в host buffer, оставшегося размера TR-DOS buffer и следующего TR-DOS track/sector cursor. Это позволит отличить timeout ожидания свободного слота от timeout подтверждения конкретного байта и увидеть, на каком source offset остановилась передача.
+- Коммиты: `9490814ab2e855fcf0639733b2cd53201e797a2a` (host TX state) и `c30b7d4779e398678d60d1d75911370301fe77e2` (diagnostic output), оба в `main`.
+- Статус: изменения внесены; assembler/CI ещё не проверены. V2 runtime остаётся FAIL/UNRESOLVED до нового лога. Никаких выводов о неисправности NeoGS RAM, TR-DOS refill или конкретной инструкции stage1 пока не делается.
