@@ -740,3 +740,9 @@ CI run и артефакт остаются теми же: build/verification PA
 - GitHub Actions run `41408352512` для commit `5fca893e260e10d3b222c95fd04245fdb328809c` — **success**. Реальный resident-only v2 package: `16 708 bytes`, 66 sectors; stage0=150, stage1=530, resident=16 006. `disk_A_v2.trd` — 655 360 bytes; проверка каталога и каждого байта package в TR-DOS image прошла. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408352512.
 - Важная граница результата: это полностью собранный и побайтно проверенный V2 test disk и CI build PASS, но не аппаратный запуск. V1 disk `disk_A.trd` остаётся без изменений и использует `neoprog.C`; V2 для теста — только `disk_A_v2.trd`, где `neoprog.C` указывает на staged v2 package.
 - Следующий обязательный шаг: пользователь запускает `disk_A_v2.trd` в Unreal/Pentagon или на NeoGS hardware и присылает полный лог. Проверяем: stage0 #A1, stage1 #A4, stage1 #A3, resident #A2, затем существующие RTC/IPC/RAM/BIOS/CPU/INT/TR-DOS регрессии. Не объявлять V2 runtime PASS до этого лога.
+
+
+### 2026-11-02 — Final CI after V2 TR-DOS verifier message correction
+
+- Run `41408492071` for commit `a88f9c9edc2647ca3b8925f22c169c934884483d` — **success**: build, V1 TR-DOS verification, V2 package verification, V2 TR-DOS byte-for-byte verification, V2 positive/negative fixtures and artifact upload all passed. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41408492071.
+- The CI artifact `project124-build` contains `disk_A.trd` (V1 default) and `disk_A_v2.trd` (resident-only V2 staged loader test). The V2 image has the same host app, but its `neoprog.C` directory entry points to the V2 package; old V1 package is retained as `neoprog1.C`.
