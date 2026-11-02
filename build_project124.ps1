@@ -22,6 +22,7 @@ try {
     $OldOutputs = @(
         'neogs_code.bin',
         'neogs_bootstrap.bin',
+        'neogs_v2_stage1.bin',
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
         'neoprog.bin',
@@ -37,6 +38,17 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "NeoGS firmware build failed (sjasmplus exit code $LASTEXITCODE)."
     }
+
+    # Assemble the isolated V2 second-stage receiver and enforce its WIN1 budget.
+    & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_bootstrap_v2_stage1.asm'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS V2 stage-1 build failed (sjasmplus exit code $LASTEXITCODE)."
+    }
+    $V2Stage1 = Get-Item 'neogs_v2_stage1.bin'
+    if ($V2Stage1.Length -le 0 -or $V2Stage1.Length -gt 0x0800) {
+        throw "V2 stage-1 exceeds temporary WIN1 area #4800..#4FFF: $($V2Stage1.Length) bytes."
+    }
+    Write-Host ("[V2-STAGE1] Isolated receiver: {0} bytes / 2048-byte budget." -f $V2Stage1.Length)
 
     & (Join-Path $Root 'pack_neogs.ps1')
     if ($LASTEXITCODE -ne 0) {
