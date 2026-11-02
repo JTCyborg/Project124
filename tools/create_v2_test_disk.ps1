@@ -1,10 +1,18 @@
 [CmdletBinding()]
 param(
     [string]$SourceImage = 'disk_A.trd',
-    [string]$OutputImage = 'disk_A_v2.trd'
+    [string]$OutputImage = 'disk_A_v2.trd',
+    [string]$PackagePath = 'neoprog_v2.bin'
 )
 $ErrorActionPreference = 'Stop'
 
+if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
+    throw "V2 package not found: $PackagePath"
+}
+[byte[]]$Package = [IO.File]::ReadAllBytes($PackagePath)
+if ($Package.Length -le 0 -or $Package.Length -gt 0xFF00) {
+    throw "Invalid V2 package length: $($Package.Length)"
+}
 if (-not (Test-Path -LiteralPath $SourceImage -PathType Leaf)) {
     throw "Source TR-DOS image not found: $SourceImage"
 }
@@ -46,6 +54,14 @@ if ($V2Entry -lt 0) { throw 'V2 neopv2.C entry not found in source TR-DOS image'
 [Array]::Copy($OldName, 0, $Copy, $V1Entry, 8)
 [Array]::Copy($ActiveName, 0, $Copy, $V2Entry, 8)
 
+# SjASMPlus writes the chunks contiguously but leaves the first chunk's
+# catalogue length/count in place for this separately named append sequence.
+# Finalize the V2 directory metadata to the exact package size; the verifier
+# below checks that all bytes are physically contiguous and correct.
+$Copy[$V2Entry + 11] = [byte]($Package.Length -band 0xFF)
+$Copy[$V2Entry + 12] = [byte](($Package.Length -shr 8) -band 0xFF)
+$Copy[$V2Entry + 13] = [byte][Math]::Ceiling($Package.Length / 256.0)
+
 $OutputDirectory = Split-Path -Parent $OutputImage
 if (-not [string]::IsNullOrWhiteSpace($OutputDirectory) -and -not (Test-Path -LiteralPath $OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
@@ -67,4 +83,5 @@ if ($ActiveCount -ne 1 -or $OldCount -ne 1) {
     Remove-Item -LiteralPath $OutputImage -Force
     throw "V2 disk directory post-check failed: active=$ActiveCount old=$OldCount"
 }
+Write-Host ("[V2-DISK] PASS: package={0} bytes / {1} sectors; " -f $Package.Length, [Math]::Ceiling($Package.Length / 256.0))
 Write-Host "[V2-DISK] PASS: $OutputImage; neoprog.C points to staged V2 package; V1 retained as neoprog1.C"
