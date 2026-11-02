@@ -676,3 +676,13 @@ CI run и артефакт остаются теми же: build/verification PA
 - Commits: verifier `f2016ff837922bcc662810242e730f88f72acd91`; malformed fixtures `ba6ed4b55532c2ae30183800c63cb6600d5682c0`.
 - CI runs `41405827968` и `41405849949` запущены для этих изменений; результат ожидается. До их завершения тесты не отмечать PASS.
 - Архитектурный вывод для следующего этапа: текущий 196-byte bootstrap не может быть просто расширен парсером v2 без нарушения первого-sector ограничения 254 байта. Поэтому v2 загрузчик должен быть двухступенчатым: stage-0 остаётся маленьким и совместимым с GS #14/#13, stage-1 исполняется из временной области WIN1 вне DMA frame, принимает/проверяет v2 заголовок и выполняет bank writes в WIN0/WIN2. Нельзя посылать v2 `P124` payload через текущий v1 bootstrap: он воспримет его как flat firmware и выполнит magic. Требуется отдельный согласованный package/host protocol, v1 остаётся default.
+
+
+### 2026-11-02 — V2 implementation step 3: isolated stage-1 receiver source
+
+- Добавлен `neogs_sub/bootstrap_v2_stage1.asm`: второй этап загрузчика, размещаемый в WIN1 по адресу #4800. Он исполняется из WIN1, поэтому переключает только WIN2/MPAG; стек остаётся в WIN3/page2 до передачи управления resident firmware.
+- Реализован протокол stage-1: отправляет #A4 READY, принимает точную длину v2 payload, подтверждает #A3, проверяет `P124`/version/count/total и все дескрипторы до первой записи в RAM; проверяет допустимые pages 0/68/69, уникальность, offset=0, длины 1..#4000, flags и сумму длин; затем копирует page0 через WIN0, pages68/69 через MPAG (#22/#A2), восстанавливая default MPAG=#80 после каждого overlay.
+- Ошибка/тайм-аут ведут к #E1 и HALT; после полной записи stage-1 делает JP 0000, где resident firmware выдаёт существующий #A2. Сам stage-1 не выдаёт ложный firmware-ready ACK.
+- Добавлен отдельный build target `neogs_sub/build_bootstrap_v2_stage1.asm`; `build_project124.ps1` теперь ассемблирует его отдельно и проверяет лимит 2048 байт (#4800..#4FFF). Workflow публикует `neogs_v2_stage1.bin`. Основной v1 bootstrap, packer и TR-DOS пакет не переключаются на v2.
+- Commits: stage-1 source `4b4ff947eeec3f13e1a5d34915e2ffddadd255df`; duplicate-page validation `8af557a1cd4d6b06a43dde8159f8c79fbbce36ad`; build target `2f748daa06e3bec16e6cd2909b717c562d8bdacf`; build integration `64be49269e8ab3bc9910ee6fda54fd6aafcff0e5`; workflow artifact `6e32487cd95a8d0f64d4608649f49bb6b52dd0c7`.
+- Ограничение текущего шага: stage-1 пока изолированный бинарный модуль. Его загрузка stage-0 и передача ему v2 payload ещё не подключены к host. Нужны сборка/проверка размера, затем stage-0 v2 и host protocol. Не использовать `neoprog_v2.bin` для запуска.
