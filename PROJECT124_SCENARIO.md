@@ -721,3 +721,12 @@ CI run и артефакт остаются теми же: build/verification PA
 - Packer/verifier/tests обновлены под `[WORD stage0][stage0][V2S1][WORD stage1][stage1][P124 payload]`; stage1 length смещён после marker. Проверяется точное наличие marker.
 - CI run `41406660067` для commit `05313682304330c9005ed46a745843d8cb224829` — **success**: полный 48-KiB synthetic package `49 866 bytes`, 195 sectors; stage0=150, stage1=530, payload=49 178; malformed inputs rejected, resident-only и two-segment fixtures verified. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41406660067.
 - Stage0/stage1/packer пока не интегрированы с host transfer. Ветка v1 остаётся единственным активным runtime путём. Следующий шаг — распознавание V2S1 и отдельная host-последовательность загрузки stage0, stage1 и payload; затем TR-DOS v2 test package с отдельным именем файла.
+
+
+### 2026-11-02 — V2 host parser and staged transfer path
+
+- В `zx_main/neogs_driver.asm` добавлено распознавание точного marker `V2S1` после stage-0 prefix. Проверка выполняется только если stage0+marker+stage1 length metadata помещаются в первый сектор; отсутствие marker оставляет прежний v1 путь без изменений.
+- Добавлен отдельный `upload_firmware_v2`: повторный #F4/#20 RAM probe; #14/#13 установка stage-0; передача stage1 length+bytes; ожидание #A4; передача P124 payload length+bytes; ожидание resident #A2; точный byte-count check по всем DBIT-acknowledged GS bytes. Для stage1 и payload используется общий stream helper с переиспользованием #C000 и подкачкой TR-DOS секторов без буфера всего файла.
+- Stage0 metadata budget ограничен 248 bytes, потому что в первом секторе после `WORD stage0 + stage0` должны также находиться `V2S1` и WORD stage1 length. Stage0=150 bytes, stage1=530 bytes; это подтверждено сборкой.
+- GitHub Actions run `41407099336` для commit `20f459c2ff1d8f60067256c57e0cd9abbacdf7a3` — **success**: Z80 host/firmware assembler, v1 package/TR-DOS verification, v2 staged package fixtures, stage0/1 assembly и artifact upload прошли. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41407099336.
+- Это только host/assembler CI PASS. V2 TR-DOS test disk и аппаратная загрузка ещё не созданы/не проверены. Следующий шаг — собирать реальный resident-only v2 package из `neogs_code.bin`, помещать его в отдельный `disk_A_v2.trd` под именем `neoprog.C`, затем просить пользователя проверить аппаратный runtime. Полный 48-KiB firmware split/linker и overlay runtime usage остаются отдельно.
