@@ -118,7 +118,6 @@ try {
     & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
     $Stage0Length = Read-U16 $Package 0
-    $Stage1LengthOffset = 2 + $Stage0Length
     $Stage1MarkerOffset = 2 + $Stage0Length
     $Stage1LengthOffset = $Stage1MarkerOffset + 4
     $PayloadStart = $Stage1LengthOffset + 2 + (Read-U16 $Package $Stage1LengthOffset)
@@ -131,7 +130,8 @@ try {
     & $Packer -Stage0Path $Stage0 -Stage1Path $Stage1 -ResidentPath $Resident -Overlay68Path $Overlay68 -OutputPath $Output
     [byte[]]$Package = [IO.File]::ReadAllBytes($Output)
     $Stage0Length = Read-U16 $Package 0
-    $Stage1LengthOffset = 2 + $Stage0Length
+    $Stage1MarkerOffset = 2 + $Stage0Length
+    $Stage1LengthOffset = $Stage1MarkerOffset + 4
     $PayloadStart = $Stage1LengthOffset + 2 + (Read-U16 $Package $Stage1LengthOffset)
     Assert-True ($Package[$PayloadStart + 5] -eq 2) 'two-segment count'
     Assert-True ((Read-U16 $Package ($PayloadStart + 6)) -eq 0x8000) 'two-segment length'
