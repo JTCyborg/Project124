@@ -697,6 +697,19 @@ upload_firmware_v2:
         ld      (neo_fw_last_rx_byte), a
         cp      #A4
         jp      nz, upload_firmware_v2_failed
+
+        ; The stream helper advances its source counters only after a normal
+        ; DBIT-clear observation. #A4 proves the final stage-1 byte was read,
+        ; so account for that byte here before the payload stream starts.
+        ld      hl, (neo_fw_source)
+        inc     hl
+        ld      (neo_fw_source), hl
+        ld      hl, (neo_fw_buffer_remaining)
+        dec     hl
+        ld      (neo_fw_buffer_remaining), hl
+        ld      hl, (neo_fw_stream_remaining)
+        dec     hl
+        ld      (neo_fw_stream_remaining), hl
         jr      .v2_stage1_ready
 
 .v2_stage1_stream_tx_done:
