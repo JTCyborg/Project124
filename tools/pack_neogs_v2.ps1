@@ -100,7 +100,7 @@ foreach ($Segment in $Segments) {
     $DataOffset += $Segment.Bytes.Length
 }
 
-$PackageLength = 2 + $Stage0.Length + 2 + $Stage1.Length + $Payload.Length
+$PackageLength = 2 + $Stage0.Length + 4 + 2 + $Stage1.Length + $Payload.Length
 if ($PackageLength -gt 0xFF00) {
     throw "V2 package exceeds TR-DOS 255-sector limit: $PackageLength bytes"
 }
@@ -108,7 +108,10 @@ if ($PackageLength -gt 0xFF00) {
 $Package = New-Object byte[] $PackageLength
 [Array]::Copy([BitConverter]::GetBytes([UInt16]$Stage0.Length), 0, $Package, 0, 2)
 [Array]::Copy($Stage0, 0, $Package, 2, $Stage0.Length)
-$Stage1LengthOffset = 2 + $Stage0.Length
+$Stage1MarkerOffset = 2 + $Stage0.Length
+[byte[]]$Stage1Marker = [Text.Encoding]::ASCII.GetBytes('V2S1')
+[Array]::Copy($Stage1Marker, 0, $Package, $Stage1MarkerOffset, 4)
+$Stage1LengthOffset = $Stage1MarkerOffset + 4
 [Array]::Copy([BitConverter]::GetBytes([UInt16]$Stage1.Length), 0, $Package, $Stage1LengthOffset, 2)
 [Array]::Copy($Stage1, 0, $Package, $Stage1LengthOffset + 2, $Stage1.Length)
 [Array]::Copy($Payload, 0, $Package, $Stage1LengthOffset + 2 + $Stage1.Length, $Payload.Length)
