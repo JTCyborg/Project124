@@ -105,7 +105,7 @@ try {
     if (-not (Test-Path 'disk_A.trd')) {
         throw 'Assembler returned success, but disk_A.trd was not created.'
     }
-    & (Join-Path $Root 'tools/create_v2_test_disk.ps1') -SourceImage 'disk_A.trd' -OutputImage 'disk_A_v2.trd'
+    & (Join-Path $Root 'tools/create_v2_test_disk.ps1') -SourceImage 'disk_A.trd' -OutputImage 'disk_A_v2.trd' -PackagePath 'neoprog_v2.bin'
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'disk_A_v2.trd')) {
         throw 'V2 test-disk creation failed.'
     }
