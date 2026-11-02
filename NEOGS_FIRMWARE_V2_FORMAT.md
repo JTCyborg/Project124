@@ -83,7 +83,7 @@ Payload records follow the descriptor table in the same order. There is no impli
 - [x] WIN1 stack relocation accepted by hardware runtime.
 - [x] Host ROM probe now enforces >= #118000 RAM; CI build passed.
 - [x] V2 image builder/packer and positive/negative fixture tests (packer CI PASS, run 41365886610).
-- [ ] Independent v2 package verifier and malformed-header fixture suite (CI pending, runs 41405827968 / 41405849949).
+- [x] Independent v2 package verifier and malformed-header fixture suite (CI PASS, run 41405849949).
 - [ ] Host V2 length/accounting path (must be paired with stage-1 bootstrap protocol; v1 path remains active).
 - [ ] Two-stage bootstrap integration: compact stage-0 must load this WIN1 stage-1 module; host must stream its exact payload length before the V2 image.
 - [ ] Resident bank-switch/call/data helpers.
