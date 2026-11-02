@@ -27,8 +27,15 @@ try {
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
         'neoprog.bin',
+        'neoprog_v2.bin',
+        'zx_main/neoprog_v2_chunks.inc',
+        'zx_main/neoprog_v2_part0.bin',
+        'zx_main/neoprog_v2_part1.bin',
+        'zx_main/neoprog_v2_part2.bin',
+        'zx_main/neoprog_v2_part3.bin',
         'zx_main/neoprog.bin',
-        'disk_A.trd'
+        'disk_A.trd',
+        'disk_A_v2.trd'
     )
     foreach ($File in $OldOutputs) {
         if (Test-Path $File) { Remove-Item $File -Force }
@@ -67,12 +74,20 @@ try {
         throw "NeoGS package creation failed."
     }
 
+    # Build a separate resident-only V2 package and its 16-KiB host chunks.
+    & (Join-Path $Root 'tools/pack_neogs_v2.ps1') -ResidentPath 'neogs_code.bin' -OutputPath 'neoprog_v2.bin'
+    if ($LASTEXITCODE -ne 0) {
+        throw "NeoGS V2 package creation failed."
+    }
+
     $Generated = @(
         'neogs_code.bin',
         'neogs_bootstrap.bin',
         'zx_main/neogs_code.bin',
         'zx_main/neogs_bootstrap.bin',
         'neoprog.bin',
+        'neoprog_v2.bin',
+        'zx_main/neoprog_v2_chunks.inc',
         'zx_main/neoprog.bin'
     )
     foreach ($File in $Generated) {
@@ -89,9 +104,12 @@ try {
     if (-not (Test-Path 'disk_A.trd')) {
         throw 'Assembler returned success, but disk_A.trd was not created.'
     }
+    if (-not (Test-Path 'disk_A_v2.trd')) {
+        throw 'Assembler returned success, but disk_A_v2.trd was not created.'
+    }
 
     Write-Host "Build completed. Output files:" -ForegroundColor Green
-    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','neoprog.bin','disk_A.trd' |
+    Get-Item 'neogs_code.bin','neogs_bootstrap.bin','neoprog.bin','neoprog_v2.bin','disk_A.trd','disk_A_v2.trd' |
         Select-Object Name,Length,LastWriteTime |
         Format-Table -AutoSize
 }
