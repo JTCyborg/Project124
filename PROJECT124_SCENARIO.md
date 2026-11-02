@@ -651,3 +651,5 @@ CI run и артефакт остаются теми же: build/verification PA
 - Следующий этап: проверить сборку; затем зафиксировать v2 header/segment descriptor и написать тесты packer на адреса назначения, размер каждого сегмента, total firmware <= #C000 и overlap с reserved pages. Только после этого менять bootstrap/host transfer в согласованном порядке.
 
 - CI для RAM-size guard: run `41365546148`, commit `39e8632966db0ce3bff1591c2b550f052ac386d9` — **success**. Шаги firmware/package/host/TR-DOS build, verify и artifact upload завершились success. Это build PASS; runtime новой проверки размера RAM ещё не выполнен.
+
+- Зафиксирован отдельный v2 wire-format contract: `NEOGS_FIRMWARE_V2_FORMAT.md` (commit `4f904fd414c749c4a66385f95d163415a529957e`). Формат: magic `P124`, version 2, до трёх шестибайтовых segment descriptors, resident page 0 и overlay pages 68/69, payload <= #C000; descriptor validation, reserved map, host streaming и receiver алгоритм описаны точно. Документ не означает, что v2 уже поддерживается runtime.
