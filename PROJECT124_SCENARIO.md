@@ -1,6 +1,6 @@
 # Project124 — рабочий сценарий и журнал реализации
 
-Обновлено: 2026-11-01
+Обновлено: 2026-11-02
 
 ## Цель текущего этапа
 
@@ -46,7 +46,7 @@
 | CPU-04 | Аудит PCem 8086 reference и план расширения активного ядра | Аудит выполнен (первичный) | Изучены `PCem/808x.c`, `PCem/x86.h`, `PCem/x86_flags.h`; сформирована карта пробелов и очередность расширения. PCem используется как семантический reference, без прямого переноса C-кода |
 | CPU-05 | Реализация immediate ALU: accumulator-immediate и группы 80/81/83 | **В работе; реализация заблокирована бюджетом firmware** |
 | CPU-I/O-02 | Сборка и runtime-регрессия гостевых IN/OUT | **Runtime PASS 2026-11-02 (подтверждён по общему успешному результату self-test)** | Пять сценариев выполнены внутри `x86_real_mode_test`; явный host marker добавлен отдельным коммитом после запуска |
-| STACK-01 | Z80 stack relocation + guard | **Runtime PASS 2026-11-02** | WIN2 guard #B800..#B87F intact; stack stayed above #B880 after Stage 5. Stack moved to fixed WIN2/page #01 (SP=#BFFE); 128-byte canary #B800..#B87F; check after Stage 5 |
+| STACK-01 | Z80 stack relocation + guard (previous layout) | Historical Runtime PASS 2026-11-02 | Previous WIN2/page #01 layout, SP=#BFFE, guard #B800..#B87F; superseded by STACK-02 |\n| STACK-02 | Z80 stack relocation to WIN1 + guard | **CI build PASS; hardware runtime pending** | New SP=#4FFE in PG1/page #03; 128-byte guard #4800..#487F; DMA still starts #5000; marker updated to WIN1/#4880 |
 | CPU-STR-01 | MOVS/CMPS/STOS/LODS/SCAS byte/word, no REP | **Runtime PASS 2026-11-02** | All ten forms; source segment override; DF +/-; compare FLAGS checkpoints passed. Ten opcode forms, source segment override, DF +/- and CMPS/SCAS FLAGS regression | Активный decoder и ALU/FLAGS helpers проанализированы. Текущий `neogs_code.bin` = 13 311 байт (`#33FF`) при ASSERT `<=#3400`: свободен 1 байт. До добавления opcode handlers требуется безопасно освободить/вынести код и тестовые данные; ASSERT сохраняется |
 
 ## Обязательные критерии завершения потоковой загрузки
@@ -532,3 +532,107 @@ GitHub Actions run **41363938732** for source commit `54b89e1f22bc6b7b62002dc3a4
 **Build: PASS. Runtime: PENDING.** The new CPU-STR-02 regression has not yet been executed on the user's Pentagon/NeoGS runtime. Do not mark REP support complete until the user log contains `[CPU-STR-02] PASS` and the existing CPU-I/O, CPU-STR-01, INT, BIOS and STACK markers remain successful.
 
 This build leaves only 378 bytes below the firmware `#4000` ceiling. Avoid adding more firmware features before runtime validation; any required correction should first be evaluated against this remaining budget.
+
+
+### 2026-11-02 — CPU-STR-02: полный runtime PASS на Pentagon/NeoGS
+
+Пользователь предоставил полный runtime-лог пакета `neoprog.C` длиной `#3F4C` (64 TR-DOS sectors), соответствующего CI run **41363938732**, artifact ID **13106601153**.
+
+**Ключевое подтверждение новой функциональности:**
+
+- `[CPU-STR-02] PASS: REP MOVSB; REPE CMPSB; REPNE SCASB; CX=0; REP + SS override.`
+- Отдельный host marker выведен после выполнения полного guest regression, поэтому это подтверждение runtime, а не только успешной сборки.
+- Проверены повторные byte/word операции, остановка REPE/REPNE по ZF, обнулённый CX без выполнения тела, обновление CX/SI/DI и source segment override на всех итерациях.
+
+**Сохранность предыдущей регрессии в том же запуске:**
+
+- IPC HLT: PASS, AX=#BBAB; пять interpreter edge cases: PASS.
+- 64-page RAM, word access и segment/offset wrap: PASS.
+- BIOS IVT/BDA и INT Stage 2A stack frame / IRET: PASS.
+- CPU arithmetic, branches, stack/call/ret, MOV/ModR/M и I/O regression: PASS.
+- `[CPU-I/O] PASS`: IN/OUT E4-E7 и EC-EF; immediate/DX; byte/word; full DX; FLAGS.
+- `[CPU-STR] PASS`: все десять single-step MOVS/CMPS/STOS/LODS/SCAS форм byte/word, segment override, DF +/- и FLAGS.
+- `[INT] PASS`: guest INT 20h handler executed; IRET returned to caller.
+- `[BIOS] PASS`: INT 10h mode/cursor/teletype; 42-column stream.
+- Stage 5 TR-DOS task/file sectors/DMA: PASS; result status/AX=`0000 BBAB`.
+- `[STACK] PASS`: 128-byte WIN2 guard intact; stack stayed above #B880.
+- Финальная строка: `[HALT] Core task pipeline executed entirely. System suspended.`
+
+**Итоговые статусы:**
+
+- CPU-STR-01: Runtime PASS.
+- CPU-STR-02 (REP/REPE/REPNE): Runtime PASS.
+- CPU-I/O-02: Runtime PASS.
+- STACK-01: Runtime PASS.
+- Полный pipeline данного пакета: Runtime PASS.
+
+CI run и артефакт остаются теми же: build/verification PASS в run **41363938732**, пакет `#3F4C`, 64 сектора. Новый build после пользовательского runtime-лога не требуется: исходники и пакет не менялись. В логе нет CRC/побайтной проверки содержимого пакета, поэтому FW-10 не закрывать; стресс-тест загрузки пакета не менее 48 КБ (FW-09) также остаётся отдельной отложенной задачей.
+
+**Ближайшее действие:** зафиксировать эту сборку как новую runtime baseline; затем отдельно провести аудит firmware budget и плана расширения CPU core. В текущем образе до лимита #4000 оставалось 378 байт — не добавлять крупные функции без предварительного измерения размера и плана размещения.
+
+
+### 2026-11-02 — CPU-STR-02 runtime PASS и аудит целевого 48-КиБ firmware limit
+
+**Runtime baseline:** пользовательский полный запуск пакета `#3F4C` (64 сектора) подтвердил `[CPU-STR-02] PASS` для REP MOVSB, REPE CMPSB, REPNE SCASB, CX=0 и REP + SS override. В том же логе прошли CPU-I/O, CPU-STR-01, INT 20h/IRET, BIOS INT 10h, Stage 5 DMA и STACK guard; pipeline завершился штатным HALT. Это runtime PASS на Pentagon/NeoGS для CI package из run `41363938732`.
+
+**Проверка ограничения firmware по текущему `main`:** целевой предел 48 KiB принят как требование проекта; однако текущие исходники ещё не реализуют его сквозным образом. Обнаружены несогласованные/нерасширенные проверки:
+
+- `neogs_sub/build_firmware.asm`: `ASSERT neogs_firmware_end <= $4000` — assembler limit 16 KiB.
+- `pack_neogs.ps1`: `$Firmware.Length -gt 0x4000` — package tool limit 16 KiB.
+- `.github/workflows/project124-build.yml`: CI rejects firmware above `0x4000` и печатает limit 16384.
+- `neogs_sub/bootstrap.asm`: несмотря на комментарий о 48-KiB physical map и конфигурацию MPAG/MPAGEX, длина отвергается при значении больше `#4000`; копирование начинается с HL=0 линейно.
+- `zx_main/neogs_driver.asm`: firmware length validator также отвергает всё, что больше `#4000`.
+
+**Критически важная деталь адресной карты:** в bootstrap документированы WIN0 `0000-3FFF`, WIN1 `4000-7FFF`, WIN2 `8000-BFFF`, WIN3 `C000-FFFF`; WIN1 содержит зарезервированный DMA frame `#5000-#7FFF`, а bootstrap размещает Z80 stack в `#F000-#FFFF`. Firmware сейчас собирается как один линейный образ с `ORG 0` и загружается линейно в адрес 0. Поэтому простая замена константы `#4000` на `#C000` небезопасна: она затронет DMA frame/служебную область и может привести к повреждению исполняемого кода или стека. Требуется согласованная сегментная/банковая схема загрузки и размещения, а не только увеличение числовых лимитов.
+
+**Вывод аудита:** 48 KiB — целевой предел/требование, но по состоянию проверенного `main` он пока не подтверждён как реально доступный размер firmware. Текущий пакет `#3F4C` и runtime PASS остаются валидными; firmware image в этой сборке занимает `#3E86` (16 006 байт). Старое замечание о запасе 378 байт относится только к действующему 16-KiB assembler/packer/CI ceiling и не должно использоваться как общий проектный лимит.
+
+**Следующий технический этап:** спроектировать и документировать 48-KiB размещение с явными диапазонами firmware, DMA frame, trampoline и stack; определить способ загрузки в не-contiguous окна/страницы и правила адресации; после этого синхронно обновить assembler, bootstrap, host driver, packer, CI и проверки размера. До завершения этого этапа нельзя считать 48-KiB загрузку реализованной и нельзя просто ослаблять ASSERT.
+
+
+---
+
+## 2026-11-02 — начало реализации 48-КиБ firmware v2
+
+- По команде пользователя возобновлена задача 48-КиБ firmware; сценарий задач обновлён, этап переведён из общего аудита в реализацию bank-aware формата.
+- Создан документ `NEOGS_FIRMWARE_48K_LAYOUT.md` (commit `ad604b4f58abc6a3179ed634585882e35fa88817`). В нём зафиксированы проверенные исходники, текущая карта WIN0..WIN3, все критические области, инварианты, этапы реализации и критерии аппаратной приёмки.
+- Повторная проверка актуального `main` выявила, что 16-КиБ ограничения по-прежнему действуют одновременно в assembler (`build_firmware.asm`), bootstrap (`bootstrap.asm`), Z80 host driver (`neogs_driver.asm`), packer (`pack_neogs.ps1`) и CI (`project124-build.yml`). Это не было ошибочно принято за реализованные 48 КиБ.
+- Уточнена фактическая карта текущего runtime:
+  - WIN0 `0000-3FFF`, физическая page 0 — resident firmware;
+  - WIN1 `4000-7FFF`, физическая page 3 — bootstrap во время загрузки, ROM return trampoline в `4000`, DMA frame `5000-7FFF`;
+  - WIN2 `8000-BFFF`, физическая page 1 — Z80 stack `BFFE`, guard `B800-B87F`;
+  - WIN3 `C000-FFFF`, изначально page 2, затем MPAGEX переключает x86 pages 4..67.
+- Важное следствие: flat-копирование 48-КиБ образа с адреса `0000` самоуничтожит работающий bootstrap на границе `4000`, а затем перезапишет trampoline/DMA и конфликтует с активными stack/x86 windows. Поэтому увеличение лимита до `C000` в отдельных местах запрещено.
+- Начатая реализация разделена на v2 сегментный формат, host streaming, bootstrap receiver и bank-aware resident runtime. Существующий v1 flat формат до 16 КиБ должен остаться совместимым на переходном этапе.
+- Текущий blocker перед фиксацией окончательной карты сегментов: подтвердить по первичной документации GS105a фактическую ёмкость/инвентаризацию физических страниц и точную семантику MPAG/MPAGEX. Текущие исходники доказывают только используемые страницы 0, 1, 2, 3 и x86 диапазон 4..67; наличие свободных overlay pages пока не доказано.
+- Код загрузчика/packer/firmware пока намеренно не менялся: без подтверждённой карты это создало бы риск повреждения DMA, стека, bootstrap или x86 RAM. Следующий шаг реализации — подтвердить физическую карту и затем заморозить v2 segment table; после этого синхронно менять все пять компонентов.
+- Статус: аудит карты — выполнен; дизайн/контракт — добавлен; v2 формат и код — ещё не реализованы; CI и runtime 48 КиБ — не PASS.
+
+
+### 2026-11-02 — implementation step 1: release WIN2 for banked firmware
+
+- Найден и проверен более точный источник по карте NeoGS: документация текущего FPGA (сводка `neogs-tdd.md` §3.2/§3.3 в Unreal-ng) подтверждает четыре независимо переключаемых окна PG0-PG3. При EXPAG порт MPAG выбирает PG2/WIN2, MPAGEX независимо выбирает PG3/WIN3; страничная гранулярность 16 КиБ.
+- На NeoGS 4 MiB доступны 256 физических страниц по 16 КиБ; на 2 MiB верхние 128 страниц зеркалируются, но страницы 0..127 остаются уникальными. Текущий x86 backend использует страницы 4..67, поэтому страницы 68 и 69 могут быть выделены под два 16-КиБ firmware overlay сегмента на обоих вариантах карты (при проверке реального размера RAM).
+- Обновлён `NEOGS_FIRMWARE_48K_LAYOUT.md`: зафиксирована v2 карта:
+  - WIN0/PG0 page 0 — resident firmware;
+  - WIN1/PG1 page 3 — trampoline `#4000`, stack `#4FFE` + guard `#4800-#487F`, DMA `#5000-#7FFF`;
+  - WIN2/PG2 via MPAG — banked overlay pages 68/69;
+  - WIN3/PG3 via MPAGEX — x86 pages 4..67.
+- Реализован первый исходный шаг: стек resident firmware перемещён с WIN2/`#BFFE` на WIN1/`#4FFE`; guard перенесён с `#B800-#B87F` на `#4800-#487F`. В старте PG1 явно устанавливается в page 3 до переноса SP; на текущих call sites последующие записи PG1 также устанавливают только page 3.
+- Обновлены полные файлы: `neogs_sub/main.asm`, `neogs_sub/build_firmware.asm`, `neogs_sub/bootstrap.asm`, `neogs_sub/x86_memory.asm`, `zx_main/neogs_driver.asm`, `pack_neogs.ps1`. Добавлены ASSERT, проверяющие, что trampoline, guard, stack и DMA frame не пересекаются.
+- Коммиты исходников (последовательные изменения main): `9b447a4820cd661a7f4e1c8c5736ca75e29f1d72`, `620484649f531bc4401c21d67de532c9b756ad27`, `f2ac34a274f7b5da747c90dd1245a4279bb27981`, `e9567210c40b7a00a9d1ae8a314514f602bf09ec`, `5cba2002bbf43180d1259a260d380c673157ce99`, `b23c685251d49166468cdba02cf4c495a89fe219`.
+- Важно: это только подготовительный шаг к banked firmware; лимит v1 16 КиБ не увеличен. v2 сегментный формат, packer, host streaming и bootstrap receiver ещё впереди.
+- Статус STACK-01 (#BFFE / guard #B800) остаётся историческим runtime PASS. Для новой конфигурации создана отдельная задача STACK-02: **исходники обновлены; build и hardware runtime ожидают**. Нельзя переносить старый PASS на новый адрес.
+- Build/CI и runtime для этого коммита ещё не подтверждены. Следующий шаг: запустить CI и проверить assembler ASSERT/firmware size; затем спроектировать v2 segment header и RAM-size guard.
+
+
+### 2026-11-02 — STACK-02 build verification
+
+- Обновлён host PASS marker в `zx_main/x86_loader.asm`: теперь он сообщает `[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.` Старый текст про WIN2/#B880 больше не должен появляться в новом логе.
+- GitHub Actions run `41365093478` для commit `779d47402ccb4533109a118dd71ada8de9f6518e`: build firmware/package/host/TR-DOS — success; firmware/package verification — success; artifact upload — success. Job cleanup ещё мог оставаться в состоянии in_progress, но все функциональные build/verify/upload steps завершены success.
+- Скачан и проверен артефакт `project124-build` (artifact ID `13106199874`):
+  - `neogs_code.bin`: 16 006 bytes = `#3E86`, запас до v1 лимита `#4000` — 378 bytes;
+  - `neogs_bootstrap.bin`: 196 bytes = `#00C4`;
+  - `neoprog.bin`: 16 204 bytes = `#3F4C`, 64 TR-DOS sectors;
+  - `disk_A.trd`: 655 360 bytes.
+- Это CI/build PASS, не hardware runtime PASS. Требуется запуск на Pentagon/NeoGS и полный лог, где новый marker подтверждает guard #4800..#487F после Stage 5. До этого не начинать перенос кода в banked WIN2.

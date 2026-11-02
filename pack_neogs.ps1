@@ -19,8 +19,9 @@ if ($Bootstrap.Length -eq 0 -or $Bootstrap.Length -gt 254) {
 }
 # Must match neogs_sub/build_firmware.asm and the runtime checks in
 # neogs_sub/bootstrap.asm and zx_main/neogs_driver.asm.
-# Firmware may occupy the full 16 KiB fixed WIN0 window. The Z80 stack is in
-# fixed WIN2/page #01 at BFFE; the lower 128 bytes at B800-B87F are a canary.
+# V1 firmware still occupies the 16 KiB resident WIN0 window. The resident
+# Z80 stack is in WIN1/page #03 at 4FFE; the lower 128 bytes at 4800-487F
+# are a canary. WIN2 is reserved for the upcoming banked firmware overlays.
 if ($Firmware.Length -eq 0 -or $Firmware.Length -gt 0x4000) {
     throw "Invalid NeoGS firmware length: $($Firmware.Length) (maximum 16384 bytes / 0x4000)"
 }

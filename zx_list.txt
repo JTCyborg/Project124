@@ -1526,462 +1526,464 @@
 228+  6912 ED 52                sbc     hl, de
 229+  6914 22 A7 6B             ld      (neo_fw_buffer_remaining), hl
 230+  6917
-231+  6917                      ; Firmware low-window image must fit in $0000-$3FFF; stack is now in reserved WIN3.
-232+  6917 2A B8 6B             ld      hl, (neo_fw_length)
-233+  691A 7C                   ld      a, h
-234+  691B B7                   or      a
-235+  691C C2 26 69             jp      nz, .firmware_high_nonzero
-236+  691F 7D                   ld      a, l
-237+  6920 B7                   or      a
-238+  6921 CA 83 6A             jp      z, .upload_failed
-239+  6924 18 0D                jr      .firmware_length_valid
-240+  6926              .firmware_high_nonzero:
-241+  6926 7C                   ld      a, h
-242+  6927 FE 40                cp      #40
-243+  6929 38 08                jr      c, .firmware_length_valid
-244+  692B C2 83 6A             jp      nz, .upload_failed
-245+  692E 7D                   ld      a, l
-246+  692F B7                   or      a
-247+  6930 C2 83 6A             jp      nz, .upload_failed
-248+  6933              .firmware_length_valid:
-249+  6933 AF                   xor     a
-250+  6934 32 C4 6B             ld      (neo_fw_bytes_sent), a
-251+  6937 32 C5 6B             ld      (neo_fw_bytes_sent+1), a
-252+  693A 32 C8 6B             ld      (neo_fw_timeout_phase), a
-253+  693D DB BB                in      a, (GSSTAT)
-254+  693F 32 C6 6B             ld      (neo_fw_initial_status), a
-255+  6942 32 C7 6B             ld      (neo_fw_last_status), a
-256+  6945
-257+  6945                      ; Phase 1: documented GS105a cold restart. Also returns a running
-258+  6945                      ; Project 124 firmware to the stock ROM before the new bootstrap.
-259+  6945 3E 01                ld      a, 1
-260+  6947 32 C8 6B             ld      (neo_fw_timeout_phase), a
-261+  694A 3E F4                ld      a, GS_CMD_COLD_RESTART
-262+  694C CD AA 6A             call    gs_boot_send_command_long
-263+  694F DA 83 6A             jp      c, .upload_failed
-264+  6952
-265+  6952                      ; Phase 2: #20 returns three RAM-size bytes only after stock ROM is up.
-266+  6952                      ; Retry #F4 once: if the previous run was interrupted during DMA, the
-267+  6952                      ; first #F4 may have been consumed as the DMA end marker; the second
-268+  6952                      ; reaches the command dispatcher after it returns to its main loop.
-269+  6952 3E 02                ld      a, 2
-270+  6954 32 C8 6B             ld      (neo_fw_timeout_phase), a
-271+  6957 CD 85 6A             call    gs_boot_probe_rom
-272+  695A 30 18                jr      nc, .stock_rom_ready
-273+  695C 3E 01                ld      a, 1
-274+  695E 32 C8 6B             ld      (neo_fw_timeout_phase), a
-275+  6961 3E F4                ld      a, GS_CMD_COLD_RESTART
-276+  6963 CD AA 6A             call    gs_boot_send_command_long
-277+  6966 DA 83 6A             jp      c, .upload_failed
-278+  6969 3E 02                ld      a, 2
-279+  696B 32 C8 6B             ld      (neo_fw_timeout_phase), a
-280+  696E CD 85 6A             call    gs_boot_probe_rom
-281+  6971 DA 83 6A             jp      c, .upload_failed
-282+  6974              .stock_rom_ready:
-283+  6974
-284+  6974                      ; Phase 3: use the native GS105a memory loader, not the MOD player.
-285+  6974                      ; #14 RECEIVE BLOCK expects the first (negative length low) byte
-286+  6974                      ; before the command, then negative length high, address low/high,
-287+  6974                      ; and exactly N payload bytes. The payload is written directly to RAM.
-288+  6974 3E 03                ld      a, 3
-289+  6976 32 C8 6B             ld      (neo_fw_timeout_phase), a
-290+  6979 21 00 00             ld      hl, 0
-291+  697C ED 5B B4 6B          ld      de, (neo_fw_bootstrap_length)
-292+  6980 B7                   or      a
-293+  6981 ED 52                sbc     hl, de                  ; HL = -bootstrap length
-294+  6983 22 BC 6B             ld      (neo_fw_block_length), hl
-295+  6986 7D                   ld      a, l
-296+  6987 CD EC 6A             call    gs_boot_write_command_argument
-297+  698A DA 83 6A             jp      c, .upload_failed
-298+  698D 3E 14                ld      a, GS_CMD_RECEIVE_BLOCK
-299+  698F CD CF 6A             call    gs_boot_send_command
-300+  6992 DA 83 6A             jp      c, .upload_failed
-301+  6995
-302+  6995                      ; Remaining #14 header: -length high, destination $4000.
-303+  6995 3A BD 6B             ld      a, (neo_fw_block_length+1)
-304+  6998 CD 09 6B             call    gs_boot_send_data_byte
-305+  699B DA 83 6A             jp      c, .upload_failed
-306+  699E AF                   xor     a
-307+  699F CD 09 6B             call    gs_boot_send_data_byte  ; destination low = $00
-308+  69A2 DA 83 6A             jp      c, .upload_failed
-309+  69A5 3E 40                ld      a, #40
-310+  69A7 CD 09 6B             call    gs_boot_send_data_byte  ; destination high = $40
-311+  69AA DA 83 6A             jp      c, .upload_failed
-312+  69AD
-313+  69AD                      ; Phase 4: transfer the executable bootstrap into RAM $4000.
-314+  69AD 3E 04                ld      a, 4
-315+  69AF 32 C8 6B             ld      (neo_fw_timeout_phase), a
-316+  69B2 2A B2 6B             ld      hl, (neo_fw_bootstrap_source)
-317+  69B5 ED 5B B4 6B          ld      de, (neo_fw_bootstrap_length)
-318+  69B9              .bootstrap_block_loop:
-319+  69B9 7A                   ld      a, d
-320+  69BA B3                   or      e
-321+  69BB 28 0B                jr      z, .bootstrap_block_done
-322+  69BD 7E                   ld      a, (hl)
-323+  69BE CD 09 6B             call    gs_boot_send_data_byte
-324+  69C1 DA 83 6A             jp      c, .upload_failed
-325+  69C4 23                   inc     hl
-326+  69C5 1B                   dec     de
-327+  69C6 18 F1                jr      .bootstrap_block_loop
-328+  69C8              .bootstrap_block_done:
-329+  69C8
-330+  69C8                      ; Phase 5: #13 JUMP TO ADDRESS. The low byte is the command's
-331+  69C8                      ; first argument and must be written before issuing the command.
-332+  69C8 3E 05                ld      a, 5
-333+  69CA 32 C8 6B             ld      (neo_fw_timeout_phase), a
-334+  69CD AF                   xor     a                       ; entry address low = $00
-335+  69CE CD EC 6A             call    gs_boot_write_command_argument
-336+  69D1 DA 83 6A             jp      c, .upload_failed
-337+  69D4 3E 13                ld      a, GS_CMD_JUMP_ADDRESS
-338+  69D6 CD CF 6A             call    gs_boot_send_command
-339+  69D9 DA 83 6A             jp      c, .upload_failed
-340+  69DC 3E 40                ld      a, #40                  ; entry address high = $40
-341+  69DE CD 09 6B             call    gs_boot_send_data_byte
-342+  69E1 DA 83 6A             jp      c, .upload_failed
-343+  69E4
-344+  69E4                      ; Phase 6: bootstrap has enabled RAM-over-ROM and is waiting at $0000.
-345+  69E4 3E 06                ld      a, 6
-346+  69E6 32 C8 6B             ld      (neo_fw_timeout_phase), a
-347+  69E9 CD 42 6B             call    gs_boot_receive_data_byte
-348+  69EC DA 83 6A             jp      c, .upload_failed
-349+  69EF FE A1                cp      NGS_BOOTSTRAP_READY_ACK
-350+  69F1 C2 83 6A             jp      nz, .upload_failed
-351+  69F4
-352+  69F4                      ; Phase 7: send firmware length low/high and require ACK #A3.
-353+  69F4 3E 07                ld      a, 7
-354+  69F6 32 C8 6B             ld      (neo_fw_timeout_phase), a
-355+  69F9 2A B8 6B             ld      hl, (neo_fw_length)
-356+  69FC 7D                   ld      a, l
-357+  69FD CD 09 6B             call    gs_boot_send_data_byte
-358+  6A00 DA 83 6A             jp      c, .upload_failed
-359+  6A03 7C                   ld      a, h
-360+  6A04 CD 09 6B             call    gs_boot_send_data_byte
-361+  6A07 DA 83 6A             jp      c, .upload_failed
-362+  6A0A CD 42 6B             call    gs_boot_receive_data_byte
-363+  6A0D DA 83 6A             jp      c, .upload_failed
-364+  6A10 FE A3                cp      NGS_BOOTSTRAP_LENGTH_ACK
-365+  6A12 C2 83 6A             jp      nz, .upload_failed
-366+  6A15
-367+  6A15                      ; Phase 8: stream the custom firmware to RAM address $0000.
-368+  6A15 3E 08                ld      a, 8
-369+  6A17 32 C8 6B             ld      (neo_fw_timeout_phase), a
-370+  6A1A 2A B6 6B             ld      hl, (neo_fw_source)
-371+  6A1D ED 5B B8 6B          ld      de, (neo_fw_length)
-372+  6A21              .firmware_stream_loop:
-373+  6A21 7A                   ld      a, d
-374+  6A22 B3                   or      e
-375+  6A23 28 31                jr      z, .firmware_stream_done
-376+  6A25
-377+  6A25                      ; Refill the same 256-byte host buffer only after its current bytes
-378+  6A25                      ; have all been consumed. DE (firmware bytes left) survives the read.
-379+  6A25 ED 4B A7 6B          ld      bc, (neo_fw_buffer_remaining)
-380+  6A29 78                   ld      a, b
-381+  6A2A B1                   or      c
-382+  6A2B 20 11                jr      nz, .firmware_buffer_ready
-383+  6A2D D5                   push    de
-384+  6A2E CD 6A 68             call    neo_fw_read_next_sector
-385+  6A31 D1                   pop     de
-386+  6A32 DA 83 6A             jp      c, .upload_failed
-387+  6A35 21 00 01             ld      hl, 256
-388+  6A38 22 A7 6B             ld      (neo_fw_buffer_remaining), hl
-389+  6A3B 21 00 C0             ld      hl, #C000
-390+  6A3E              .firmware_buffer_ready:
-391+  6A3E 7E                   ld      a, (hl)
-392+  6A3F CD 09 6B             call    gs_boot_send_data_byte
-393+  6A42 DA 83 6A             jp      c, .upload_failed
-394+  6A45 23                   inc     hl
-395+  6A46 1B                   dec     de
-396+  6A47 22 B6 6B             ld      (neo_fw_source), hl
-397+  6A4A 2A A7 6B             ld      hl, (neo_fw_buffer_remaining)
-398+  6A4D 2B                   dec     hl
-399+  6A4E 22 A7 6B             ld      (neo_fw_buffer_remaining), hl
-400+  6A51 2A B6 6B             ld      hl, (neo_fw_source)
-401+  6A54 18 CB                jr      .firmware_stream_loop
-402+  6A56
-403+  6A56              .firmware_stream_done:
-404+  6A56                      ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
-405+  6A56 3E 09                ld      a, 9
-406+  6A58 32 C8 6B             ld      (neo_fw_timeout_phase), a
-407+  6A5B CD 42 6B             call    gs_boot_receive_data_byte
-408+  6A5E DA 83 6A             jp      c, .upload_failed
-409+  6A61 FE A2                cp      NGS_FIRMWARE_READY_ACK
-410+  6A63 C2 83 6A             jp      nz, .upload_failed
-411+  6A66
-412+  6A66                      ; Cross-check every GS data byte acknowledged by DBIT. The count
-413+  6A66                      ; includes #14's remaining three header bytes, bootstrap payload,
-414+  6A66                      ; #13's high address byte, firmware length (two bytes), and firmware.
-415+  6A66                      ; The first argument byte of #14 and #13 is preloaded before command
-416+  6A66                      ; dispatch and is therefore intentionally not counted.
-417+  6A66 3E 0A                ld      a, 10
-418+  6A68 32 C8 6B             ld      (neo_fw_timeout_phase), a
-419+  6A6B 2A B4 6B             ld      hl, (neo_fw_bootstrap_length)
-420+  6A6E ED 5B B8 6B          ld      de, (neo_fw_length)
-421+  6A72 19                   add     hl, de
-422+  6A73 11 06 00             ld      de, 6
-423+  6A76 19                   add     hl, de
-424+  6A77 ED 5B C4 6B          ld      de, (neo_fw_bytes_sent)
-425+  6A7B B7                   or      a
-426+  6A7C ED 52                sbc     hl, de
-427+  6A7E C2 83 6A             jp      nz, .upload_failed
-428+  6A81
-429+  6A81 AF                   xor     a
-430+  6A82 C9                   ret
-431+  6A83
-432+  6A83              .upload_failed:
-433+  6A83 37                   scf
-434+  6A84 C9                   ret
-435+  6A85
-436+  6A85              ; -------------------------------------------------------------------------
-437+  6A85              ; Standard GS105a ROM transport primitives.
-438+  6A85              ; Commands use CBIT; data bytes use DBIT. All waits are bounded.
-439+  6A85              ; -------------------------------------------------------------------------
-440+  6A85
-441+  6A85              ; Probe stock ROM by reading the three-byte RAM size returned by command #20.
-442+  6A85              gs_boot_probe_rom:
-443+  6A85 3E 20                ld      a, GS_CMD_GET_TOTAL_RAM
-444+  6A87 CD AA 6A             call    gs_boot_send_command_long
-445+  6A8A D8                   ret     c
-446+  6A8B CD 42 6B             call    gs_boot_receive_data_byte
-447+  6A8E D8                   ret     c
-448+  6A8F 32 BE 6B             ld      (neo_fw_rom_ram_low), a
-449+  6A92 CD 42 6B             call    gs_boot_receive_data_byte
-450+  6A95 D8                   ret     c
-451+  6A96 32 BF 6B             ld      (neo_fw_rom_ram_mid), a
-452+  6A99 CD 42 6B             call    gs_boot_receive_data_byte
-453+  6A9C D8                   ret     c
-454+  6A9D 32 C0 6B             ld      (neo_fw_rom_ram_high), a
-455+  6AA0                      ; #20 reports total RAM as a 24-bit byte count. The 48-KiB
-456+  6AA0                      ; memory map needs at least four 16-KiB pages (64 KiB total):
-457+  6AA0                      ; fixed pages 0 and 3 plus selectable pages 1 and 2.
-458+  6AA0 3A C0 6B             ld      a, (neo_fw_rom_ram_high)
-459+  6AA3 B7                   or      a
-460+  6AA4 20 02                jr      nz, .rom_probe_ok
-461+  6AA6 37                   scf
-462+  6AA7 C9                   ret
-463+  6AA8              .rom_probe_ok:
-464+  6AA8 B7                   or      a
-465+  6AA9 C9                   ret
-466+  6AAA
-467+  6AAA              ; Long command wait for #F4 cold restart and ROM self-test.
-468+  6AAA              gs_boot_send_command_long:
-469+  6AAA 32 C1 6B             ld      (neo_fw_command_byte), a
-470+  6AAD 3A C1 6B             ld      a, (neo_fw_command_byte)
-471+  6AB0 D3 BB                out     (GSCOM), a
-472+  6AB2 D5                   push    de
-473+  6AB3 16 10                ld      d, 16
-474+  6AB5              .long_outer:
-475+  6AB5 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-476+  6AB8              .long_inner:
-477+  6AB8 DB BB                in      a, (GSSTAT)
-478+  6ABA 32 C7 6B             ld      (neo_fw_last_status), a
-479+  6ABD CB 47                bit     B_CBIT, a
-480+  6ABF 28 0B                jr      z, .long_done
-481+  6AC1 0B                   dec     bc
-482+  6AC2 78                   ld      a, b
-483+  6AC3 B1                   or      c
-484+  6AC4 20 F2                jr      nz, .long_inner
-485+  6AC6 15                   dec     d
-486+  6AC7 20 EC                jr      nz, .long_outer
-487+  6AC9 D1                   pop     de
-488+  6ACA 37                   scf
-489+  6ACB C9                   ret
-490+  6ACC              .long_done:
-491+  6ACC D1                   pop     de
-492+  6ACD B7                   or      a
-493+  6ACE C9                   ret
-494+  6ACF
-495+  6ACF              gs_boot_send_command:
-496+  6ACF 32 C1 6B             ld      (neo_fw_command_byte), a
-497+  6AD2 3A C1 6B             ld      a, (neo_fw_command_byte)
-498+  6AD5 D3 BB                out     (GSCOM), a
-499+  6AD7 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-500+  6ADA              .command_wait:
-501+  6ADA DB BB                in      a, (GSSTAT)
-502+  6ADC 32 C7 6B             ld      (neo_fw_last_status), a
-503+  6ADF CB 47                bit     B_CBIT, a
-504+  6AE1 28 07                jr      z, .command_done
-505+  6AE3 0B                   dec     bc
-506+  6AE4 78                   ld      a, b
-507+  6AE5 B1                   or      c
-508+  6AE6 20 F2                jr      nz, .command_wait
-509+  6AE8 37                   scf
-510+  6AE9 C9                   ret
-511+  6AEA              .command_done:
-512+  6AEA B7                   or      a
-513+  6AEB C9                   ret
-514+  6AEC
-515+  6AEC              ; Preload the first argument byte of GS105a commands #13/#14. Those
-516+  6AEC              ; handlers read this byte before clearing CBIT; later arguments use DBIT.
-517+  6AEC              gs_boot_write_command_argument:
-518+  6AEC 32 C2 6B             ld      (neo_fw_tx_byte), a
-519+  6AEF 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-520+  6AF2              .argument_wait_free:
-521+  6AF2 DB BB                in      a, (GSSTAT)
-522+  6AF4 32 C7 6B             ld      (neo_fw_last_status), a
-523+  6AF7 CB 7F                bit     B_DBIT, a
-524+  6AF9 28 07                jr      z, .argument_slot_free
-525+  6AFB 0B                   dec     bc
-526+  6AFC 78                   ld      a, b
-527+  6AFD B1                   or      c
-528+  6AFE 20 F2                jr      nz, .argument_wait_free
-529+  6B00 37                   scf
-530+  6B01 C9                   ret
-531+  6B02              .argument_slot_free:
-532+  6B02 3A C2 6B             ld      a, (neo_fw_tx_byte)
-533+  6B05 D3 B3                out     (GSDAT), a
-534+  6B07 B7                   or      a
-535+  6B08 C9                   ret
-536+  6B09
-537+  6B09              gs_boot_send_data_byte:
-538+  6B09 32 C2 6B             ld      (neo_fw_tx_byte), a
-539+  6B0C 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-540+  6B0F              .data_wait_free:
-541+  6B0F DB BB                in      a, (GSSTAT)
-542+  6B11 32 C7 6B             ld      (neo_fw_last_status), a
-543+  6B14 CB 7F                bit     B_DBIT, a
-544+  6B16 28 07                jr      z, .data_slot_free
-545+  6B18 0B                   dec     bc
-546+  6B19 78                   ld      a, b
-547+  6B1A B1                   or      c
-548+  6B1B 20 F2                jr      nz, .data_wait_free
-549+  6B1D 37                   scf
-550+  6B1E C9                   ret
-551+  6B1F              .data_slot_free:
-552+  6B1F 3A C2 6B             ld      a, (neo_fw_tx_byte)
-553+  6B22 D3 B3                out     (GSDAT), a
-554+  6B24 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-555+  6B27              .data_wait_consumed:
-556+  6B27 DB BB                in      a, (GSSTAT)
-557+  6B29 32 C7 6B             ld      (neo_fw_last_status), a
-558+  6B2C CB 7F                bit     B_DBIT, a
-559+  6B2E 28 07                jr      z, .data_consumed
-560+  6B30 0B                   dec     bc
-561+  6B31 78                   ld      a, b
-562+  6B32 B1                   or      c
-563+  6B33 20 F2                jr      nz, .data_wait_consumed
-564+  6B35 37                   scf
-565+  6B36 C9                   ret
-566+  6B37              .data_consumed:
-567+  6B37 E5                   push    hl
-568+  6B38 2A C4 6B             ld      hl, (neo_fw_bytes_sent)
-569+  6B3B 23                   inc     hl
-570+  6B3C 22 C4 6B             ld      (neo_fw_bytes_sent), hl
-571+  6B3F E1                   pop     hl
-572+  6B40 B7                   or      a
-573+  6B41 C9                   ret
-574+  6B42
-575+  6B42              gs_boot_receive_data_byte:
-576+  6B42 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
-577+  6B45              .receive_wait:
-578+  6B45 DB BB                in      a, (GSSTAT)
-579+  6B47 32 C7 6B             ld      (neo_fw_last_status), a
-580+  6B4A CB 7F                bit     B_DBIT, a
-581+  6B4C 20 07                jr      nz, .receive_ready
-582+  6B4E 0B                   dec     bc
-583+  6B4F 78                   ld      a, b
-584+  6B50 B1                   or      c
-585+  6B51 20 F2                jr      nz, .receive_wait
-586+  6B53 37                   scf
-587+  6B54 C9                   ret
-588+  6B55              .receive_ready:
-589+  6B55 DB B3                in      a, (GSDAT)
-590+  6B57 32 C3 6B             ld      (neo_fw_last_rx_byte), a
-591+  6B5A B7                   or      a
-592+  6B5B C9                   ret
-593+  6B5C
-594+  6B5C              ; -------------------------------------------------------------------------
-595+  6B5C              ; Project 124 private-protocol waits (custom firmware already running).
+231+  6917                      ; V1 resident firmware is still limited to WIN0. During transfer the bootstrap
+232+  6917                      ; stack remains at #FFFE in WIN3; the resident entry later moves its stack
+233+  6917                      ; to WIN1/#4FFE, leaving WIN2 available for the future banked-image format.
+234+  6917 2A B8 6B             ld      hl, (neo_fw_length)
+235+  691A 7C                   ld      a, h
+236+  691B B7                   or      a
+237+  691C C2 26 69             jp      nz, .firmware_high_nonzero
+238+  691F 7D                   ld      a, l
+239+  6920 B7                   or      a
+240+  6921 CA 83 6A             jp      z, .upload_failed
+241+  6924 18 0D                jr      .firmware_length_valid
+242+  6926              .firmware_high_nonzero:
+243+  6926 7C                   ld      a, h
+244+  6927 FE 40                cp      #40
+245+  6929 38 08                jr      c, .firmware_length_valid
+246+  692B C2 83 6A             jp      nz, .upload_failed
+247+  692E 7D                   ld      a, l
+248+  692F B7                   or      a
+249+  6930 C2 83 6A             jp      nz, .upload_failed
+250+  6933              .firmware_length_valid:
+251+  6933 AF                   xor     a
+252+  6934 32 C4 6B             ld      (neo_fw_bytes_sent), a
+253+  6937 32 C5 6B             ld      (neo_fw_bytes_sent+1), a
+254+  693A 32 C8 6B             ld      (neo_fw_timeout_phase), a
+255+  693D DB BB                in      a, (GSSTAT)
+256+  693F 32 C6 6B             ld      (neo_fw_initial_status), a
+257+  6942 32 C7 6B             ld      (neo_fw_last_status), a
+258+  6945
+259+  6945                      ; Phase 1: documented GS105a cold restart. Also returns a running
+260+  6945                      ; Project 124 firmware to the stock ROM before the new bootstrap.
+261+  6945 3E 01                ld      a, 1
+262+  6947 32 C8 6B             ld      (neo_fw_timeout_phase), a
+263+  694A 3E F4                ld      a, GS_CMD_COLD_RESTART
+264+  694C CD AA 6A             call    gs_boot_send_command_long
+265+  694F DA 83 6A             jp      c, .upload_failed
+266+  6952
+267+  6952                      ; Phase 2: #20 returns three RAM-size bytes only after stock ROM is up.
+268+  6952                      ; Retry #F4 once: if the previous run was interrupted during DMA, the
+269+  6952                      ; first #F4 may have been consumed as the DMA end marker; the second
+270+  6952                      ; reaches the command dispatcher after it returns to its main loop.
+271+  6952 3E 02                ld      a, 2
+272+  6954 32 C8 6B             ld      (neo_fw_timeout_phase), a
+273+  6957 CD 85 6A             call    gs_boot_probe_rom
+274+  695A 30 18                jr      nc, .stock_rom_ready
+275+  695C 3E 01                ld      a, 1
+276+  695E 32 C8 6B             ld      (neo_fw_timeout_phase), a
+277+  6961 3E F4                ld      a, GS_CMD_COLD_RESTART
+278+  6963 CD AA 6A             call    gs_boot_send_command_long
+279+  6966 DA 83 6A             jp      c, .upload_failed
+280+  6969 3E 02                ld      a, 2
+281+  696B 32 C8 6B             ld      (neo_fw_timeout_phase), a
+282+  696E CD 85 6A             call    gs_boot_probe_rom
+283+  6971 DA 83 6A             jp      c, .upload_failed
+284+  6974              .stock_rom_ready:
+285+  6974
+286+  6974                      ; Phase 3: use the native GS105a memory loader, not the MOD player.
+287+  6974                      ; #14 RECEIVE BLOCK expects the first (negative length low) byte
+288+  6974                      ; before the command, then negative length high, address low/high,
+289+  6974                      ; and exactly N payload bytes. The payload is written directly to RAM.
+290+  6974 3E 03                ld      a, 3
+291+  6976 32 C8 6B             ld      (neo_fw_timeout_phase), a
+292+  6979 21 00 00             ld      hl, 0
+293+  697C ED 5B B4 6B          ld      de, (neo_fw_bootstrap_length)
+294+  6980 B7                   or      a
+295+  6981 ED 52                sbc     hl, de                  ; HL = -bootstrap length
+296+  6983 22 BC 6B             ld      (neo_fw_block_length), hl
+297+  6986 7D                   ld      a, l
+298+  6987 CD EC 6A             call    gs_boot_write_command_argument
+299+  698A DA 83 6A             jp      c, .upload_failed
+300+  698D 3E 14                ld      a, GS_CMD_RECEIVE_BLOCK
+301+  698F CD CF 6A             call    gs_boot_send_command
+302+  6992 DA 83 6A             jp      c, .upload_failed
+303+  6995
+304+  6995                      ; Remaining #14 header: -length high, destination $4000.
+305+  6995 3A BD 6B             ld      a, (neo_fw_block_length+1)
+306+  6998 CD 09 6B             call    gs_boot_send_data_byte
+307+  699B DA 83 6A             jp      c, .upload_failed
+308+  699E AF                   xor     a
+309+  699F CD 09 6B             call    gs_boot_send_data_byte  ; destination low = $00
+310+  69A2 DA 83 6A             jp      c, .upload_failed
+311+  69A5 3E 40                ld      a, #40
+312+  69A7 CD 09 6B             call    gs_boot_send_data_byte  ; destination high = $40
+313+  69AA DA 83 6A             jp      c, .upload_failed
+314+  69AD
+315+  69AD                      ; Phase 4: transfer the executable bootstrap into RAM $4000.
+316+  69AD 3E 04                ld      a, 4
+317+  69AF 32 C8 6B             ld      (neo_fw_timeout_phase), a
+318+  69B2 2A B2 6B             ld      hl, (neo_fw_bootstrap_source)
+319+  69B5 ED 5B B4 6B          ld      de, (neo_fw_bootstrap_length)
+320+  69B9              .bootstrap_block_loop:
+321+  69B9 7A                   ld      a, d
+322+  69BA B3                   or      e
+323+  69BB 28 0B                jr      z, .bootstrap_block_done
+324+  69BD 7E                   ld      a, (hl)
+325+  69BE CD 09 6B             call    gs_boot_send_data_byte
+326+  69C1 DA 83 6A             jp      c, .upload_failed
+327+  69C4 23                   inc     hl
+328+  69C5 1B                   dec     de
+329+  69C6 18 F1                jr      .bootstrap_block_loop
+330+  69C8              .bootstrap_block_done:
+331+  69C8
+332+  69C8                      ; Phase 5: #13 JUMP TO ADDRESS. The low byte is the command's
+333+  69C8                      ; first argument and must be written before issuing the command.
+334+  69C8 3E 05                ld      a, 5
+335+  69CA 32 C8 6B             ld      (neo_fw_timeout_phase), a
+336+  69CD AF                   xor     a                       ; entry address low = $00
+337+  69CE CD EC 6A             call    gs_boot_write_command_argument
+338+  69D1 DA 83 6A             jp      c, .upload_failed
+339+  69D4 3E 13                ld      a, GS_CMD_JUMP_ADDRESS
+340+  69D6 CD CF 6A             call    gs_boot_send_command
+341+  69D9 DA 83 6A             jp      c, .upload_failed
+342+  69DC 3E 40                ld      a, #40                  ; entry address high = $40
+343+  69DE CD 09 6B             call    gs_boot_send_data_byte
+344+  69E1 DA 83 6A             jp      c, .upload_failed
+345+  69E4
+346+  69E4                      ; Phase 6: bootstrap has enabled RAM-over-ROM and is waiting at $0000.
+347+  69E4 3E 06                ld      a, 6
+348+  69E6 32 C8 6B             ld      (neo_fw_timeout_phase), a
+349+  69E9 CD 42 6B             call    gs_boot_receive_data_byte
+350+  69EC DA 83 6A             jp      c, .upload_failed
+351+  69EF FE A1                cp      NGS_BOOTSTRAP_READY_ACK
+352+  69F1 C2 83 6A             jp      nz, .upload_failed
+353+  69F4
+354+  69F4                      ; Phase 7: send firmware length low/high and require ACK #A3.
+355+  69F4 3E 07                ld      a, 7
+356+  69F6 32 C8 6B             ld      (neo_fw_timeout_phase), a
+357+  69F9 2A B8 6B             ld      hl, (neo_fw_length)
+358+  69FC 7D                   ld      a, l
+359+  69FD CD 09 6B             call    gs_boot_send_data_byte
+360+  6A00 DA 83 6A             jp      c, .upload_failed
+361+  6A03 7C                   ld      a, h
+362+  6A04 CD 09 6B             call    gs_boot_send_data_byte
+363+  6A07 DA 83 6A             jp      c, .upload_failed
+364+  6A0A CD 42 6B             call    gs_boot_receive_data_byte
+365+  6A0D DA 83 6A             jp      c, .upload_failed
+366+  6A10 FE A3                cp      NGS_BOOTSTRAP_LENGTH_ACK
+367+  6A12 C2 83 6A             jp      nz, .upload_failed
+368+  6A15
+369+  6A15                      ; Phase 8: stream the custom firmware to RAM address $0000.
+370+  6A15 3E 08                ld      a, 8
+371+  6A17 32 C8 6B             ld      (neo_fw_timeout_phase), a
+372+  6A1A 2A B6 6B             ld      hl, (neo_fw_source)
+373+  6A1D ED 5B B8 6B          ld      de, (neo_fw_length)
+374+  6A21              .firmware_stream_loop:
+375+  6A21 7A                   ld      a, d
+376+  6A22 B3                   or      e
+377+  6A23 28 31                jr      z, .firmware_stream_done
+378+  6A25
+379+  6A25                      ; Refill the same 256-byte host buffer only after its current bytes
+380+  6A25                      ; have all been consumed. DE (firmware bytes left) survives the read.
+381+  6A25 ED 4B A7 6B          ld      bc, (neo_fw_buffer_remaining)
+382+  6A29 78                   ld      a, b
+383+  6A2A B1                   or      c
+384+  6A2B 20 11                jr      nz, .firmware_buffer_ready
+385+  6A2D D5                   push    de
+386+  6A2E CD 6A 68             call    neo_fw_read_next_sector
+387+  6A31 D1                   pop     de
+388+  6A32 DA 83 6A             jp      c, .upload_failed
+389+  6A35 21 00 01             ld      hl, 256
+390+  6A38 22 A7 6B             ld      (neo_fw_buffer_remaining), hl
+391+  6A3B 21 00 C0             ld      hl, #C000
+392+  6A3E              .firmware_buffer_ready:
+393+  6A3E 7E                   ld      a, (hl)
+394+  6A3F CD 09 6B             call    gs_boot_send_data_byte
+395+  6A42 DA 83 6A             jp      c, .upload_failed
+396+  6A45 23                   inc     hl
+397+  6A46 1B                   dec     de
+398+  6A47 22 B6 6B             ld      (neo_fw_source), hl
+399+  6A4A 2A A7 6B             ld      hl, (neo_fw_buffer_remaining)
+400+  6A4D 2B                   dec     hl
+401+  6A4E 22 A7 6B             ld      (neo_fw_buffer_remaining), hl
+402+  6A51 2A B6 6B             ld      hl, (neo_fw_source)
+403+  6A54 18 CB                jr      .firmware_stream_loop
+404+  6A56
+405+  6A56              .firmware_stream_done:
+406+  6A56                      ; Phase 9: new firmware has jumped to $0000 and sends ACK #A2.
+407+  6A56 3E 09                ld      a, 9
+408+  6A58 32 C8 6B             ld      (neo_fw_timeout_phase), a
+409+  6A5B CD 42 6B             call    gs_boot_receive_data_byte
+410+  6A5E DA 83 6A             jp      c, .upload_failed
+411+  6A61 FE A2                cp      NGS_FIRMWARE_READY_ACK
+412+  6A63 C2 83 6A             jp      nz, .upload_failed
+413+  6A66
+414+  6A66                      ; Cross-check every GS data byte acknowledged by DBIT. The count
+415+  6A66                      ; includes #14's remaining three header bytes, bootstrap payload,
+416+  6A66                      ; #13's high address byte, firmware length (two bytes), and firmware.
+417+  6A66                      ; The first argument byte of #14 and #13 is preloaded before command
+418+  6A66                      ; dispatch and is therefore intentionally not counted.
+419+  6A66 3E 0A                ld      a, 10
+420+  6A68 32 C8 6B             ld      (neo_fw_timeout_phase), a
+421+  6A6B 2A B4 6B             ld      hl, (neo_fw_bootstrap_length)
+422+  6A6E ED 5B B8 6B          ld      de, (neo_fw_length)
+423+  6A72 19                   add     hl, de
+424+  6A73 11 06 00             ld      de, 6
+425+  6A76 19                   add     hl, de
+426+  6A77 ED 5B C4 6B          ld      de, (neo_fw_bytes_sent)
+427+  6A7B B7                   or      a
+428+  6A7C ED 52                sbc     hl, de
+429+  6A7E C2 83 6A             jp      nz, .upload_failed
+430+  6A81
+431+  6A81 AF                   xor     a
+432+  6A82 C9                   ret
+433+  6A83
+434+  6A83              .upload_failed:
+435+  6A83 37                   scf
+436+  6A84 C9                   ret
+437+  6A85
+438+  6A85              ; -------------------------------------------------------------------------
+439+  6A85              ; Standard GS105a ROM transport primitives.
+440+  6A85              ; Commands use CBIT; data bytes use DBIT. All waits are bounded.
+441+  6A85              ; -------------------------------------------------------------------------
+442+  6A85
+443+  6A85              ; Probe stock ROM by reading the three-byte RAM size returned by command #20.
+444+  6A85              gs_boot_probe_rom:
+445+  6A85 3E 20                ld      a, GS_CMD_GET_TOTAL_RAM
+446+  6A87 CD AA 6A             call    gs_boot_send_command_long
+447+  6A8A D8                   ret     c
+448+  6A8B CD 42 6B             call    gs_boot_receive_data_byte
+449+  6A8E D8                   ret     c
+450+  6A8F 32 BE 6B             ld      (neo_fw_rom_ram_low), a
+451+  6A92 CD 42 6B             call    gs_boot_receive_data_byte
+452+  6A95 D8                   ret     c
+453+  6A96 32 BF 6B             ld      (neo_fw_rom_ram_mid), a
+454+  6A99 CD 42 6B             call    gs_boot_receive_data_byte
+455+  6A9C D8                   ret     c
+456+  6A9D 32 C0 6B             ld      (neo_fw_rom_ram_high), a
+457+  6AA0                      ; #20 reports total RAM as a 24-bit byte count. The 48-KiB
+458+  6AA0                      ; memory map needs at least four 16-KiB pages (64 KiB total):
+459+  6AA0                      ; fixed pages 0 and 3 plus selectable pages 1 and 2.
+460+  6AA0 3A C0 6B             ld      a, (neo_fw_rom_ram_high)
+461+  6AA3 B7                   or      a
+462+  6AA4 20 02                jr      nz, .rom_probe_ok
+463+  6AA6 37                   scf
+464+  6AA7 C9                   ret
+465+  6AA8              .rom_probe_ok:
+466+  6AA8 B7                   or      a
+467+  6AA9 C9                   ret
+468+  6AAA
+469+  6AAA              ; Long command wait for #F4 cold restart and ROM self-test.
+470+  6AAA              gs_boot_send_command_long:
+471+  6AAA 32 C1 6B             ld      (neo_fw_command_byte), a
+472+  6AAD 3A C1 6B             ld      a, (neo_fw_command_byte)
+473+  6AB0 D3 BB                out     (GSCOM), a
+474+  6AB2 D5                   push    de
+475+  6AB3 16 10                ld      d, 16
+476+  6AB5              .long_outer:
+477+  6AB5 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+478+  6AB8              .long_inner:
+479+  6AB8 DB BB                in      a, (GSSTAT)
+480+  6ABA 32 C7 6B             ld      (neo_fw_last_status), a
+481+  6ABD CB 47                bit     B_CBIT, a
+482+  6ABF 28 0B                jr      z, .long_done
+483+  6AC1 0B                   dec     bc
+484+  6AC2 78                   ld      a, b
+485+  6AC3 B1                   or      c
+486+  6AC4 20 F2                jr      nz, .long_inner
+487+  6AC6 15                   dec     d
+488+  6AC7 20 EC                jr      nz, .long_outer
+489+  6AC9 D1                   pop     de
+490+  6ACA 37                   scf
+491+  6ACB C9                   ret
+492+  6ACC              .long_done:
+493+  6ACC D1                   pop     de
+494+  6ACD B7                   or      a
+495+  6ACE C9                   ret
+496+  6ACF
+497+  6ACF              gs_boot_send_command:
+498+  6ACF 32 C1 6B             ld      (neo_fw_command_byte), a
+499+  6AD2 3A C1 6B             ld      a, (neo_fw_command_byte)
+500+  6AD5 D3 BB                out     (GSCOM), a
+501+  6AD7 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+502+  6ADA              .command_wait:
+503+  6ADA DB BB                in      a, (GSSTAT)
+504+  6ADC 32 C7 6B             ld      (neo_fw_last_status), a
+505+  6ADF CB 47                bit     B_CBIT, a
+506+  6AE1 28 07                jr      z, .command_done
+507+  6AE3 0B                   dec     bc
+508+  6AE4 78                   ld      a, b
+509+  6AE5 B1                   or      c
+510+  6AE6 20 F2                jr      nz, .command_wait
+511+  6AE8 37                   scf
+512+  6AE9 C9                   ret
+513+  6AEA              .command_done:
+514+  6AEA B7                   or      a
+515+  6AEB C9                   ret
+516+  6AEC
+517+  6AEC              ; Preload the first argument byte of GS105a commands #13/#14. Those
+518+  6AEC              ; handlers read this byte before clearing CBIT; later arguments use DBIT.
+519+  6AEC              gs_boot_write_command_argument:
+520+  6AEC 32 C2 6B             ld      (neo_fw_tx_byte), a
+521+  6AEF 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+522+  6AF2              .argument_wait_free:
+523+  6AF2 DB BB                in      a, (GSSTAT)
+524+  6AF4 32 C7 6B             ld      (neo_fw_last_status), a
+525+  6AF7 CB 7F                bit     B_DBIT, a
+526+  6AF9 28 07                jr      z, .argument_slot_free
+527+  6AFB 0B                   dec     bc
+528+  6AFC 78                   ld      a, b
+529+  6AFD B1                   or      c
+530+  6AFE 20 F2                jr      nz, .argument_wait_free
+531+  6B00 37                   scf
+532+  6B01 C9                   ret
+533+  6B02              .argument_slot_free:
+534+  6B02 3A C2 6B             ld      a, (neo_fw_tx_byte)
+535+  6B05 D3 B3                out     (GSDAT), a
+536+  6B07 B7                   or      a
+537+  6B08 C9                   ret
+538+  6B09
+539+  6B09              gs_boot_send_data_byte:
+540+  6B09 32 C2 6B             ld      (neo_fw_tx_byte), a
+541+  6B0C 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+542+  6B0F              .data_wait_free:
+543+  6B0F DB BB                in      a, (GSSTAT)
+544+  6B11 32 C7 6B             ld      (neo_fw_last_status), a
+545+  6B14 CB 7F                bit     B_DBIT, a
+546+  6B16 28 07                jr      z, .data_slot_free
+547+  6B18 0B                   dec     bc
+548+  6B19 78                   ld      a, b
+549+  6B1A B1                   or      c
+550+  6B1B 20 F2                jr      nz, .data_wait_free
+551+  6B1D 37                   scf
+552+  6B1E C9                   ret
+553+  6B1F              .data_slot_free:
+554+  6B1F 3A C2 6B             ld      a, (neo_fw_tx_byte)
+555+  6B22 D3 B3                out     (GSDAT), a
+556+  6B24 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+557+  6B27              .data_wait_consumed:
+558+  6B27 DB BB                in      a, (GSSTAT)
+559+  6B29 32 C7 6B             ld      (neo_fw_last_status), a
+560+  6B2C CB 7F                bit     B_DBIT, a
+561+  6B2E 28 07                jr      z, .data_consumed
+562+  6B30 0B                   dec     bc
+563+  6B31 78                   ld      a, b
+564+  6B32 B1                   or      c
+565+  6B33 20 F2                jr      nz, .data_wait_consumed
+566+  6B35 37                   scf
+567+  6B36 C9                   ret
+568+  6B37              .data_consumed:
+569+  6B37 E5                   push    hl
+570+  6B38 2A C4 6B             ld      hl, (neo_fw_bytes_sent)
+571+  6B3B 23                   inc     hl
+572+  6B3C 22 C4 6B             ld      (neo_fw_bytes_sent), hl
+573+  6B3F E1                   pop     hl
+574+  6B40 B7                   or      a
+575+  6B41 C9                   ret
+576+  6B42
+577+  6B42              gs_boot_receive_data_byte:
+578+  6B42 01 FF FF             ld      bc, FW_BYTE_TIMEOUT
+579+  6B45              .receive_wait:
+580+  6B45 DB BB                in      a, (GSSTAT)
+581+  6B47 32 C7 6B             ld      (neo_fw_last_status), a
+582+  6B4A CB 7F                bit     B_DBIT, a
+583+  6B4C 20 07                jr      nz, .receive_ready
+584+  6B4E 0B                   dec     bc
+585+  6B4F 78                   ld      a, b
+586+  6B50 B1                   or      c
+587+  6B51 20 F2                jr      nz, .receive_wait
+588+  6B53 37                   scf
+589+  6B54 C9                   ret
+590+  6B55              .receive_ready:
+591+  6B55 DB B3                in      a, (GSDAT)
+592+  6B57 32 C3 6B             ld      (neo_fw_last_rx_byte), a
+593+  6B5A B7                   or      a
+594+  6B5B C9                   ret
+595+  6B5C
 596+  6B5C              ; -------------------------------------------------------------------------
-597+  6B5C              neogs_wait_command_done:
-597+  6B5C
-598+  6B5C 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
-599+  6B5F              .cmd_wait:
-600+  6B5F DB BB                in      a, (GSSTAT)
-601+  6B61 CB 47                bit     B_CBIT, a
-602+  6B63 28 07                jr      z, .cmd_done
-603+  6B65 0B                   dec     bc
-604+  6B66 78                   ld      a, b
-605+  6B67 B1                   or      c
-606+  6B68 20 F5                jr      nz, .cmd_wait
-607+  6B6A 37                   scf
-608+  6B6B C9                   ret
-609+  6B6C              .cmd_done:
-610+  6B6C B7                   or      a
-611+  6B6D C9                   ret
-612+  6B6E
-613+  6B6E              neogs_wait_command_done_long:
-613+  6B6E
-614+  6B6E D5                   push    de
-615+  6B6F 16 10                ld      d, #10
-616+  6B71              .cmd_long_outer:
-617+  6B71 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
-618+  6B74              .cmd_long_inner:
-619+  6B74 DB BB                in      a, (GSSTAT)
-620+  6B76 CB 47                bit     B_CBIT, a
-621+  6B78 28 0B                jr      z, .cmd_long_done
-622+  6B7A 0B                   dec     bc
-623+  6B7B 78                   ld      a, b
-624+  6B7C B1                   or      c
-625+  6B7D 20 F5                jr      nz, .cmd_long_inner
-626+  6B7F 15                   dec     d
-627+  6B80 20 EF                jr      nz, .cmd_long_outer
-628+  6B82 D1                   pop     de
-629+  6B83 37                   scf
-630+  6B84 C9                   ret
-631+  6B85              .cmd_long_done:
-632+  6B85 D1                   pop     de
-633+  6B86 B7                   or      a
-634+  6B87 C9                   ret
-635+  6B88
-636+  6B88              neogs_wait_data_byte:
-636+  6B88
-637+  6B88 01 FF FF             ld      bc, IPC_BYTE_TIMEOUT
-638+  6B8B              .data_wait:
-639+  6B8B DB BB                in      a, (GSSTAT)
-640+  6B8D CB 7F                bit     B_DBIT, a
-641+  6B8F 20 07                jr      nz, .data_ready
-642+  6B91 0B                   dec     bc
-643+  6B92 78                   ld      a, b
-644+  6B93 B1                   or      c
-645+  6B94 20 F5                jr      nz, .data_wait
-646+  6B96 37                   scf
-647+  6B97 C9                   ret
-648+  6B98              .data_ready:
-649+  6B98 DB B3                in      a, (GSDAT)
-650+  6B9A B7                   or      a
-651+  6B9B C9                   ret
-652+  6B9C
-653+  6B9C              ; TR-DOS NeoGS package loader state and fixed 8-character filename.
-654+  6B9C 6E 65 6F 70  neo_fw_filename:        db "neoprog "
-654+  6BA0 72 6F 67 20
-655+  6BA4 00 00        neo_fw_load_buffer:     dw 0
-656+  6BA6 00           neo_fw_load_remaining:  db 0
-657+  6BA7 00 00        neo_fw_buffer_remaining: dw 0
-658+  6BA9 00           neo_fw_load_track:      db 0
-659+  6BAA 00           neo_fw_load_sector:     db 0
-660+  6BAB 00           neo_fw_file_error:      db 0
-661+  6BAC 00 00        neo_fw_file_length:     dw 0
-662+  6BAE
-663+  6BAE              ; Stage 2 package parser and transfer state.
-664+  6BAE 00 00        neo_fw_package_source:  dw 0
-665+  6BB0 00 00        neo_fw_package_length:  dw 0
-666+  6BB2 00 00        neo_fw_bootstrap_source: dw 0
-667+  6BB4 00 00        neo_fw_bootstrap_length: dw 0
-668+  6BB6 00 00        neo_fw_source:          dw 0
-669+  6BB8 00 00        neo_fw_length:          dw 0
-670+  6BBA 00 40        neo_fw_bootstrap_address: dw #4000
-671+  6BBC 00 00        neo_fw_block_length:    dw 0
-672+  6BBE 00           neo_fw_rom_ram_low:     db 0
-673+  6BBF 00           neo_fw_rom_ram_mid:     db 0
-674+  6BC0 00           neo_fw_rom_ram_high:    db 0
-675+  6BC1 00           neo_fw_command_byte:    db 0
-676+  6BC2 00           neo_fw_tx_byte:         db 0
-677+  6BC3 00           neo_fw_last_rx_byte:    db 0
-678+  6BC4 00 00        neo_fw_bytes_sent:      dw 0
-679+  6BC6 00           neo_fw_initial_status:  db 0
-680+  6BC7 00           neo_fw_last_status:     db 0
-681+  6BC8 00           neo_fw_timeout_phase:   db 0
-682+  6BC9
+597+  6B5C              ; Project 124 private-protocol waits (custom firmware already running).
+598+  6B5C              ; -------------------------------------------------------------------------
+599+  6B5C              neogs_wait_command_done:
+599+  6B5C
+600+  6B5C 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
+601+  6B5F              .cmd_wait:
+602+  6B5F DB BB                in      a, (GSSTAT)
+603+  6B61 CB 47                bit     B_CBIT, a
+604+  6B63 28 07                jr      z, .cmd_done
+605+  6B65 0B                   dec     bc
+606+  6B66 78                   ld      a, b
+607+  6B67 B1                   or      c
+608+  6B68 20 F5                jr      nz, .cmd_wait
+609+  6B6A 37                   scf
+610+  6B6B C9                   ret
+611+  6B6C              .cmd_done:
+612+  6B6C B7                   or      a
+613+  6B6D C9                   ret
+614+  6B6E
+615+  6B6E              neogs_wait_command_done_long:
+615+  6B6E
+616+  6B6E D5                   push    de
+617+  6B6F 16 10                ld      d, #10
+618+  6B71              .cmd_long_outer:
+619+  6B71 01 FF FF             ld      bc, IPC_CMD_TIMEOUT
+620+  6B74              .cmd_long_inner:
+621+  6B74 DB BB                in      a, (GSSTAT)
+622+  6B76 CB 47                bit     B_CBIT, a
+623+  6B78 28 0B                jr      z, .cmd_long_done
+624+  6B7A 0B                   dec     bc
+625+  6B7B 78                   ld      a, b
+626+  6B7C B1                   or      c
+627+  6B7D 20 F5                jr      nz, .cmd_long_inner
+628+  6B7F 15                   dec     d
+629+  6B80 20 EF                jr      nz, .cmd_long_outer
+630+  6B82 D1                   pop     de
+631+  6B83 37                   scf
+632+  6B84 C9                   ret
+633+  6B85              .cmd_long_done:
+634+  6B85 D1                   pop     de
+635+  6B86 B7                   or      a
+636+  6B87 C9                   ret
+637+  6B88
+638+  6B88              neogs_wait_data_byte:
+638+  6B88
+639+  6B88 01 FF FF             ld      bc, IPC_BYTE_TIMEOUT
+640+  6B8B              .data_wait:
+641+  6B8B DB BB                in      a, (GSSTAT)
+642+  6B8D CB 7F                bit     B_DBIT, a
+643+  6B8F 20 07                jr      nz, .data_ready
+644+  6B91 0B                   dec     bc
+645+  6B92 78                   ld      a, b
+646+  6B93 B1                   or      c
+647+  6B94 20 F5                jr      nz, .data_wait
+648+  6B96 37                   scf
+649+  6B97 C9                   ret
+650+  6B98              .data_ready:
+651+  6B98 DB B3                in      a, (GSDAT)
+652+  6B9A B7                   or      a
+653+  6B9B C9                   ret
+654+  6B9C
+655+  6B9C              ; TR-DOS NeoGS package loader state and fixed 8-character filename.
+656+  6B9C 6E 65 6F 70  neo_fw_filename:        db "neoprog "
+656+  6BA0 72 6F 67 20
+657+  6BA4 00 00        neo_fw_load_buffer:     dw 0
+658+  6BA6 00           neo_fw_load_remaining:  db 0
+659+  6BA7 00 00        neo_fw_buffer_remaining: dw 0
+660+  6BA9 00           neo_fw_load_track:      db 0
+661+  6BAA 00           neo_fw_load_sector:     db 0
+662+  6BAB 00           neo_fw_file_error:      db 0
+663+  6BAC 00 00        neo_fw_file_length:     dw 0
+664+  6BAE
+665+  6BAE              ; Stage 2 package parser and transfer state.
+666+  6BAE 00 00        neo_fw_package_source:  dw 0
+667+  6BB0 00 00        neo_fw_package_length:  dw 0
+668+  6BB2 00 00        neo_fw_bootstrap_source: dw 0
+669+  6BB4 00 00        neo_fw_bootstrap_length: dw 0
+670+  6BB6 00 00        neo_fw_source:          dw 0
+671+  6BB8 00 00        neo_fw_length:          dw 0
+672+  6BBA 00 40        neo_fw_bootstrap_address: dw #4000
+673+  6BBC 00 00        neo_fw_block_length:    dw 0
+674+  6BBE 00           neo_fw_rom_ram_low:     db 0
+675+  6BBF 00           neo_fw_rom_ram_mid:     db 0
+676+  6BC0 00           neo_fw_rom_ram_high:    db 0
+677+  6BC1 00           neo_fw_command_byte:    db 0
+678+  6BC2 00           neo_fw_tx_byte:         db 0
+679+  6BC3 00           neo_fw_last_rx_byte:    db 0
+680+  6BC4 00 00        neo_fw_bytes_sent:      dw 0
+681+  6BC6 00           neo_fw_initial_status:  db 0
+682+  6BC7 00           neo_fw_last_status:     db 0
+683+  6BC8 00           neo_fw_timeout_phase:   db 0
+684+  6BC9
 # file closed: neogs_driver.asm
 286   6BC9                      INCLUDE "x86_loader.asm"
 # file opened: x86_loader.asm
@@ -4376,13 +4378,13 @@
 930+  8021 73 20 2F 20
 930+  8025 41 58 20 3D
 930+  8029 20 00
-931+  802B 5B 53 54 41  P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN2 guard intact; stack stayed above #B880.", 13, 0
+931+  802B 5B 53 54 41  P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.", 13, 0
 931+  802F 43 4B 5D 20
 931+  8033 50 41 53 53
 931+  8037 3A 20 31 32
 931+  803B 38 2D 62 79
 931+  803F 74 65 20 57
-931+  8043 49 4E 32 20
+931+  8043 49 4E 31 20
 931+  8047 67 75 61 72
 931+  804B 64 20 69 6E
 931+  804F 74 61 63 74
@@ -4391,7 +4393,7 @@
 931+  805B 73 74 61 79
 931+  805F 65 64 20 61
 931+  8063 62 6F 76 65
-931+  8067 20 23 42 38
+931+  8067 20 23 34 38
 931+  806B 38 30 2E 0D
 931+  806F 00
 932+  8070 5B 53 54 41  P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0

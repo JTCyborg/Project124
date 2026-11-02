@@ -862,7 +862,9 @@ upload_firmware::
         sbc     hl, de
         ld      (neo_fw_buffer_remaining), hl
 
-        ; Firmware low-window image must fit in $0000-$3FFF; stack is now in reserved WIN3.
+        ; V1 resident firmware is still limited to WIN0. During transfer the bootstrap
+        ; stack remains at #FFFE in WIN3; the resident entry later moves its stack
+        ; to WIN1/#4FFE, leaving WIN2 available for the future banked-image format.
         ld      hl, (neo_fw_length)
         ld      a, h
         or      a
@@ -2248,7 +2250,7 @@ P124_msg_file_ok:            defb "[STAGE 5] [TRDOS] Task file found.", 13, 0
 P124_msg_buf_loaded:         defb "[STAGE 5] [BUFFER] File sectors loaded into host RAM #C000.", 13, 0
 P124_msg_task_dma_ok:        defb "[STAGE 5] [DMA] NeoGS acknowledged DMA completion.", 13, 0
 P124_msg_x86_result_ready:  defb "[STAGE 5] [RESULT] Status / AX = ", 0
-P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN2 guard intact; stack stayed above #B880.", 13, 0
+P124_msg_stack_guard_pass: defb "[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.", 13, 0
 P124_msg_err_no_file:        defb "[STAGE 5] [ERROR] Task file not found.", 13, 0
 P124_msg_err_empty_file:     defb "[STAGE 5] [ERROR] Task file is empty or has zero sectors.", 13, 0
 P124_msg_err_bad_descriptor: defb "[STAGE 5] [ERROR] TR-DOS file descriptor is inconsistent.", 13, 0
@@ -3726,13 +3728,13 @@ File_Y: DB 0
 ; Based on NeoGS Programmer's Guide v0.1.A and ports.inc v0.3.
 ;
 ; MEMORY MAP / BOOT:
-; The stock GS105a ROM loads a tiny module at $5B00. That module enables
-; RAM-over-ROM and receives this firmware at logical RAM address $0000.
-; Firmware occupies fixed WIN0 ($0000-$3FFF). The Z80 stack is moved to fixed WIN2,
-; physical page #01, at $BFFE. x86_mem_map_addr remaps only WIN3 via MPAGEX;
-; MPAG/WIN2 remains fixed throughout guest-memory access. A 128-byte canary
-; at $B800-$B87F detects stack overflow; the usable stack area is ~1.87 KiB.
-; WIN1 remains on physical page #03; the DMA frame at logical $5000 maps to $00D000.
+; WIN0 ($0000-$3FFF), PG0/page #00: fixed resident Z80 firmware.
+; WIN1 ($4000-$7FFF), PG1/page #03: ROM-return trampoline at $4000,
+;   Z80 stack at $4FFE with guard $4800-$487F, DMA frame at $5000-$7FFF.
+; WIN2 ($8000-$BFFF), PG2 via MPAG: reserved for banked firmware overlays.
+; WIN3 ($C000-$FFFF), PG3 via MPAGEX: x86 physical-memory window (pages 4..67).
+; The resident stack is deliberately outside WIN2 and WIN3 so both windows
+; can be bank-switched independently without moving the active Z80 stack.
 ; =========================================================================
 
         INCLUDE "../shared/neogs_io.inc"
@@ -3742,8 +3744,8 @@ File_Y: DB 0
 ROM_RETURN_TRAMPOLINE_ADDR EQU $4000
 X86_DMA_HEADER_ADDR        EQU $5000
 X86_RAM_RUN_ADDR           EQU $5002
-Z80_STACK_TOP              EQU $BFFE
-Z80_STACK_GUARD_BASE       EQU $B800
+Z80_STACK_TOP              EQU $4FFE
+Z80_STACK_GUARD_BASE       EQU $4800
 Z80_STACK_GUARD_SIZE       EQU $0080
 Z80_STACK_FILL_LENGTH      EQU Z80_STACK_TOP - Z80_STACK_GUARD_BASE - 1
 DMA_WAIT_LIMIT   EQU #FFFF
@@ -3760,9 +3762,13 @@ IPC_WAIT_LIMIT   EQU #FFFF
 start_neoprogram:
         di
         im      1
-        ld      sp, Z80_STACK_TOP     ; fixed WIN2/page #01; only WIN3 is remapped by MPAGEX
-        ; Fill the reserved stack area with a canary before the first CALL/PUSH.
-        ; The lower 128 bytes remain a guard; normal stack use grows down from BFFE.
+        ; PG1 must be the physical page #03 before SP is moved into WIN1.
+        ; At this point the bootstrap stack is still in WIN3 at #FFFE.
+        ld      a, #03
+        call    neo_set_pg1
+        ld      sp, Z80_STACK_TOP     ; WIN1/page #03; DMA begins at #5000
+        ; Fill the stack region with a canary before the first normal CALL/PUSH.
+        ; The lower 128 bytes remain a guard; normal stack use grows down from #4FFE.
         ld      hl, Z80_STACK_GUARD_BASE
         ld      (hl), #A5
         ld      de, Z80_STACK_GUARD_BASE + 1
@@ -4135,8 +4141,8 @@ command_run_x86_real:
         out     (CLRCBIT), a
         jp      main_loop
 
-; Check the lower 128-byte canary in fixed WIN2/page #01.
-; Carry set means the Z80 stack crossed the #B880 safety boundary.
+; Check the lower 128-byte canary in WIN1/page #03.
+; Carry set means the Z80 stack crossed the #4880 safety boundary.
 z80_stack_guard_check:
         ld      hl, Z80_STACK_GUARD_BASE
         ld      b, Z80_STACK_GUARD_SIZE
@@ -4325,7 +4331,11 @@ rom_return_trampoline_end:
         INCLUDE "x86_strings.asm"
         INCLUDE "bios/bios_video.asm"
 
-; The return trampoline occupies $4000; the DMA frame starts at $5000.
+; WIN1 layout: trampoline $4000-$400F, guard $4800-$487F, stack grows
+; down from $4FFE, and the DMA frame starts at $5000.
+        ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= Z80_STACK_GUARD_BASE
+        ASSERT Z80_STACK_GUARD_BASE + Z80_STACK_GUARD_SIZE <= Z80_STACK_TOP
+        ASSERT Z80_STACK_TOP < X86_DMA_HEADER_ADDR
         ASSERT ROM_RETURN_TRAMPOLINE_ADDR + 16 <= X86_DMA_HEADER_ADDR
         ASSERT X86_DMA_HEADER_ADDR = #5000
         ASSERT neogs_dma_handler_end <= #5000
@@ -4347,8 +4357,9 @@ neogs_firmware_end:
 ; length and exactly that many bytes through the documented ZX data channel,
 ; stores the custom firmware at RAM address $0000, then jumps to $0000.
 ;
-; It executes from fixed RAM window $4000-$7FFF. Its stack is moved to
-; reserved $F000-$FFFF after the extended RAM windows are configured.
+; It executes from fixed RAM window $4000-$7FFF. During bootstrap receive,
+; its temporary stack is at $FFFE in WIN3/page #02. Before normal firmware
+; operation, the resident entry relocates the stack to WIN1/page #03 at $4FFE.
 ; =========================================================================
 
 neogs_bootstrap_start:
@@ -4372,8 +4383,8 @@ neogs_bootstrap_start:
         ld      a, #01
         out     (MPAGEX), a
 
-        ; Stack lives in the reserved $F000-$FFFF part of WIN3. This keeps it
-        ; safe while the bootstrap fills the low and upper firmware windows.
+        ; Temporary bootstrap stack: WIN3/page #02. The resident entry moves
+        ; the operational stack to WIN1 after PG1 has been restored to page #03.
         ld      sp, #FFFE
 
         ; Tell Spectrum that the tiny loader is running and waiting for length.
@@ -4669,10 +4680,10 @@ x86_exit_status:     db 0
 ;
 ; x86 physical $00000-$FFFFF maps to NeoGS RAM pages 4..67
 ; (NeoGS physical base $010000, page size $4000 / 16 KiB).
-; Window C000-FFFF is switched through MPAGEX. Firmware code remains in fixed
-; WIN0/page 0; the Z80 stack is in fixed WIN2/page 1 at BFFE. MPAGEX never
-; changes WIN2, so this stack remains safe during x86 RAM accesses. The DMA
-; frame is in WIN1/page 3.
+; Window C000-FFFF is switched through MPAGEX. Resident firmware remains in
+; WIN0/page 0; WIN2 is reserved for banked firmware overlays. The Z80 stack
+; is in WIN1/page 3 at #4FFE, below the DMA frame at #5000. MPAGEX never
+; changes WIN1 or WIN2, so the active stack and banked overlay stay mapped.
 ;
 ; x86_mem_addr is a 20-bit little-endian address:
 ;   +0 = bits 7:0, +1 = bits 15:8, +2 = bits 19:16 (valid 0..0F).
@@ -4684,8 +4695,9 @@ x86_exit_status:     db 0
 ;   x86_mem_test: destructive test of the reserved 1 MiB x86 RAM region.
 ;                 status=0, AX=0001 on pass; status=5, AX=phase:page on fail.
 ;
-; The test leaves NOROM+EXPAG enabled. Only window 3 is switched by MPAGEX;
-; callers must keep SP below C000 for the entire test (Project124 uses BFFE).
+; The test leaves NOROM+EXPAG enabled. Only WIN3 is switched by MPAGEX;
+; callers must keep SP in WIN1 and below #5000 for the entire test
+; (Project124 uses #4FFE, with the stack guard at #4800).
 ; =========================================================================
 
 X86_MEM_NGSPAGE_BASE EQU 4
@@ -10960,8 +10972,9 @@ x86_bios_video_test_image_end:
         DEVICE ZXSPECTRUM128
         INCLUDE "main.asm"
 
-; Firmware occupies fixed WIN0 and may use the full 16 KiB window.
-; The Z80 stack is in fixed WIN2/page #01 at $BFFE; WIN3 is remapped by MPAGEX.
+; Resident firmware occupies WIN0. WIN2 is being reserved for banked
+; firmware overlays; the resident Z80 stack is in WIN1/page #03 at $4FFE.
+; WIN3 remains the independently switched x86 physical-memory window.
         ASSERT neogs_firmware_end <= $4000
         SAVEBIN "neogs_code.bin", 0, neogs_firmware_end
         SAVEBIN "zx_main/neogs_code.bin", 0, neogs_firmware_end
