@@ -46,10 +46,10 @@ try {
         throw "NeoGS V2 stage-0 build failed (sjasmplus exit code $LASTEXITCODE)."
     }
     $V2Stage0 = Get-Item 'neogs_v2_bootstrap.bin'
-    if ($V2Stage0.Length -le 0 -or $V2Stage0.Length -gt 254) {
-        throw "V2 stage-0 exceeds first-sector bootstrap limit: $($V2Stage0.Length) bytes."
+    if ($V2Stage0.Length -le 0 -or $V2Stage0.Length -gt 248) {
+        throw "V2 stage-0 exceeds stage-0 + marker + stage-1 length must fit sector 0: $($V2Stage0.Length) bytes."
     }
-    Write-Host ("[V2-STAGE0] Bootstrap: {0} bytes / 254-byte first-sector budget." -f $V2Stage0.Length)
+    Write-Host ("[V2-STAGE0] Bootstrap: {0} bytes / 248-byte first-sector budget." -f $V2Stage0.Length)
 
     # Assemble the isolated V2 second-stage receiver and enforce its WIN1 budget.
     & $AssemblerPath -I 'neogs_sub' -I 'shared' 'neogs_sub/build_bootstrap_v2_stage1.asm'
