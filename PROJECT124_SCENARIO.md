@@ -667,3 +667,12 @@ CI run и артефакт остаются теми же: build/verification PA
 - GitHub Actions run `41365886610` для commit `9143b8e198216739489b52c7ff20a7d94081eb38` завершился **success**. Шаги v1 firmware/package/host/TR-DOS build, v1 package verification, новый v2 fixture test и artifact upload — success. Run URL: https://github.com/JTCyborg/Project124/actions/runs/41365886610. Отдельный workflow run `41365883154` для commit workflow также прошёл все функциональные шаги success.
 - CI подтверждает синтаксис/исполнение PowerShell packer и positive/negative fixtures в Windows runner. Это не hardware runtime и не подтверждение, что bootstrap/host уже понимают v2.
 - V2 bootstrap receiver, host transfer, banked runtime и аппаратная загрузка 48 KiB всё ещё не реализованы.
+
+
+### 2026-11-02 — V2 implementation step 2: strict package verifier and malformed-input fixtures
+
+- Добавлен `tools/verify_neogs_v2.ps1`: независимая проверка готового пакета, не доверяющая packer. Проверяет внешний bootstrap prefix (1..254), предел #FF00, `P124`/version 2, count 1..3, таблицу descriptor, разрешённые physical pages 0/68/69, уникальность страниц, resident page 0 первым и executable, offset 0 для текущего canonical profile, flags, длины 1..#4000, сумму длин и точное совпадение конца файла (без усечения/лишних байтов).
+- `tools/test_neogs_v2.ps1` теперь запускает verifier на resident-only, двухсегментном и полном 48-KiB пакетах, а также модифицирует корректный пакет для проверки отказа на wrong magic/version, count 0/4, duplicate/reserved/unsupported page, nonzero offset, zero/oversize segment, unknown flags, total mismatch, bootstrap length >254, truncated payload и trailing byte.
+- Commits: verifier `f2016ff837922bcc662810242e730f88f72acd91`; malformed fixtures `ba6ed4b55532c2ae30183800c63cb6600d5682c0`.
+- CI runs `41405827968` и `41405849949` запущены для этих изменений; результат ожидается. До их завершения тесты не отмечать PASS.
+- Архитектурный вывод для следующего этапа: текущий 196-byte bootstrap не может быть просто расширен парсером v2 без нарушения первого-sector ограничения 254 байта. Поэтому v2 загрузчик должен быть двухступенчатым: stage-0 остаётся маленьким и совместимым с GS #14/#13, stage-1 исполняется из временной области WIN1 вне DMA frame, принимает/проверяет v2 заголовок и выполняет bank writes в WIN0/WIN2. Нельзя посылать v2 `P124` payload через текущий v1 bootstrap: он воспримет его как flat firmware и выполнит magic. Требуется отдельный согласованный package/host protocol, v1 остаётся default.
