@@ -17,7 +17,7 @@ $DirectoryOffset = 0
 $EntrySize = 16
 $EntryCount = 128
 $V1Name = 'neoprog '
-$V2Name = 'neoprog2'
+$V2Name = 'neopv2 '
 $V1Entry = -1
 $V2Entry = -1
 
@@ -31,12 +31,12 @@ for ($Index = 0; $Index -lt $EntryCount; $Index++) {
         $V1Entry = $Offset
     }
     if ($Name -ceq $V2Name) {
-        if ($V2Entry -ge 0) { throw 'Duplicate neoprog2.C directory entries in source image' }
+        if ($V2Entry -ge 0) { throw 'Duplicate neopv2.C directory entries in source image' }
         $V2Entry = $Offset
     }
 }
 if ($V1Entry -lt 0) { throw 'V1 neoprog.C entry not found in source TR-DOS image' }
-if ($V2Entry -lt 0) { throw 'V2 neoprog2.C entry not found in source TR-DOS image' }
+if ($V2Entry -lt 0) { throw 'V2 neopv2.C entry not found in source TR-DOS image' }
 
 # The test copy retains the V1 package under neoprog1.C and exposes the
 # staged V2 package under the original host filename neoprog.C.
