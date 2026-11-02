@@ -636,3 +636,16 @@ CI run и артефакт остаются теми же: build/verification PA
   - `neoprog.bin`: 16 204 bytes = `#3F4C`, 64 TR-DOS sectors;
   - `disk_A.trd`: 655 360 bytes.
 - Это CI/build PASS, не hardware runtime PASS. Требуется запуск на Pentagon/NeoGS и полный лог, где новый marker подтверждает guard #4800..#487F после Stage 5. До этого не начинать перенос кода в banked WIN2.
+
+
+### 2026-11-02 — STACK-02 hardware runtime PASS и следующий шаг v2
+
+- Получен полный свежий лог запуска пользователя на сборке с WIN1 stack relocation.
+- Новый маркер подтверждён аппаратным runtime:
+  `[STACK] PASS: 128-byte WIN1 guard intact; stack stayed above #4880.`
+- В том же запуске повторно прошли: RTC/firmware bootstrap, IPC HLT AX=#BBAB, 5 interpreter edge cases, 64-page x86 RAM test, IVT/BDA, INT Stage 2A/2B, CPU arithmetic/flow/stack/ModR/M, CPU-I/O, CPU-STR, CPU-STR-02 REP/REPE/REPNE, BIOS INT10, Stage 5 TR-DOS/DMA (status/AX=`0000 BBAB`) и штатный HALT.
+- STACK-02 теперь имеет **hardware runtime PASS**. WIN1 stack #4FFE и guard #4800..#487F проверены после полной последовательности; WIN2 больше не нужен для стека и может быть выделен под banked overlay.
+- Начат следующий кодовый шаг: `gs_boot_probe_rom` теперь требует не просто ненулевой high byte, а не менее `#118000` байт RAM (70 уникальных страниц по 16 КиБ), поскольку pages 68/69 планируются под firmware overlay, а pages 4..67 заняты x86 RAM. Порог сравнивается с 24-bit #20 response [low, mid, high]. Для RAM меньше порога загрузка будет отвергнута до отправки bootstrap.
+- Изменение кода: commit `39e8632966db0ce3bff1591c2b550f052ac386d9`; CI build для него ещё не проверен.
+- Это safety gate для будущего v2, не реализация передачи overlay и не 48-KiB runtime. Текущий v1 package остаётся <=16 KiB resident.
+- Следующий этап: проверить сборку; затем зафиксировать v2 header/segment descriptor и написать тесты packer на адреса назначения, размер каждого сегмента, total firmware <= #C000 и overlap с reserved pages. Только после этого менять bootstrap/host transfer в согласованном порядке.
